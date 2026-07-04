@@ -1,13 +1,13 @@
 import { createServerClient } from '@supabase/ssr'
 import { redirect, type Handle } from '@sveltejs/kit'
 import { sequence } from '@sveltejs/kit/hooks'
-import { VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY } from '$env/static/private'
+import { env } from '$env/dynamic/private'
 
 // Create Supabase server client for SSR
 export const supabase: Handle = async ({ event, resolve }) => {
 	event.locals.supabase = createServerClient(
-		VITE_SUPABASE_URL,
-		VITE_SUPABASE_ANON_KEY,
+		env.VITE_SUPABASE_URL,
+		env.VITE_SUPABASE_ANON_KEY,
 		{
 			cookies: {
 				getAll: () => event.cookies.getAll(),
