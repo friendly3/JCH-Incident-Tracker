@@ -40,12 +40,21 @@ function handleSystemChange(event: MediaQueryListEvent) {
 	}
 }
 
+export function isAuthPath(pathname: string): boolean {
+	return pathname === '/auth' || pathname.startsWith('/auth/');
+}
+
 export const theme = {
 	get current() {
 		return _theme;
 	},
 	get isDark() {
 		return _theme === 'dark';
+	},
+	/** Apply theme without persisting (e.g. auth pages always start in light mode). */
+	applyTransient(value: Theme) {
+		_theme = value;
+		applyTheme(value);
 	},
 	/** Resolve and apply theme state without attaching listeners. Safe for ThemeToggle onMount. */
 	sync() {

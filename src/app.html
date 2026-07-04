@@ -5,6 +5,12 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<script>
 			(function () {
+				var path = window.location.pathname;
+				var isAuth = path === '/auth' || path.indexOf('/auth/') === 0;
+				if (isAuth) {
+					document.documentElement.classList.remove('dark');
+					return;
+				}
 				var stored = localStorage.getItem('theme-preference');
 				var theme =
 					stored === 'light' || stored === 'dark'
