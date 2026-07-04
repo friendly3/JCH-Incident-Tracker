@@ -11,15 +11,19 @@
 	} from '$lib/incidentMonthExpand';
 	import { invalidateAll } from '$app/navigation';
 	import { tick } from 'svelte';
+	import {
+		incidentsFromPageData,
+		syncIncidentStoreFromPageData
+	} from '$lib/syncIncidentStore';
 
 
 	let { data } = $props();
 
-	// Sync store whenever server data changes (initial load + after invalidateAll)
-	$effect(() => {
-		if (data.supabase) {
-			incidentStore.syncFromServer(data.supabase, data.incidents ?? []);
-		}
+	const incidents = $derived(incidentsFromPageData(incidentStore.list, data.incidents));
+
+	// Sync before paint so browser refresh doesn't stick on the loading state
+	$effect.pre(() => {
+		syncIncidentStoreFromPageData(data.supabase, data.incidents);
 	});
 
 	let isRefreshing = $state(false);
@@ -55,7 +59,7 @@
 	let backToListBtn = $state<HTMLButtonElement | undefined>(undefined);
 
 	const filtered = $derived.by(() => {
-		let result = incidentStore.list.filter((i) => {
+		let result = incidents.filter((i) => {
 			const q = search.toLowerCase();
 			if (q && !i.referenceNo.toLowerCase().includes(q) && !i.referenceText.toLowerCase().includes(q) && !(i.driver ?? '').toLowerCase().includes(q) && !(i.type ?? '').toLowerCase().includes(q) && !i.response.toLowerCase().includes(q)) return false;
 			if (filterType && i.type !== filterType) return false;
@@ -130,7 +134,7 @@
 	/** All month keys from unfiltered data — used for persistence pruning, not search/filter UI. */
 	const allMonthKeys = $derived.by(() => {
 		const keys = new Set<string>();
-		for (const incident of incidentStore.list) {
+		for (const incident of incidents) {
 			keys.add(getMonthKey(incident.dateReceived));
 		}
 		return keys;
@@ -335,7 +339,7 @@
 						<p class="mt-1 text-sm text-red-600 font-medium">{incidentStore.error}</p>
 					{:else}
 						<p class="mt-1 text-sm text-warm-500">
-							{incidentStore.list.length} incidents recorded
+							{incidents.length} incidents recorded
 						</p>
 					{/if}
 				</div>
@@ -455,7 +459,7 @@
 				{isRefreshing ? 'Retrying...' : 'Try Again'}
 			</button>
 		</div>
-	{:else if mode === 'list' && (!incidentStore.isInitialized || incidentStore.isLoading)}
+	{:else if mode === 'list' && incidentStore.isLoading}
 		<div class="flex items-center justify-center py-12">
 			<div class="flex flex-col items-center">
 				<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-warm-600"></div>
@@ -517,7 +521,7 @@
 	{/if}
 
 	<!-- Table Container - scrollable body -->
-	{#if mode === 'list' && !data.loadError && incidentStore.isInitialized && !incidentStore.isLoading && !incidentStore.error}
+	{#if mode === 'list' && !data.loadError && !incidentStore.isLoading && !incidentStore.error}
 	<div class="flex-1 min-h-0 mt-4 overflow-hidden flex flex-col">
 		<div
 			class="incidents-table-scroll flex-1 overflow-auto rounded-lg border border-warm-200 bg-white shadow-sm"

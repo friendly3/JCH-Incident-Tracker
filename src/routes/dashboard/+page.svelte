@@ -2,6 +2,10 @@
 	import { invalidateAll } from '$app/navigation';
 	import { incidentStore } from '$lib/data/store.svelte';
 	import { formatDate } from '$lib/formatDate';
+	import {
+		incidentsFromPageData,
+		syncIncidentStoreFromPageData
+	} from '$lib/syncIncidentStore';
 	import { theme } from '$lib/theme.svelte';
 	import type { Chart as ChartJS, ChartOptions } from 'chart.js';
 	import { Chart, registerables } from 'chart.js';
@@ -266,7 +270,7 @@
 	function aggregateIncidentsBy(field: 'teamLeader' | 'driver', emptyLabel = 'Unassigned') {
 		const grouped = new Map<string, { label: string; count: number }>();
 
-		incidentStore.list.forEach((incident) => {
+		incidents.forEach((incident) => {
 			const { key, label } = normalizeAggregationKey(incident[field], emptyLabel);
 			const existing = grouped.get(key);
 			grouped.set(key, {
@@ -384,6 +388,9 @@
 	}
 
 	let { data } = $props();
+
+	const incidents = $derived(incidentsFromPageData(incidentStore.list, data.incidents));
+
 	let canvasElement: HTMLCanvasElement | undefined = $state();
 	let teamLeaderCanvas: HTMLCanvasElement | undefined = $state();
 	let driverCanvas: HTMLCanvasElement | undefined = $state();
@@ -406,18 +413,16 @@
 		}
 	}
 
-	// Sync store whenever server data changes (initial load + after invalidateAll)
-	$effect(() => {
-		if (data.supabase) {
-			incidentStore.syncFromServer(data.supabase, data.incidents ?? []);
-		}
+	// Sync before paint so browser refresh doesn't stick on the loading state
+	$effect.pre(() => {
+		syncIncidentStoreFromPageData(data.supabase, data.incidents);
 	});
 
 	// Group incidents by date and count them
 	const incidentsByDate = $derived.by(() => {
 		const grouped: Record<string, number> = {};
 
-		incidentStore.list.forEach((incident) => {
+		incidents.forEach((incident) => {
 			const date = incident.dateReceived;
 			grouped[date] = (grouped[date] || 0) + 1;
 		});
@@ -590,16 +595,16 @@
 	});
 
 	// Calculate stats
-	const totalIncidents = $derived(incidentStore.list.length);
+	const totalIncidents = $derived(incidents.length);
 	const incidentsThisMonth = $derived(
-		incidentStore.list.filter((i) => {
+		incidents.filter((i) => {
 			const date = new Date(i.dateReceived);
 			const now = new Date();
 			return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
 		}).length
 	);
 	const incidentsThisWeek = $derived(
-		incidentStore.list.filter((i) => {
+		incidents.filter((i) => {
 			const date = new Date(i.dateReceived);
 			const now = new Date();
 			const weekAgo = new Date(now);
@@ -643,7 +648,7 @@
 				{isRetrying ? 'Retrying...' : 'Try Again'}
 			</button>
 		</div>
-	{:else if !incidentStore.isInitialized || incidentStore.isLoading}
+	{:else if incidentStore.isLoading}
 		<div class="flex items-center justify-center py-12">
 			<div class="flex flex-col items-center">
 				<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-warm-600"></div>
@@ -785,7 +790,7 @@
 					<div class="px-6 py-4 border-b border-warm-200 bg-warm-50">
 						<h2 class="text-lg font-semibold text-warm-800">Recent Incidents</h2>
 					</div>
-					{#if incidentStore.list.length === 0}
+					{#if incidents.length === 0}
 						<div class="p-8 text-center">
 							<p class="text-warm-500">No incidents recorded yet.</p>
 						</div>
@@ -802,7 +807,7 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each incidentStore.list.slice(0, 10) as incident (incident.id)}
+								{#each incidents.slice(0, 10) as incident (incident.id)}
 									<tr class="border-b border-warm-100 last:border-0 hover:bg-warm-50/50">
 										<td class="px-6 py-3 whitespace-nowrap text-warm-700">{formatDate(incident.dateReceived)}</td>
 										<td class="px-6 py-3 whitespace-nowrap">
