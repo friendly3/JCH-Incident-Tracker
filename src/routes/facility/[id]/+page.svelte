@@ -1,14 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { incidentStore } from '$lib/data/store.svelte';
+	import { formatDate } from '$lib/formatDate';
 
 	const incident = $derived(incidentStore.list.find((i) => i.id === page.params.id));
-
-	function formatDate(dateStr: string) {
-		if (!dateStr) return '';
-		const d = new Date(dateStr);
-		return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
-	}
 </script>
 
 <svelte:head>
@@ -53,7 +48,7 @@
 					</div>
 					<div class="rounded-lg border border-warm-200 bg-white p-5 shadow-sm">
 						<h2 class="text-sm font-medium text-warm-500">Team Leader</h2>
-						<p class="mt-1 text-warm-800">{incident.teamLeader}</p>
+						<p class="mt-1 text-warm-800 uppercase">{incident.teamLeader}</p>
 					</div>
 					<div class="rounded-lg border border-warm-200 bg-white p-5 shadow-sm">
 						<h2 class="text-sm font-medium text-warm-500">Driver</h2>
