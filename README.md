@@ -35,11 +35,10 @@ npm install
 
 ### Environment Setup
 
-Create a `.env.local` file:
+Copy `.env.example` to `.env.local` and fill in your Supabase credentials:
 
-```
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```bash
+cp .env.example .env.local
 ```
 
 ### Development
@@ -48,7 +47,7 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 npm run dev
 ```
 
-Visit `http://localhost:5175` and create an account.
+Visit `http://127.0.0.1:5173` and create an account.
 
 ### Build
 
@@ -56,6 +55,19 @@ Visit `http://localhost:5175` and create an account.
 npm run build
 npm run preview
 ```
+
+### Deploy to Cloudflare Pages
+
+1. Push this repo to GitHub and connect it in Cloudflare Pages.
+2. Configure the build:
+   - **Build command:** `npm run build`
+   - **Build output directory:** `.svelte-kit/cloudflare`
+   - **Node.js version:** 18 or 20
+3. Set environment variables (Production and Preview):
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+4. In Supabase → Authentication → URL Configuration, add your Pages URL (e.g. `https://your-project.pages.dev`) as Site URL and redirect URL.
+5. Apply all SQL migrations in `supabase/migrations/` via the Supabase SQL editor.
 
 ## Project Structure
 
@@ -97,4 +109,4 @@ npm run build
 
 You can preview the production build with `npm run preview`.
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+This project uses [`@sveltejs/adapter-cloudflare`](https://svelte.dev/docs/kit/adapter-cloudflare) for Cloudflare Pages deployment.

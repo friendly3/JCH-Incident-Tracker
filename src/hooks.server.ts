@@ -32,7 +32,7 @@ export const supabase: Handle = async ({ event, resolve }) => {
 
 // Protect routes that require authentication
 export const authorize: Handle = async ({ event, resolve }) => {
-	const protectedRoutes = ['/', '/dashboard', '/team', '/facility']
+	const protectedRoutes = ['/', '/dashboard', '/team', '/facility', '/admin']
 
 	const isProtected = protectedRoutes.some((route) => 
 		event.url.pathname === route || event.url.pathname.startsWith(route + '/')
