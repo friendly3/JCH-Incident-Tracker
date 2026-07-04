@@ -1,154 +1,324 @@
 <script lang="ts">
-	import type { Incident } from '$lib/data/incidents';
-	import { allTypes, allDrivers, allTeamLeaders, allActions } from '$lib/data/incidents';
+	import type { Incident, IncidentType, IncidentAction } from '$lib/data/incidents';
+	import type { Driver, TeamLeader } from '$lib/data/team';
+	import { formatDateTimeLocal } from '$lib/formatDate';
 
 	interface Props {
 		incident?: Incident;
+		incidentTypes: IncidentType[];
+		incidentActions: IncidentAction[];
+		drivers: Driver[];
+		teamLeaders: TeamLeader[];
 		onSubmit: (incident: Incident) => void;
-		onCancel: () => void;
+		onCancel: (hasUnsavedChanges: boolean) => void;
 		onUnsavedChangesChange?: (hasChanges: boolean) => void;
 	}
 
-	let { incident, onSubmit, onCancel, onUnsavedChangesChange }: Props = $props();
+	let { incident, incidentTypes, incidentActions, drivers, teamLeaders, onSubmit, onCancel, onUnsavedChangesChange }: Props = $props();
 
 	const isEdit = $derived(!!incident);
 	let showConfirm = $state(false);
-	let showDiscardWarning = $state(false);
+	let receivedAt = $state('');
+	let respondedAt = $state('');
+
+	function normalizeOptionalTime(time: string): string {
+		const trimmed = time?.trim().slice(0, 5) ?? '';
+		return trimmed === '00:00' ? '' : trimmed;
+	}
+
+	function normalizeDateOnly(date: string): string {
+		if (!date?.trim()) return '';
+		const match = /^(\d{4}-\d{2}-\d{2})/.exec(date.trim());
+		return match ? match[1] : date.trim();
+	}
+
+	function normalizeIncident(source: Incident): Incident {
+		return {
+			...source,
+			source: source.source === 'import' ? 'import' : 'ui',
+			dateReceived: normalizeDateOnly(source.dateReceived),
+			dateResponse: normalizeDateOnly(source.dateResponse),
+			time: normalizeOptionalTime(source.time),
+			timeResponse: normalizeOptionalTime(source.timeResponse),
+			emailSender: source.emailSender?.trim() ?? '',
+			emailSubject: source.emailSubject?.trim() ?? '',
+			sender: source.sender?.trim() ?? '',
+			marked: source.marked?.trim() ?? '',
+			response: source.response?.trim() ?? '',
+			referenceNo: source.referenceNo?.trim() ?? '',
+			referenceText: source.referenceText?.trim() ?? ''
+		};
+	}
+
+	function emptyIncident(): Incident {
+		return {
+			id: crypto.randomUUID(),
+			source: 'ui',
+			emailSender: '',
+			emailSubject: '',
+			dateReceived: '',
+			time: '',
+			sender: '',
+			teamLeaderId: null,
+			typeId: null,
+			marked: '',
+			referenceNo: '',
+			referenceText: '',
+			driverId: null,
+			response: '',
+			dateResponse: '',
+			timeResponse: '',
+			actionId: null
+		};
+	}
+
+	type FormSnapshot = {
+		source: 'ui' | 'import';
+		dateReceived: string;
+		time: string;
+		sender: string;
+		teamLeaderId: string | null;
+		typeId: string | null;
+		marked: string;
+		referenceNo: string;
+		referenceText: string;
+		driverId: string | null;
+		response: string;
+		dateResponse: string;
+		timeResponse: string;
+		actionId: string | null;
+		emailSender: string;
+		emailSubject: string;
+	};
+
+	function toSnapshot(value: Incident): FormSnapshot {
+		return {
+			source: value.source === 'import' ? 'import' : 'ui',
+			dateReceived: normalizeDateOnly(value.dateReceived),
+			time: normalizeOptionalTime(value.time),
+			sender: value.sender?.trim() ?? '',
+			teamLeaderId: value.teamLeaderId,
+			typeId: value.typeId,
+			marked: value.marked?.trim() ?? '',
+			referenceNo: value.referenceNo?.trim() ?? '',
+			referenceText: value.referenceText?.trim() ?? '',
+			driverId: value.driverId,
+			response: value.response?.trim() ?? '',
+			dateResponse: normalizeDateOnly(value.dateResponse),
+			timeResponse: normalizeOptionalTime(value.timeResponse),
+			actionId: value.actionId,
+			emailSender: value.emailSender?.trim() ?? '',
+			emailSubject: value.emailSubject?.trim() ?? ''
+		};
+	}
+
+	function combineDateTime(date: string, time: string): string {
+		if (!date?.trim()) return '';
+		const normalizedTime = time?.trim() ? time.trim().slice(0, 5) : '00:00';
+		return `${date}T${normalizedTime}`;
+	}
+
+	function splitDateTime(value: string): { date: string; time: string } {
+		if (!value) return { date: '', time: '' };
+		const [date, timePart] = value.split('T');
+		return { date: date ?? '', time: normalizeOptionalTime(timePart ?? '') };
+	}
+
+	function syncReceivedAt() {
+		const { date, time } = splitDateTime(receivedAt);
+		form.dateReceived = date;
+		form.time = time;
+	}
+
+	function syncRespondedAt() {
+		const { date, time } = splitDateTime(respondedAt);
+		form.dateResponse = date;
+		form.timeResponse = time;
+	}
 
 	let form = $state<Incident>({
 		id: '',
+		source: 'ui',
+		emailSender: '',
+		emailSubject: '',
 		dateReceived: '',
 		time: '',
-		sender: 'Caringbah Cust Exp',
-		teamLeader: 'Andrew Tran',
-		type: 'Disputed Delivery',
+		sender: '',
+		teamLeaderId: null,
+		typeId: null,
 		marked: '',
 		referenceNo: '',
 		referenceText: '',
-		driver: '',
+		driverId: null,
 		response: '',
 		dateResponse: '',
 		timeResponse: '',
-		action: ''
+		actionId: null
 	});
 
-	// Check if form has unsaved changes
-	const hasUnsavedChanges = $derived.by(() => {
-		if (!incident) {
-			// For new incidents, check if any required fields are filled
-			return (
-				form.dateReceived ||
-				form.time ||
-				form.sender !== 'Caringbah Cust Exp' ||
-				form.teamLeader !== 'Andrew Tran' ||
-				form.type !== 'Disputed Delivery' ||
-				form.marked ||
-				form.referenceNo ||
-				form.referenceText ||
-				form.driver ||
-				form.response ||
-				form.dateResponse ||
-				form.timeResponse ||
-				form.action
-			);
-		}
-		// For edits, check if any field differs from original
-		return (
-			form.dateReceived !== incident.dateReceived ||
-			form.time !== incident.time ||
-			form.sender !== incident.sender ||
-			form.teamLeader !== incident.teamLeader ||
-			form.type !== incident.type ||
-			form.marked !== incident.marked ||
-			form.referenceNo !== incident.referenceNo ||
-			form.referenceText !== incident.referenceText ||
-			form.driver !== incident.driver ||
-			form.response !== incident.response ||
-			form.dateResponse !== incident.dateResponse ||
-			form.timeResponse !== incident.timeResponse ||
-			form.action !== incident.action
-		);
-	});
+	let baselineSnapshot = $state('');
 
-	// Update parent whenever unsaved changes change
+	function computeHasUnsavedChanges(): boolean {
+		const received = splitDateTime(receivedAt);
+		const responded = splitDateTime(respondedAt);
+		const snapshot = toSnapshot(form);
+		const current = JSON.stringify({
+			...snapshot,
+			dateReceived: normalizeDateOnly(received.date),
+			time: normalizeOptionalTime(received.time),
+			dateResponse: normalizeDateOnly(responded.date),
+			timeResponse: normalizeOptionalTime(responded.time)
+		});
+		return current !== baselineSnapshot;
+	}
+
+	const hasUnsavedChanges = $derived(computeHasUnsavedChanges());
+
+	/** Synchronous dirty check for parent dismiss handlers (backdrop/Escape). */
+	export function getHasUnsavedChanges(): boolean {
+		return computeHasUnsavedChanges();
+	}
+
+	/** Sync datetimes, then report dirty state to parent for close/discard flow. */
+	export function requestClose(): void {
+		const dirty = computeHasUnsavedChanges();
+		syncReceivedAt();
+		syncRespondedAt();
+		onCancel(dirty);
+	}
+
+	// UI indicator only — dismiss decisions use requestClose()/onCancel(liveFlag)
 	$effect(() => {
-		onUnsavedChangesChange?.(Boolean(hasUnsavedChanges));
+		onUnsavedChangesChange?.(hasUnsavedChanges);
 	});
 
-	// Reset form when incident prop changes
+	// Reset form when incident prop changes (only track `incident`, not form edits)
 	$effect(() => {
-		if (incident) {
-			form = { ...incident };
-		} else {
-			form = {
-				id: crypto.randomUUID(),
-				dateReceived: new Date().toISOString().slice(0, 10),
-				time: new Date().toTimeString().slice(0, 5),
-				sender: 'Caringbah Cust Exp',
-				teamLeader: 'Andrew Tran',
-				type: 'Disputed Delivery',
-				marked: '',
-				referenceNo: '',
-				referenceText: '',
-				driver: '',
-				response: '',
-				dateResponse: '',
-				timeResponse: '',
-				action: ''
-			};
-		}
+		showConfirm = false;
+		const source = incident;
+		const initial = source ? normalizeIncident(source) : emptyIncident();
+		form = initial;
+		receivedAt = combineDateTime(initial.dateReceived, initial.time);
+		respondedAt = combineDateTime(initial.dateResponse, initial.timeResponse);
+		baselineSnapshot = JSON.stringify(toSnapshot(initial));
 	});
 
 	function handleSubmit() {
+		syncReceivedAt();
+		syncRespondedAt();
+
+		if (!form.dateReceived || !form.typeId) {
+			return;
+		}
+
+		const payload: Incident = {
+			...form,
+			source: form.source === 'import' ? 'import' : 'ui',
+			time: form.time.trim(),
+			timeResponse: form.timeResponse.trim()
+		};
+
 		if (isEdit && !showConfirm) {
 			showConfirm = true;
 			return;
 		}
-		onSubmit({ ...form });
+		onSubmit(payload);
 		showConfirm = false;
 	}
 
 	function handleCancel() {
-		if (hasUnsavedChanges) {
-			showDiscardWarning = true;
-		} else {
-			onCancel();
-		}
+		requestClose();
 	}
 
-	function handleBackdropClick(e: MouseEvent) {
-		// Only handle clicks directly on the backdrop itself
-		if (e.target === e.currentTarget) {
-			handleCancel();
-		}
-	}
-
-	function handleKeyDown(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			handleCancel();
-		}
-	}
-
-	function confirmDiscard() {
-		showDiscardWarning = false;
-		onCancel();
-	}
-
-	const inputClass = 'w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none';
+	const inputClass = 'w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus';
 	const labelClass = 'mb-1 block text-sm text-warm-500';
+	const dateTimeFieldClass =
+		'input-focus-within form-field-surface relative w-full rounded-lg border border-warm-200 bg-warm-50';
+	const dateTimeDisplayClass =
+		'pointer-events-none flex min-h-[2.375rem] items-center px-3 py-2 text-sm';
+	const dateTimeOverlayClass = 'absolute inset-0 h-full w-full cursor-pointer opacity-0';
+
+	const receivedAtDesc = $derived(formatDateTimeLocal(receivedAt) || 'Select date and time');
+	const respondedAtDesc = $derived(formatDateTimeLocal(respondedAt) || 'Select date and time');
+	const emailFieldsEditable = $derived((form.source ?? 'ui') === 'ui');
+	const readonlyEmailClass = `${inputClass} bg-warm-100 text-warm-400 cursor-default select-all`;
 </script>
 
-<form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-6">
-	<h2 class="text-xl font-semibold text-warm-800">{isEdit ? 'Edit' : 'Add'} Incident</h2>
+<form novalidate onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-6">
+	<h2 id="incident-form-title" class="text-xl font-semibold text-warm-800">Incident Details</h2>
 
 	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 		<div>
-			<label for="dateReceived" class={labelClass}>Date Received *</label>
-			<input id="dateReceived" type="date" bind:value={form.dateReceived} required class={inputClass} />
+			<label for="referenceNo" class={labelClass}>Reference No.</label>
+			<input
+				id="referenceNo"
+				type="text"
+				bind:value={form.referenceNo}
+				class="{inputClass} text-accent-600"
+			/>
 		</div>
 		<div>
-			<label for="time" class={labelClass}>Time *</label>
-			<input id="time" type="time" bind:value={form.time} required class={inputClass} />
+			<label for="emailSender" class={labelClass}>Email Sender</label>
+			<input
+				id="emailSender"
+				type="text"
+				bind:value={form.emailSender}
+				readonly={!emailFieldsEditable}
+				class={emailFieldsEditable ? inputClass : readonlyEmailClass}
+			/>
+		</div>
+		<div class="sm:col-span-2">
+			<label for="emailSubject" class={labelClass}>Email Subject</label>
+			<input
+				id="emailSubject"
+				type="text"
+				bind:value={form.emailSubject}
+				readonly={!emailFieldsEditable}
+				class={emailFieldsEditable ? inputClass : readonlyEmailClass}
+			/>
+		</div>
+		<div>
+			<label for="action" class={labelClass}>Action</label>
+			<select id="action" bind:value={form.actionId} class="{inputClass} uppercase">
+				<option value={null}>— None —</option>
+				{#each incidentActions as a}<option value={a.id} class="uppercase">{a.name}</option>{/each}
+			</select>
+		</div>
+		<div>
+			<label for="type" class={labelClass}>Type *</label>
+			<select id="type" bind:value={form.typeId} class="{inputClass} uppercase">
+				<option value={null}>— Select type —</option>
+				{#each incidentTypes as t}<option value={t.id} class="uppercase">{t.name}</option>{/each}
+			</select>
+		</div>
+		<div>
+			<label for="marked" class={labelClass}>Marked</label>
+			<select id="marked" bind:value={form.marked} class="{inputClass} uppercase">
+				<option value="" class="uppercase">None</option>
+				<option value="High" class="uppercase">High</option>
+			</select>
+		</div>
+		<div class="col-span-full border-t border-warm-200/60"></div>
+		<div>
+			<label id="receivedAt-label" for="receivedAt" class={labelClass}>Date Received *</label>
+			<span id="receivedAt-desc" class="sr-only">{receivedAtDesc}</span>
+			<div class={dateTimeFieldClass}>
+				<div
+					class="{dateTimeDisplayClass} {receivedAt ? 'text-warm-700' : 'text-warm-400'}"
+					aria-hidden="true"
+				>
+					{formatDateTimeLocal(receivedAt) || 'Select date & time'}
+				</div>
+				<input
+					id="receivedAt"
+					type="datetime-local"
+					bind:value={receivedAt}
+					oninput={syncReceivedAt}
+					onchange={syncReceivedAt}
+					aria-labelledby="receivedAt-label receivedAt-desc"
+					class={dateTimeOverlayClass}
+				/>
+			</div>
 		</div>
 		<div>
 			<label for="sender" class={labelClass}>Sender</label>
@@ -156,28 +326,10 @@
 		</div>
 		<div>
 			<label for="teamLeader" class={labelClass}>Team Leader</label>
-			<input id="teamLeader" type="text" bind:value={form.teamLeader} list="teamLeaders" class={inputClass} />
-			<datalist id="teamLeaders">
-				{#each allTeamLeaders as tl}<option value={tl}>{tl}</option>{/each}
-			</datalist>
-		</div>
-		<div>
-			<label for="type" class={labelClass}>Type *</label>
-			<input id="type" type="text" bind:value={form.type} list="types" required class={inputClass} />
-			<datalist id="types">
-				{#each allTypes as t}<option value={t}>{t}</option>{/each}
-			</datalist>
-		</div>
-		<div>
-			<label for="marked" class={labelClass}>Marked</label>
-			<select id="marked" bind:value={form.marked} class={inputClass}>
-				<option value="">None</option>
-				<option value="High">High</option>
+			<select id="teamLeader" bind:value={form.teamLeaderId} class={inputClass}>
+				<option value={null}>— None —</option>
+				{#each teamLeaders as tl}<option value={tl.id}>{tl.name}</option>{/each}
 			</select>
-		</div>
-		<div>
-			<label for="referenceNo" class={labelClass}>Reference No.</label>
-			<input id="referenceNo" type="text" bind:value={form.referenceNo} class={inputClass} />
 		</div>
 		<div class="sm:col-span-2">
 			<label for="referenceText" class={labelClass}>Reference Text</label>
@@ -185,29 +337,35 @@
 		</div>
 		<div>
 			<label for="driver" class={labelClass}>Driver</label>
-			<input id="driver" type="text" bind:value={form.driver} list="drivers" class={inputClass} />
-			<datalist id="drivers">
-				{#each allDrivers as d}<option value={d}>{d}</option>{/each}
-			</datalist>
+			<select id="driver" bind:value={form.driverId} class={inputClass}>
+				<option value={null}>— None —</option>
+				{#each drivers as d}<option value={d.id}>{d.username}</option>{/each}
+			</select>
 		</div>
 		<div>
 			<label for="response" class={labelClass}>Response By</label>
 			<input id="response" type="text" bind:value={form.response} class={inputClass} />
 		</div>
 		<div>
-			<label for="dateResponse" class={labelClass}>Response Date</label>
-			<input id="dateResponse" type="date" bind:value={form.dateResponse} class={inputClass} />
-		</div>
-		<div>
-			<label for="timeResponse" class={labelClass}>Response Time</label>
-			<input id="timeResponse" type="time" bind:value={form.timeResponse} class={inputClass} />
-		</div>
-		<div>
-			<label for="action" class={labelClass}>Action</label>
-			<input id="action" type="text" bind:value={form.action} list="actions" class={inputClass} />
-			<datalist id="actions">
-				{#each allActions as a}<option value={a}>{a}</option>{/each}
-			</datalist>
+			<label id="respondedAt-label" for="respondedAt" class={labelClass}>Responded</label>
+			<span id="respondedAt-desc" class="sr-only">{respondedAtDesc}</span>
+			<div class={dateTimeFieldClass}>
+				<div
+					class="{dateTimeDisplayClass} {respondedAt ? 'text-warm-700' : 'text-warm-400'}"
+					aria-hidden="true"
+				>
+					{formatDateTimeLocal(respondedAt) || 'Select date & time'}
+				</div>
+				<input
+					id="respondedAt"
+					type="datetime-local"
+					bind:value={respondedAt}
+					oninput={syncRespondedAt}
+					onchange={syncRespondedAt}
+					aria-labelledby="respondedAt-label respondedAt-desc"
+					class={dateTimeOverlayClass}
+				/>
+			</div>
 		</div>
 	</div>
 
@@ -227,30 +385,10 @@
 				{isEdit ? 'Update' : 'Add'} Incident
 			</button>
 			<button type="button" onclick={handleCancel}
-				class="rounded-lg px-5 py-2 text-sm text-warm-500 hover:text-white">
+				class="rounded-lg border-2 border-warm-400 px-5 py-2 text-sm text-warm-700 hover:bg-warm-50">
 				Cancel
 			</button>
 		{/if}
 	</div>
 
 </form>
-
-<!-- Unsaved Changes Warning -->
-{#if showDiscardWarning}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-		<div class="rounded-lg bg-white p-6 shadow-xl">
-			<h3 class="mb-2 text-lg font-semibold text-warm-800">Unsaved Changes</h3>
-			<p class="mb-6 text-sm text-warm-600">You have unsaved changes. Are you sure you want to discard them?</p>
-			<div class="flex gap-3 justify-end">
-				<button type="button" onclick={() => { showDiscardWarning = false; }}
-					class="rounded-lg border border-warm-200 px-4 py-2 text-sm text-warm-700 hover:bg-warm-50">
-					Keep Editing
-				</button>
-				<button type="button" onclick={confirmDiscard}
-					class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
-					Discard Changes
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
