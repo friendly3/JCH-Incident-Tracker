@@ -50,7 +50,7 @@
 			placeholder="Search by name, suburb, or provider..."
 			value={search}
 			oninput={(e) => update({ search: e.currentTarget.value })}
-			class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2.5 text-sm text-warm-800 placeholder-warm-400 focus:border-accent-500 focus:outline-none"
+			class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2.5 text-sm text-warm-800 placeholder-warm-400 input-focus"
 		/>
 	</div>
 
@@ -59,7 +59,7 @@
 		<select
 			value={selectedState}
 			onchange={(e) => update({ selectedState: e.currentTarget.value })}
-			class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none"
+			class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus"
 		>
 			<option value="">All States</option>
 			{#each allStates as s}
@@ -70,7 +70,7 @@
 		<select
 			value={type}
 			onchange={(e) => update({ type: e.currentTarget.value })}
-			class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none"
+			class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus"
 		>
 			<option value="">All Types</option>
 			{#each allTypes as t}
@@ -81,7 +81,7 @@
 		<select
 			value={minRating}
 			onchange={(e) => update({ minRating: Number(e.currentTarget.value) })}
-			class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none"
+			class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus"
 		>
 			<option value={0}>Any Rating</option>
 			<option value={2}>2+ Stars</option>
@@ -93,7 +93,7 @@
 		<select
 			value={sortBy}
 			onchange={(e) => update({ sortBy: e.currentTarget.value })}
-			class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none"
+			class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus"
 		>
 			<option value="rating">Highest Rated</option>
 			<option value="price-low">Price: Low to High</option>
