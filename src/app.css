@@ -1,21 +1,60 @@
 @import 'tailwindcss';
 
-@theme {
-	--color-warm-50: #faf6f1;
-	--color-warm-100: #f3ebe0;
-	--color-warm-200: #e8d9c4;
-	--color-warm-300: #d4be9e;
-	--color-warm-400: #c0a27a;
-	--color-warm-500: #a88a60;
-	--color-warm-600: #8b6d48;
-	--color-warm-700: #6e5639;
-	--color-warm-800: #52412e;
-	--color-warm-900: #3a2e21;
-	--color-warm-950: #251d15;
+@custom-variant dark (&:where(.dark, .dark *));
 
-	--color-accent-500: #b45309;
-	--color-accent-600: #92400e;
-	--color-accent-700: #78350f;
+@theme {
+	/*
+	 * Legacy token prefix `warm-*` maps to the Vichy neutral scale (cool gray).
+	 * Class names are unchanged for compatibility; only hex values reflect Figma Vichy.
+	 */
+	/* Vichy: soft gray + crisp white base */
+	--color-warm-50: #f8f8f8;
+	--color-warm-100: #f0f1f1;
+	--color-warm-200: #e2e4e4;
+	--color-warm-300: #bbbfc0;
+	/* Text-oriented shades shifted darker for light-mode readability */
+	--color-warm-400: #9a9d9e;
+	--color-warm-500: #878787;
+	--color-warm-600: #6a6c6e;
+	--color-warm-700: #525456;
+	--color-warm-800: #3a3b3d;
+	--color-warm-900: #181818;
+	--color-warm-950: #0a0a0a;
+
+	/* Vichy: vibrant teal accent */
+	--color-accent-50: #e8f8f6;
+	--color-accent-100: #c5ede8;
+	--color-accent-200: #8fdcd2;
+	--color-accent-500: #05ac98;
+	--color-accent-600: #038676;
+	--color-accent-700: #026b5c;
+}
+
+@layer theme {
+	.dark {
+		color-scheme: dark;
+
+		/* Cool dark gray base (inverted scale) */
+		--color-warm-50: #0a0a0a;
+		--color-warm-100: #141516;
+		--color-warm-200: #1e1f21;
+		--color-warm-300: #2e3032;
+		--color-warm-400: #4a4c4e;
+		--color-warm-500: #6e7072;
+		--color-warm-600: #9a9c9e;
+		--color-warm-700: #bbbfc0;
+		--color-warm-800: #e0e2e2;
+		--color-warm-900: #f8f8f8;
+		--color-warm-950: #fdfdfd;
+
+		/* Teal accent — slightly brighter on dark surfaces */
+		--color-accent-50: #0a1a18;
+		--color-accent-100: #0f2a26;
+		--color-accent-200: #1b4a44;
+		--color-accent-500: #0cac99;
+		--color-accent-600: #1dd4be;
+		--color-accent-700: #5ee8d4;
+	}
 }
 
 body {
@@ -23,7 +62,368 @@ body {
 	color: var(--color-warm-900);
 }
 
+/* Surface overrides for hardcoded white backgrounds */
+@layer utilities {
+	.dark .bg-white {
+		background-color: var(--color-warm-100);
+	}
+
+	.dark .bg-white\/80 {
+		background-color: color-mix(in srgb, var(--color-warm-100) 80%, transparent);
+	}
+
+	.dark .bg-white\/95 {
+		background-color: color-mix(in srgb, var(--color-warm-100) 95%, transparent);
+	}
+
+	/* Elevate form fields above page background in dark mode */
+	.dark input:not([type='checkbox']):not([type='radio']),
+	.dark select,
+	.dark textarea {
+		background-color: var(--color-warm-200);
+		color: var(--color-warm-900);
+	}
+
+	/* Teal accent text on inputs — overrides inputClass text-warm-700 / dark input color */
+	input.text-accent-600:not([type='checkbox']):not([type='radio']) {
+		color: var(--color-accent-600);
+	}
+
+	/* Datetime overlay display — match elevated input surface in dark mode */
+	.dark .form-field-surface {
+		background-color: var(--color-warm-200);
+		color: var(--color-warm-900);
+	}
+
+	.dark input::placeholder,
+	.dark textarea::placeholder {
+		color: var(--color-warm-500);
+	}
+
+	/* Status / alert surfaces */
+	.dark .bg-red-50 {
+		background-color: color-mix(in srgb, #7f1d1d 35%, var(--color-warm-100));
+	}
+
+	.dark .bg-red-100 {
+		background-color: color-mix(in srgb, #991b1b 45%, var(--color-warm-200));
+	}
+
+	.dark .text-red-700 {
+		color: #fca5a5;
+	}
+
+	.dark .border-red-200 {
+		border-color: #991b1b;
+	}
+
+	.dark .bg-green-50 {
+		background-color: color-mix(in srgb, #14532d 35%, var(--color-warm-100));
+	}
+
+	.dark .bg-green-100 {
+		background-color: color-mix(in srgb, #166534 45%, var(--color-warm-200));
+	}
+
+	.dark .text-green-700 {
+		color: #86efac;
+	}
+
+	.dark .border-green-200 {
+		border-color: #166534;
+	}
+
+	.dark .bg-blue-100 {
+		background-color: color-mix(in srgb, #1e3a8a 45%, var(--color-warm-200));
+	}
+
+	.dark .text-blue-700 {
+		color: #93c5fd;
+	}
+
+	.dark .border-blue-200 {
+		border-color: #1d4ed8;
+	}
+
+	.dark .bg-orange-100 {
+		background-color: color-mix(in srgb, #9a3412 45%, var(--color-warm-200));
+	}
+
+	.dark .text-orange-700 {
+		color: #fdba74;
+	}
+
+	.dark .border-orange-200 {
+		border-color: #c2410c;
+	}
+
+	.dark .bg-yellow-100 {
+		background-color: color-mix(in srgb, #854d0e 45%, var(--color-warm-200));
+	}
+
+	.dark .text-yellow-700 {
+		color: #fde047;
+	}
+
+	.dark .border-yellow-200 {
+		border-color: #a16207;
+	}
+
+	.dark .bg-purple-100 {
+		background-color: color-mix(in srgb, #581c87 45%, var(--color-warm-200));
+	}
+
+	.dark .text-purple-700 {
+		color: #d8b4fe;
+	}
+
+	.dark .border-purple-200 {
+		border-color: #7e22ce;
+	}
+
+	.dark .bg-emerald-100 {
+		background-color: color-mix(in srgb, #14532d 45%, var(--color-warm-200));
+	}
+
+	.dark .text-emerald-700 {
+		color: #6ee7b7;
+	}
+
+	.dark .border-emerald-200 {
+		border-color: #166534;
+	}
+
+	.dark .bg-amber-100 {
+		background-color: color-mix(in srgb, #854d0e 45%, var(--color-warm-200));
+	}
+
+	.dark .text-amber-700 {
+		color: #fde047;
+	}
+
+	.dark .border-amber-200 {
+		border-color: #a16207;
+	}
+
+	/* CTA buttons: white text needs darker teal (bright accent-600 is for links/text) */
+	.dark .bg-accent-600.text-white,
+	.dark button.bg-accent-600.text-white {
+		background-color: #038676;
+		color: #ffffff;
+	}
+
+	.dark .bg-accent-600.text-white:hover,
+	.dark .hover\:bg-accent-500:hover.text-white,
+	.dark button.bg-accent-600.text-white:hover {
+		background-color: #049e8b;
+		color: #ffffff;
+	}
+
+	/* Edit buttons: avoid white on bright teal on hover (warm-50 = darkest in dark mode) */
+	.dark .hover\:bg-accent-600:hover.hover\:text-white:hover {
+		color: var(--color-warm-50);
+	}
+
+	/* Placeholder contrast on warm input surfaces */
+	.placeholder-warm-400::placeholder {
+		color: var(--color-warm-600);
+	}
+
+	/* Standardized keyboard focus for form controls */
+	.input-focus {
+		outline: none;
+	}
+
+	.input-focus:focus-visible {
+		outline: 2px solid transparent;
+		outline-offset: 2px;
+		border-color: var(--color-accent-500);
+		box-shadow:
+			0 0 0 2px var(--color-warm-50),
+			0 0 0 4px var(--color-accent-500);
+	}
+
+	.dark .input-focus:focus-visible {
+		box-shadow:
+			0 0 0 2px var(--color-warm-100),
+			0 0 0 4px var(--color-accent-500);
+	}
+
+	/* Visible focus ring for datetime overlay wrappers (native input is opacity-0) */
+	.input-focus-within {
+		outline: none;
+	}
+
+	.input-focus-within:focus-within:has(:focus-visible) {
+		outline: 2px solid transparent;
+		outline-offset: 2px;
+		border-color: var(--color-accent-500);
+		box-shadow:
+			0 0 0 2px var(--color-warm-50),
+			0 0 0 4px var(--color-accent-500);
+	}
+
+	.dark .input-focus-within:focus-within:has(:focus-visible) {
+		box-shadow:
+			0 0 0 2px var(--color-warm-100),
+			0 0 0 4px var(--color-accent-500);
+	}
+
+	.dark .shadow-sm {
+		--tw-shadow-color: rgb(0 0 0 / 0.3);
+	}
+
+	.dark .shadow-lg,
+	.dark .shadow-xl,
+	.dark .shadow-2xl {
+		--tw-shadow-color: rgb(0 0 0 / 0.5);
+	}
+}
+
 /* Sidebar enhancements */
 .sidebar-nav {
 	transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Loading bar animation */
+@keyframes loading-bar {
+	0% {
+		transform: translateX(-100%);
+		opacity: 1;
+	}
+	50% {
+		opacity: 1;
+	}
+	100% {
+		transform: translateX(100%);
+		opacity: 0;
+	}
+}
+
+.animate-loading-bar {
+	animation: loading-bar 1.5s ease-in-out infinite;
+}
+
+/* Keep incidents table header aligned when scrollbar appears/disappears */
+.incidents-table-scroll {
+	scrollbar-gutter: stable;
+}
+
+/* Tactile button press feedback — applies codebase-wide */
+@layer base {
+	button {
+		user-select: none;
+	}
+
+	button:not(:disabled) {
+		transition:
+			transform 100ms ease-out,
+			box-shadow 100ms ease-out,
+			background-color 150ms ease,
+			border-color 150ms ease,
+			color 150ms ease,
+			filter 100ms ease-out;
+	}
+
+	button:not(:disabled):active {
+		transform: translateY(1px) scale(0.98);
+	}
+
+	/* Primary / danger filled buttons — raised at rest, pressed inward on click */
+	button:not(:disabled):where(
+		[class*='bg-accent-6'],
+		[class*='bg-red-6'],
+		[class*='bg-emerald-6']
+	) {
+		box-shadow:
+			0 1px 2px rgb(0 0 0 / 0.06),
+			0 2px 4px rgb(0 0 0 / 0.08);
+	}
+
+	button:not(:disabled):where(
+		[class*='bg-accent-6'],
+		[class*='bg-red-6'],
+		[class*='bg-emerald-6']
+	):hover {
+		box-shadow:
+			0 2px 4px rgb(0 0 0 / 0.08),
+			0 4px 8px rgb(0 0 0 / 0.06);
+	}
+
+	button:not(:disabled):where(
+		[class*='bg-accent-6'],
+		[class*='bg-red-6'],
+		[class*='bg-emerald-6']
+	):active {
+		box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.18);
+		filter: brightness(0.94);
+	}
+
+	/* Soft pill / secondary buttons */
+	button:not(:disabled):where(
+		[class*='bg-accent-1'],
+		[class*='bg-red-1'],
+		[class*='bg-warm-1'],
+		[class*='bg-warm-2']
+	):active {
+		box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.12);
+	}
+
+	/* Bordered outline buttons */
+	button:not(:disabled):where([class*='border-']):active {
+		box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.1);
+	}
+
+	/* Nav links styled as buttons */
+	a.rounded-lg:active {
+		transform: translateY(1px) scale(0.98);
+		transition: transform 100ms ease-out;
+	}
+
+	.dark button:not(:disabled):where(
+		[class*='bg-accent-6'],
+		[class*='bg-red-6'],
+		[class*='bg-emerald-6']
+	):active {
+		box-shadow: inset 0 2px 5px rgb(0 0 0 / 0.35);
+		filter: brightness(1.08);
+	}
+}
+
+@layer utilities {
+	.btn-tactile {
+		transition:
+			transform 100ms ease-out,
+			box-shadow 100ms ease-out,
+			background-color 150ms ease,
+			border-color 150ms ease,
+			color 150ms ease,
+			filter 100ms ease-out;
+	}
+
+	.btn-tactile:active:not(:disabled) {
+		transform: translateY(1px) scale(0.98);
+	}
+
+	.btn-raised {
+		box-shadow:
+			0 1px 2px rgb(0 0 0 / 0.06),
+			0 2px 4px rgb(0 0 0 / 0.08);
+	}
+
+	.btn-raised:hover:not(:disabled) {
+		box-shadow:
+			0 2px 4px rgb(0 0 0 / 0.08),
+			0 4px 8px rgb(0 0 0 / 0.06);
+	}
+
+	.btn-raised:active:not(:disabled) {
+		box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.18);
+		filter: brightness(0.94);
+	}
+
+	.dark .btn-raised:active:not(:disabled) {
+		box-shadow: inset 0 2px 5px rgb(0 0 0 / 0.35);
+		filter: brightness(1.08);
+	}
 }
