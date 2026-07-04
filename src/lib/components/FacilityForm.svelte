@@ -69,17 +69,17 @@
 		<div>
 			<label for="name" class="mb-1 block text-sm text-warm-500">Facility Name *</label>
 			<input id="name" type="text" bind:value={form.name} required
-				class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none" />
+				class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus" />
 		</div>
 		<div>
 			<label for="provider" class="mb-1 block text-sm text-warm-500">Provider *</label>
 			<input id="provider" type="text" bind:value={form.provider} required
-				class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none" />
+				class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus" />
 		</div>
 		<div>
 			<label for="type" class="mb-1 block text-sm text-warm-500">Type</label>
 			<select id="type" bind:value={form.type}
-				class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none">
+				class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus">
 				{#each types as t}
 					<option value={t}>{t}</option>
 				{/each}
@@ -88,7 +88,7 @@
 		<div>
 			<label for="phone" class="mb-1 block text-sm text-warm-500">Phone</label>
 			<input id="phone" type="text" bind:value={form.phone}
-				class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none" />
+				class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus" />
 		</div>
 	</div>
 
@@ -97,18 +97,18 @@
 		<div class="sm:col-span-2">
 			<label for="address" class="mb-1 block text-sm text-warm-500">Address</label>
 			<input id="address" type="text" bind:value={form.address}
-				class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none" />
+				class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus" />
 		</div>
 		<div>
 			<label for="suburb" class="mb-1 block text-sm text-warm-500">Suburb *</label>
 			<input id="suburb" type="text" bind:value={form.suburb} required
-				class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none" />
+				class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus" />
 		</div>
 		<div class="grid grid-cols-2 gap-2">
 			<div>
 				<label for="formState" class="mb-1 block text-sm text-warm-500">State</label>
 				<select id="formState" bind:value={(form as any).selectedState}
-					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none">
+					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus">
 					{#each states as s}
 						<option value={s}>{s}</option>
 					{/each}
@@ -117,7 +117,7 @@
 			<div>
 				<label for="postcode" class="mb-1 block text-sm text-warm-500">Postcode</label>
 				<input id="postcode" type="text" bind:value={form.postcode}
-					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none" />
+					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus" />
 			</div>
 		</div>
 	</div>
@@ -126,7 +126,7 @@
 	<div>
 		<label for="description" class="mb-1 block text-sm text-warm-500">Description</label>
 		<textarea id="description" bind:value={form.description} rows={3}
-			class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none"></textarea>
+			class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus"></textarea>
 	</div>
 
 	<!-- Ratings -->
@@ -136,7 +136,7 @@
 			<div>
 				<label for="starRating" class="mb-1 block text-xs text-warm-500">Star Rating</label>
 				<select id="starRating" bind:value={form.starRating}
-					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none">
+					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus">
 					{#each [1, 2, 3, 4, 5] as n}
 						<option value={n}>{n} Star{n > 1 ? 's' : ''}</option>
 					{/each}
@@ -145,35 +145,35 @@
 			<div>
 				<label for="qmResidents" class="mb-1 block text-xs text-warm-500">Residents</label>
 				<select id="qmResidents" bind:value={form.qualityMeasures.residents}
-					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none">
+					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus">
 					{#each [1, 2, 3, 4, 5] as n}<option value={n}>{n}/5</option>{/each}
 				</select>
 			</div>
 			<div>
 				<label for="qmCompliance" class="mb-1 block text-xs text-warm-500">Compliance</label>
 				<select id="qmCompliance" bind:value={form.qualityMeasures.compliance}
-					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none">
+					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus">
 					{#each [1, 2, 3, 4, 5] as n}<option value={n}>{n}/5</option>{/each}
 				</select>
 			</div>
 			<div>
 				<label for="qmStaffing" class="mb-1 block text-xs text-warm-500">Staffing</label>
 				<select id="qmStaffing" bind:value={form.qualityMeasures.staffing}
-					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none">
+					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus">
 					{#each [1, 2, 3, 4, 5] as n}<option value={n}>{n}/5</option>{/each}
 				</select>
 			</div>
 			<div>
 				<label for="qmQuality" class="mb-1 block text-xs text-warm-500">Quality</label>
 				<select id="qmQuality" bind:value={form.qualityMeasures.quality}
-					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none">
+					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus">
 					{#each [1, 2, 3, 4, 5] as n}<option value={n}>{n}/5</option>{/each}
 				</select>
 			</div>
 			<div>
 				<label for="complianceStatus" class="mb-1 block text-xs text-warm-500">Status</label>
 				<select id="complianceStatus" bind:value={form.complianceStatus}
-					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none">
+					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus">
 					{#each complianceOptions as o}
 						<option value={o}>{o}</option>
 					{/each}
@@ -189,32 +189,32 @@
 			<div>
 				<label for="totalBeds" class="mb-1 block text-xs text-warm-500">Total Beds</label>
 				<input id="totalBeds" type="number" bind:value={form.totalBeds} min={0}
-					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none" />
+					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus" />
 			</div>
 			<div>
 				<label for="availableBeds" class="mb-1 block text-xs text-warm-500">Available</label>
 				<input id="availableBeds" type="number" bind:value={form.availableBeds} min={0}
-					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none" />
+					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus" />
 			</div>
 			<div>
 				<label for="priceFrom" class="mb-1 block text-xs text-warm-500">Daily $ From</label>
 				<input id="priceFrom" type="number" bind:value={form.dailyPrice.from} min={0}
-					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none" />
+					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus" />
 			</div>
 			<div>
 				<label for="priceTo" class="mb-1 block text-xs text-warm-500">Daily $ To</label>
 				<input id="priceTo" type="number" bind:value={form.dailyPrice.to} min={0}
-					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none" />
+					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus" />
 			</div>
 			<div>
 				<label for="depositFrom" class="mb-1 block text-xs text-warm-500">Deposit $ From</label>
 				<input id="depositFrom" type="number" bind:value={form.refundableDeposit.from} min={0}
-					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none" />
+					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus" />
 			</div>
 			<div>
 				<label for="depositTo" class="mb-1 block text-xs text-warm-500">Deposit $ To</label>
 				<input id="depositTo" type="number" bind:value={form.refundableDeposit.to} min={0}
-					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none" />
+					class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus" />
 			</div>
 		</div>
 	</div>
@@ -223,7 +223,7 @@
 	<div class="max-w-xs">
 		<label for="lastAuditDate" class="mb-1 block text-sm text-warm-500">Last Audit Date</label>
 		<input id="lastAuditDate" type="date" bind:value={form.lastAuditDate}
-			class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none" />
+			class="w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus" />
 	</div>
 
 	<!-- Services -->
