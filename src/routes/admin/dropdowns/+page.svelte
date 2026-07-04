@@ -72,8 +72,8 @@
 
     <div class="mb-8">
       <div class="tabs tabs-boxed">
-        <a class="tab {currentTab === 'types' ? 'tab-active' : ''}" onclick={() => currentTab = 'types'}>Incident Types</a> 
-        <a class="tab {currentTab === 'actions' ? 'tab-active' : ''}" onclick={() => currentTab = 'actions'}>Actions</a> 
+        <a class="tab {currentTab === 'types' ? 'active' : ''}" onclick={() => currentTab = 'types'}>Incident Types</a> 
+        <a class="tab {currentTab === 'actions' ? 'active' : ''}" onclick={() => currentTab = 'actions'}>Actions</a> 
       </div>
     </div>
 
@@ -257,18 +257,46 @@
             </tbody>
           </table>
         {:else}
-          <p class="p-8 text-center text-warm-500">No incident actions found.</p>
+          <p class="p-8 text-center text-warm-500">No actions found.</p>
         {/if}
       {/if}
     </div>
 
-    <div class="mt-8 flex justify-end">
+    <div class="mt-8 flex justify-center">
       <button
-        class="rounded-lg bg-accent-600 px-6 py-2 text-sm font-medium text-white hover:bg-accent-500"
-        onclick={() => (showAdd = true)}
+        class="rounded-lg bg-accent-600 px-8 py-3 text-lg font-medium text-white hover:bg-accent-500"
+        onclick={() => showAdd = true}
       >
-        + Add {currentTab === 'types' ? 'Type' : 'Action'}
+        + Add New {currentTab === 'types' ? 'Type' : 'Action'}
       </button>
     </div>
   </div>
 </div>
+
+<style>
+  .tabs {
+    border-bottom: 1px solid rgb(252 245 243 / 0.5);
+  }
+  .tab {
+    position: relative;
+    bottom: -1px;
+    padding: 0.75rem 1.5rem;
+    background: transparent;
+    border: 1px solid rgb(252 245 243 / 0.5);
+    border-bottom: none;
+    font-weight: 500;
+    color: rgb(120 113 108);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .tab:hover {
+    color: rgb(120 113 108);
+  }
+  .tab.active {
+    color: rgb(0 120 212);
+    background: white;
+    border-color: rgb(252 245 243 / 0.5);
+    border-top-color: rgb(252 245 243 / 0.5);
+    box-shadow: 0 -2px 4px rgb(0 0 0 / 0.05);
+  }
+</style>

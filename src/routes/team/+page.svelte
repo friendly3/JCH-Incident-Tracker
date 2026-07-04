@@ -14,8 +14,12 @@
 
 	// UI state
 	let activeTab = $state<'leaders' | 'drivers'>('leaders');
-	let showLeaderForm = $state(false);
-	let showDriverForm = $state(false);
+	let showLeaderForm = $state(false);   // inline add form
+	let showDriverForm = $state(false);   // inline add form
+	let showLeaderModal = $state(false);  // overlay edit modal
+	let showDriverModal = $state(false);  // overlay edit modal
+	let showLeaderDiscardModal = $state(false);
+	let showDriverDiscardModal = $state(false);
 	let editingLeader = $state<TeamLeader | undefined>(undefined);
 	let editingDriver = $state<Driver | undefined>(undefined);
 	let deleteConfirmId = $state<string | null>(null);
@@ -27,6 +31,7 @@
 		email: '',
 		phone: ''
 	});
+	let leaderFormOriginal = $state({ name: '', email: '', phone: '' });
 
 	let driverForm = $state({
 		name: '',
@@ -35,42 +40,97 @@
 		phone: '',
 		teamLeaderId: ''
 	});
+	let driverFormOriginal = $state({ name: '', username: '', email: '', phone: '', teamLeaderId: '' });
 
-	// Reset leader form
+	// Unsaved change detection
+	const leaderHasChanges = $derived(
+		leaderForm.name !== leaderFormOriginal.name ||
+		leaderForm.email !== leaderFormOriginal.email ||
+		leaderForm.phone !== leaderFormOriginal.phone
+	);
+	const driverHasChanges = $derived(
+		driverForm.name !== driverFormOriginal.name ||
+		driverForm.username !== driverFormOriginal.username ||
+		driverForm.email !== driverFormOriginal.email ||
+		driverForm.phone !== driverFormOriginal.phone ||
+		driverForm.teamLeaderId !== driverFormOriginal.teamLeaderId
+	);
+
+	// Reset leader form (inline add)
 	function resetLeaderForm() {
 		leaderForm = { name: '', email: '', phone: '' };
+		leaderFormOriginal = { name: '', email: '', phone: '' };
 		editingLeader = undefined;
 		showLeaderForm = false;
 	}
 
-	// Reset driver form
+	// Close leader edit modal
+	function closeLeaderModal() {
+		showLeaderModal = false;
+		showLeaderDiscardModal = false;
+		editingLeader = undefined;
+		leaderForm = { name: '', email: '', phone: '' };
+		leaderFormOriginal = { name: '', email: '', phone: '' };
+	}
+
+	function handleLeaderBackdrop() {
+		if (leaderHasChanges) {
+			showLeaderDiscardModal = true;
+		} else {
+			closeLeaderModal();
+		}
+	}
+
+	// Reset driver form (inline add)
 	function resetDriverForm() {
 		driverForm = { name: '', username: '', email: '', phone: '', teamLeaderId: '' };
+		driverFormOriginal = { name: '', username: '', email: '', phone: '', teamLeaderId: '' };
 		editingDriver = undefined;
 		showDriverForm = false;
 	}
 
-	// Open leader form for editing
-	function startEditLeader(leader: TeamLeader) {
-		editingLeader = leader;
-		leaderForm = { name: leader.name, email: leader.email || '', phone: leader.phone || '' };
-		showLeaderForm = true;
+	// Close driver edit modal
+	function closeDriverModal() {
+		showDriverModal = false;
+		showDriverDiscardModal = false;
+		editingDriver = undefined;
+		driverForm = { name: '', username: '', email: '', phone: '', teamLeaderId: '' };
+		driverFormOriginal = { name: '', username: '', email: '', phone: '', teamLeaderId: '' };
 	}
 
-	// Open driver form for editing
+	function handleDriverBackdrop() {
+		if (driverHasChanges) {
+			showDriverDiscardModal = true;
+		} else {
+			closeDriverModal();
+		}
+	}
+
+	// Open leader modal for editing
+	function startEditLeader(leader: TeamLeader) {
+		editingLeader = leader;
+		const initial = { name: leader.name, email: leader.email || '', phone: leader.phone || '' };
+		leaderForm = { ...initial };
+		leaderFormOriginal = { ...initial };
+		showLeaderModal = true;
+	}
+
+	// Open driver modal for editing
 	function startEditDriver(driver: Driver) {
 		editingDriver = driver;
-		driverForm = {
+		const initial = {
 			name: driver.name,
 			username: driver.username,
 			email: driver.email || '',
 			phone: driver.phone || '',
 			teamLeaderId: driver.teamLeaderId || ''
 		};
-		showDriverForm = true;
+		driverForm = { ...initial };
+		driverFormOriginal = { ...initial };
+		showDriverModal = true;
 	}
 
-	// Save team leader
+	// Save team leader (handles both inline-add and modal-edit)
 	async function saveTeamLeader() {
 		if (!leaderForm.name.trim()) {
 			alert('Please enter a team leader name');
@@ -89,13 +149,17 @@
 			: await teamStore.addTeamLeader(leader, data.user?.id);
 
 		if (success) {
-			resetLeaderForm();
+			if (showLeaderModal) {
+				closeLeaderModal();
+			} else {
+				resetLeaderForm();
+			}
 		} else {
 			alert('Failed to save team leader');
 		}
 	}
 
-	// Save driver
+	// Save driver (handles both inline-add and modal-edit)
 	async function saveDriver() {
 		if (!driverForm.name.trim() || !driverForm.username.trim()) {
 			alert('Please enter driver name and username');
@@ -116,7 +180,11 @@
 			: await teamStore.addDriver(driver, data.user?.id);
 
 		if (success) {
-			resetDriverForm();
+			if (showDriverModal) {
+				closeDriverModal();
+			} else {
+				resetDriverForm();
+			}
 		} else {
 			alert('Failed to save driver');
 		}
@@ -218,7 +286,7 @@
 											type="text"
 											bind:value={leaderForm.name}
 											placeholder="e.g., John Smith"
-											class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 focus:border-accent-500 focus:outline-none"
+											class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 input-focus"
 										/>
 									</div>
 									<div>
@@ -228,7 +296,7 @@
 											type="email"
 											bind:value={leaderForm.email}
 											placeholder="john@example.com"
-											class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 focus:border-accent-500 focus:outline-none"
+											class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 input-focus"
 										/>
 									</div>
 									<div>
@@ -238,7 +306,7 @@
 											type="tel"
 											bind:value={leaderForm.phone}
 											placeholder="0412 345 678"
-											class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 focus:border-accent-500 focus:outline-none"
+											class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 input-focus"
 										/>
 									</div>
 									<div class="flex gap-3 justify-end pt-4">
@@ -280,7 +348,7 @@
 									<tbody>
 										{#each teamStore.teamLeaders as leader (leader.id)}
 											<tr class="border-b border-warm-100 last:border-0 hover:bg-warm-50/50">
-												<td class="px-6 py-3 font-medium text-warm-800">{leader.name}</td>
+												<td class="px-6 py-3 font-medium text-warm-800 uppercase">{leader.name}</td>
 												<td class="px-6 py-3 text-warm-600">{leader.email || '-'}</td>
 												<td class="px-6 py-3 text-warm-600">{leader.phone || '-'}</td>
 												<td class="px-6 py-3 text-right whitespace-nowrap">
@@ -301,7 +369,7 @@
 													{:else}
 														<button
 															onclick={() => startEditLeader(leader)}
-															class="mr-2 px-3 py-1 text-sm bg-accent-100 hover:bg-accent-200 text-accent-700 rounded border border-accent-200"
+															class="mr-2 px-3 py-1 text-sm bg-accent-100 hover:bg-accent-600 hover:text-white text-accent-700 rounded border border-accent-200"
 														>
 															Edit
 														</button>
@@ -348,7 +416,7 @@
 												type="text"
 												bind:value={driverForm.name}
 												placeholder="e.g., Jane Smith"
-												class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 focus:border-accent-500 focus:outline-none"
+												class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 input-focus"
 											/>
 										</div>
 										<div>
@@ -358,7 +426,7 @@
 												type="text"
 												bind:value={driverForm.username}
 												placeholder="e.g., SMITHJ1"
-												class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 focus:border-accent-500 focus:outline-none"
+												class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 input-focus"
 											/>
 										</div>
 									</div>
@@ -370,7 +438,7 @@
 												type="email"
 												bind:value={driverForm.email}
 												placeholder="jane@example.com"
-												class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 focus:border-accent-500 focus:outline-none"
+												class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 input-focus"
 											/>
 										</div>
 										<div>
@@ -380,7 +448,7 @@
 												type="tel"
 												bind:value={driverForm.phone}
 												placeholder="0412 345 678"
-												class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 focus:border-accent-500 focus:outline-none"
+												class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 input-focus"
 											/>
 										</div>
 									</div>
@@ -389,11 +457,11 @@
 										<select
 											id="driver-leader"
 											bind:value={driverForm.teamLeaderId}
-											class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-700 focus:border-accent-500 focus:outline-none"
-										>
-											<option value="">-- Unassigned --</option>
-											{#each teamStore.teamLeaders as leader}
-												<option value={leader.id}>{leader.name}</option>
+										class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-700 input-focus uppercase"
+									>
+										<option value="">-- Unassigned --</option>
+										{#each teamStore.teamLeaders as leader}
+											<option value={leader.id} class="uppercase">{leader.name}</option>
 											{/each}
 										</select>
 									</div>
@@ -460,7 +528,7 @@
 													{:else}
 														<button
 															onclick={() => startEditDriver(driver)}
-															class="mr-2 px-3 py-1 text-sm bg-accent-100 hover:bg-accent-200 text-accent-700 rounded border border-accent-200"
+															class="mr-2 px-3 py-1 text-sm bg-accent-100 hover:bg-accent-600 hover:text-white text-accent-700 rounded border border-accent-200"
 														>
 															Edit
 														</button>
@@ -486,4 +554,150 @@
 			</div>
 		</div>
 	{/if}
-</div>
+
+	<!-- Edit Team Leader Modal -->
+	{#if showLeaderModal}
+		<div
+			class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+			onclick={handleLeaderBackdrop}
+			role="button"
+			tabindex="0"
+			onkeydown={(e) => e.key === 'Escape' && handleLeaderBackdrop()}
+		>
+			<div
+				class="relative w-full max-w-md bg-white rounded-xl shadow-2xl p-6"
+				onclick={(e) => e.stopPropagation()}
+				onkeydown={(e) => e.stopPropagation()}
+				role="dialog"
+				aria-modal="true"
+				tabindex="-1"
+			>
+				<div class="flex items-center justify-between mb-5">
+					<h2 class="text-lg font-semibold text-warm-800">Edit Team Leader</h2>
+					{#if leaderHasChanges}
+						<span class="text-xs text-amber-600 font-medium">Unsaved changes</span>
+					{/if}
+				</div>
+				<div class="space-y-4">
+					<div>
+						<label for="modal-leader-name" class="block text-sm font-medium text-warm-700 mb-1">Name *</label>
+						<input id="modal-leader-name" type="text" bind:value={leaderForm.name}
+							class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 input-focus" />
+					</div>
+					<div>
+						<label for="modal-leader-email" class="block text-sm font-medium text-warm-700 mb-1">Email</label>
+						<input id="modal-leader-email" type="email" bind:value={leaderForm.email}
+							class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 input-focus" />
+					</div>
+					<div>
+						<label for="modal-leader-phone" class="block text-sm font-medium text-warm-700 mb-1">Phone</label>
+						<input id="modal-leader-phone" type="tel" bind:value={leaderForm.phone}
+							class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 input-focus" />
+					</div>
+					<div class="flex gap-3 justify-end pt-2">
+						<button type="button" onclick={handleLeaderBackdrop}
+						class="rounded-lg border-2 border-warm-400 px-4 py-2 text-sm text-warm-700 hover:bg-warm-50 transition">Cancel</button>
+						<button type="button" onclick={saveTeamLeader}
+							class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-500 transition">Update Team Leader</button>
+					</div>
+				</div>
+			</div>
+		</div>
+		{#if showLeaderDiscardModal}
+			<div class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50">
+				<div class="rounded-lg bg-white p-6 shadow-xl">
+					<h3 class="mb-2 text-lg font-semibold text-warm-800">Unsaved Changes</h3>
+					<p class="mb-6 text-sm text-warm-600">You have unsaved changes. Are you sure you want to discard them?</p>
+					<div class="flex gap-3 justify-end">
+						<button type="button" onclick={() => { showLeaderDiscardModal = false; }}
+							class="rounded-lg border border-warm-200 px-4 py-2 text-sm text-warm-700 hover:bg-warm-50">Keep Editing</button>
+						<button type="button" onclick={closeLeaderModal}
+							class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Discard Changes</button>
+					</div>
+				</div>
+			</div>
+		{/if}
+	{/if}
+
+	<!-- Edit Driver Modal -->
+	{#if showDriverModal}
+		<div
+			class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+			onclick={handleDriverBackdrop}
+			role="button"
+			tabindex="0"
+			onkeydown={(e) => e.key === 'Escape' && handleDriverBackdrop()}
+		>
+			<div
+				class="relative w-full max-w-lg bg-white rounded-xl shadow-2xl p-6"
+				onclick={(e) => e.stopPropagation()}
+				onkeydown={(e) => e.stopPropagation()}
+				role="dialog"
+				aria-modal="true"
+				tabindex="-1"
+			>
+				<div class="flex items-center justify-between mb-5">
+					<h2 class="text-lg font-semibold text-warm-800">Edit Driver</h2>
+					{#if driverHasChanges}
+						<span class="text-xs text-amber-600 font-medium">Unsaved changes</span>
+					{/if}
+				</div>
+				<div class="space-y-4">
+					<div class="grid grid-cols-2 gap-4">
+						<div>
+							<label for="modal-driver-name" class="block text-sm font-medium text-warm-700 mb-1">Name *</label>
+							<input id="modal-driver-name" type="text" bind:value={driverForm.name}
+								class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 input-focus" />
+						</div>
+						<div>
+							<label for="modal-driver-username" class="block text-sm font-medium text-warm-700 mb-1">Username *</label>
+							<input id="modal-driver-username" type="text" bind:value={driverForm.username}
+								class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 input-focus" />
+						</div>
+					</div>
+					<div class="grid grid-cols-2 gap-4">
+						<div>
+							<label for="modal-driver-email" class="block text-sm font-medium text-warm-700 mb-1">Email</label>
+							<input id="modal-driver-email" type="email" bind:value={driverForm.email}
+								class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 input-focus" />
+						</div>
+						<div>
+							<label for="modal-driver-phone" class="block text-sm font-medium text-warm-700 mb-1">Phone</label>
+							<input id="modal-driver-phone" type="tel" bind:value={driverForm.phone}
+								class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 input-focus" />
+						</div>
+					</div>
+					<div>
+						<label for="modal-driver-leader" class="block text-sm font-medium text-warm-700 mb-1">Team Leader</label>
+						<select id="modal-driver-leader" bind:value={driverForm.teamLeaderId}
+							class="w-full rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-700 input-focus uppercase">
+							<option value="">-- Unassigned --</option>
+							{#each teamStore.teamLeaders as leader}
+								<option value={leader.id} class="uppercase">{leader.name}</option>
+							{/each}
+						</select>
+					</div>
+					<div class="flex gap-3 justify-end pt-2">
+						<button type="button" onclick={handleDriverBackdrop}
+						class="rounded-lg border-2 border-warm-400 px-4 py-2 text-sm text-warm-700 hover:bg-warm-50 transition">Cancel</button>
+						<button type="button" onclick={saveDriver}
+							class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-500 transition">Update Driver</button>
+					</div>
+				</div>
+			</div>
+		</div>
+		{#if showDriverDiscardModal}
+			<div class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50">
+				<div class="rounded-lg bg-white p-6 shadow-xl">
+					<h3 class="mb-2 text-lg font-semibold text-warm-800">Unsaved Changes</h3>
+					<p class="mb-6 text-sm text-warm-600">You have unsaved changes. Are you sure you want to discard them?</p>
+					<div class="flex gap-3 justify-end">
+						<button type="button" onclick={() => { showDriverDiscardModal = false; }}
+							class="rounded-lg border border-warm-200 px-4 py-2 text-sm text-warm-700 hover:bg-warm-50">Keep Editing</button>
+						<button type="button" onclick={closeDriverModal}
+							class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Discard Changes</button>
+					</div>
+				</div>
+			</div>
+		{/if}
+	{/if}</div>
