@@ -2,6 +2,8 @@
 	import { incidentStore } from '$lib/data/store.svelte';
 	import type { Incident } from '$lib/data/incidents';
 	import IncidentForm from '$lib/components/IncidentForm.svelte';
+	import { getActionPillClass } from '$lib/pillClasses';
+	import { formatDate } from '$lib/formatDate';
 
 	// NOTE: Admin page is deprecated - functionality moved to main page (+page.svelte)
 	// This page can be removed once confirmed working.
@@ -15,17 +17,11 @@
 	let searchQuery = $state('');
 	let deleteConfirmId = $state<string | null>(null);
 
-	function formatDate(dateStr: string) {
-		if (!dateStr) return '';
-		const d = new Date(dateStr);
-		return d.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-	}
-
 	const filtered = $derived(
 		incidentStore.list.filter((i) => {
 			if (!searchQuery) return true;
 			const q = searchQuery.toLowerCase();
-			return i.referenceNo.toLowerCase().includes(q) || i.referenceText.toLowerCase().includes(q) || i.driver.toLowerCase().includes(q) || i.type.toLowerCase().includes(q);
+			return i.referenceNo.toLowerCase().includes(q) || i.referenceText.toLowerCase().includes(q) || (i.driver ?? '').toLowerCase().includes(q) || (i.type ?? '').toLowerCase().includes(q);
 		})
 	);
 
@@ -36,11 +32,9 @@
 
 	async function handleSubmit(incident: Incident) {
 		if (mode === 'edit' && editingIncident) {
-			const success = await incidentStore.update(editingIncident.id, incident);
-			if (success) await incidentStore.reload(data.user?.id);
+			await incidentStore.update(editingIncident.id, incident);
 		} else {
-			const success = await incidentStore.add(incident, data.user?.id);
-			if (success) await incidentStore.reload(data.user?.id);
+			await incidentStore.add(incident, data.user?.id);
 		}
 		mode = 'list';
 		editingIncident = undefined;
@@ -52,7 +46,7 @@
 		deleteConfirmId = null;
 	}
 
-	function handleCancel() {
+	function handleCancel(_hasUnsavedChanges = false) {
 		mode = 'list';
 		editingIncident = undefined;
 	}
@@ -86,7 +80,7 @@
 				type="text"
 				placeholder="Search incidents..."
 				bind:value={searchQuery}
-				class="mb-4 w-full max-w-md rounded-lg border border-warm-200 bg-white px-4 py-2.5 text-sm text-warm-800 placeholder-warm-400 focus:border-accent-500 focus:outline-none"
+				class="mb-4 w-full max-w-md rounded-lg border border-warm-200 bg-white px-4 py-2.5 text-sm text-warm-800 placeholder-warm-400 input-focus"
 			/>
 
 			<p class="mb-4 text-sm text-warm-500">{filtered.length} incidents</p>
@@ -117,7 +111,9 @@
 								<td class="px-4 py-3 font-mono text-xs text-warm-700">{incident.driver}</td>
 								<td class="px-4 py-3">
 									{#if incident.action}
-										<span class="rounded-full bg-warm-100 px-2 py-0.5 text-xs font-medium text-warm-600">{incident.action}</span>
+										<span class="inline-flex items-center rounded-full px-3 py-0.5 text-xs font-medium border uppercase {getActionPillClass(incident.action)}">
+											{incident.action}
+										</span>
 									{:else}
 										<span class="text-warm-300">-</span>
 									{/if}
@@ -149,6 +145,10 @@
 			<div class="rounded-lg border border-warm-200 bg-white p-6 shadow-sm">
 				<IncidentForm
 					incident={editingIncident}
+					incidentTypes={data.incidentTypes ?? []}
+					incidentActions={data.incidentActions ?? []}
+					drivers={data.drivers ?? []}
+					teamLeaders={data.teamLeaders ?? []}
 					onSubmit={handleSubmit}
 					onCancel={handleCancel}
 				/>

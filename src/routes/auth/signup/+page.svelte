@@ -27,7 +27,7 @@
 					name="email"
 					value={email}
 					onchange={(e) => (email = e.currentTarget.value)}
-					class="w-full px-4 py-2 border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500"
+					class="w-full px-4 py-2 border border-warm-200 rounded-lg input-focus"
 					placeholder="your@email.com"
 					required
 				/>
@@ -41,7 +41,7 @@
 					name="password"
 					value={password}
 					onchange={(e) => (password = e.currentTarget.value)}
-					class="w-full px-4 py-2 border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500"
+					class="w-full px-4 py-2 border border-warm-200 rounded-lg input-focus"
 					placeholder="••••••••"
 					minlength="6"
 					required
@@ -56,7 +56,7 @@
 					name="confirmPassword"
 					value={confirmPassword}
 					onchange={(e) => (confirmPassword = e.currentTarget.value)}
-					class="w-full px-4 py-2 border border-warm-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500"
+					class="w-full px-4 py-2 border border-warm-200 rounded-lg input-focus"
 					placeholder="••••••••"
 					minlength="6"
 					required
@@ -81,7 +81,7 @@
 				type="submit"
 				disabled={loading}
 				onclick={() => loading = true}
-				class="w-full bg-accent-600 hover:bg-accent-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-lg transition"
+				class="w-full bg-accent-600 hover:bg-accent-700 disabled:bg-warm-400 disabled:opacity-60 text-white font-medium py-2 px-4 rounded-lg transition"
 			>
 				{loading ? 'Creating account...' : 'Create Account'}
 			</button>
