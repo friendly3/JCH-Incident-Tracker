@@ -4,7 +4,7 @@
 	import { navigating } from '$app/stores';
 	import favicon from '$lib/assets/favicon.svg';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-	import { theme } from '$lib/theme.svelte';
+	import { isAuthPath, theme } from '$lib/theme.svelte';
 	import '../app.css';
 
 	let { children, data } = $props();
@@ -32,7 +32,13 @@
 		isConfigExpanded = !isConfigExpanded;
 	}
 
+	const isAuthRoute = $derived(isAuthPath(currentPath));
+
 	$effect(() => {
+		if (isAuthRoute) {
+			theme.applyTransient('light');
+			return;
+		}
 		return theme.init();
 	});
 
@@ -208,11 +214,6 @@
 				{/if}
 			</div>
 		{/if}
-	</div>
-	{:else}
-	<!-- Theme toggle on auth pages (no sidebar) -->
-	<div class="fixed top-4 right-4 z-50">
-		<ThemeToggle class="bg-white/80 shadow-sm backdrop-blur dark:bg-warm-100/80" />
 	</div>
 	{/if}
 
