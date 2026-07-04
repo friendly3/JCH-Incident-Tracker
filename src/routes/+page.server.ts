@@ -3,7 +3,34 @@ import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const db = createDb(locals.supabase)
-	const incidents = await db.getIncidents()
 
-	return { incidents }
+	try {
+		const [incidents, incidentTypes, incidentActions, drivers, teamLeaders] = await Promise.all([
+			db.getIncidents(),
+			db.getIncidentTypes(),
+			db.getIncidentActions(),
+			db.getDrivers(),
+			db.getTeamLeaders()
+		])
+
+		return {
+			incidents,
+			incidentTypes,
+			incidentActions,
+			drivers,
+			teamLeaders,
+			loadError: null as string | null
+		}
+	} catch (err) {
+		const message = err instanceof Error ? err.message : 'Failed to load incidents'
+		console.error('Incidents page load error:', err)
+		return {
+			incidents: [],
+			incidentTypes: [],
+			incidentActions: [],
+			drivers: [],
+			teamLeaders: [],
+			loadError: message
+		}
+	}
 }

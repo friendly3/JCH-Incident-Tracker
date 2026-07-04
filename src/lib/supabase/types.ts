@@ -9,6 +9,34 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      incident_types: {
+        Row: {
+          id: string
+          name: string
+        }
+        Insert: {
+          id?: string
+          name: string
+        }
+        Update: {
+          id?: string
+          name?: string
+        }
+      }
+      incident_actions: {
+        Row: {
+          id: string
+          name: string
+        }
+        Insert: {
+          id?: string
+          name: string
+        }
+        Update: {
+          id?: string
+          name?: string
+        }
+      }
       facilities: {
         Row: {
           id: string
@@ -74,15 +102,21 @@ export interface Database {
           reference_no: string
           date_received: string
           time: string
-          type: string
-          driver: string
-          team_leader: string
+          type_id: string | null
+          driver_id: string | null
+          team_leader_id: string | null
           response: string
           reference_text: string
-          action: string
+          action_id: string | null
           status: string
-          date_response?: string
-          time_response?: string
+          email_sender?: string | null
+          email_subject?: string | null
+          sender?: string
+          marked?: string
+          source?: string
+          date_response?: string | null
+          time_response?: string | null
+          user_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -91,30 +125,40 @@ export interface Database {
           reference_no: string
           date_received: string
           time: string
-          type: string
-          driver: string
-          team_leader: string
+          type_id?: string | null
+          driver_id?: string | null
+          team_leader_id?: string | null
           response: string
           reference_text: string
-          action: string
+          action_id?: string | null
           status?: string
-          date_response?: string
-          time_response?: string
+          email_sender?: string | null
+          email_subject?: string | null
+          sender?: string
+          marked?: string
+          source?: string
+          date_response?: string | null
+          time_response?: string | null
+          user_id?: string | null
         }
         Update: {
           id?: string
           reference_no?: string
           date_received?: string
           time?: string
-          type?: string
-          driver?: string
-          team_leader?: string
+          type_id?: string | null
+          driver_id?: string | null
+          team_leader_id?: string | null
           response?: string
           reference_text?: string
-          action?: string
+          action_id?: string | null
           status?: string
-          date_response?: string
-          time_response?: string
+          email_sender?: string | null
+          email_subject?: string | null
+          sender?: string
+          marked?: string
+          date_response?: string | null
+          time_response?: string | null
           updated_at?: string
         }
       }
