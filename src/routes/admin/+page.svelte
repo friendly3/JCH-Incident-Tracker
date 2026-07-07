@@ -31,13 +31,16 @@
 	}
 
 	async function handleSubmit(incident: Incident) {
+		let success = false;
 		if (mode === 'edit' && editingIncident) {
-			await incidentStore.update(editingIncident.id, incident);
+			success = await incidentStore.update(editingIncident.id, incident);
 		} else {
-			await incidentStore.add(incident, data.user?.id);
+			success = await incidentStore.add(incident, data.user?.id);
 		}
-		mode = 'list';
-		editingIncident = undefined;
+		if (success) {
+			mode = 'list';
+			editingIncident = undefined;
+		}
 	}
 
 	async function handleDelete(id: string) {
@@ -143,6 +146,11 @@
 			{/if}
 		{:else}
 			<div class="rounded-lg border border-warm-200 bg-white p-6 shadow-sm">
+				{#if incidentStore.error}
+					<p class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+						{incidentStore.error}
+					</p>
+				{/if}
 				<IncidentForm
 					incident={editingIncident}
 					incidentTypes={data.incidentTypes ?? []}

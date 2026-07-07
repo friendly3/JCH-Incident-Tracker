@@ -18,8 +18,24 @@
 
 	const isEdit = $derived(!!incident);
 	let showConfirm = $state(false);
+	let submitError = $state<string | null>(null);
 	let receivedAt = $state('');
 	let respondedAt = $state('');
+
+	const FK_EMPTY = '';
+
+	function normalizeFkId(value: string | null | undefined): string | null {
+		if (value == null || value === '' || value === 'null' || value === 'undefined') return null;
+		return value;
+	}
+
+	function setFkField(field: 'typeId' | 'driverId' | 'teamLeaderId' | 'actionId', raw: string) {
+		form[field] = raw === FK_EMPTY ? null : raw;
+	}
+
+	function fkInList(id: string | null, items: { id: string }[]): boolean {
+		return id != null && items.some((item) => item.id === id);
+	}
 
 	function normalizeOptionalTime(time: string): string {
 		const trimmed = time?.trim().slice(0, 5) ?? '';
@@ -46,7 +62,11 @@
 			marked: source.marked?.trim() ?? '',
 			response: source.response?.trim() ?? '',
 			referenceNo: source.referenceNo?.trim() ?? '',
-			referenceText: source.referenceText?.trim() ?? ''
+			referenceText: source.referenceText?.trim() ?? '',
+			typeId: normalizeFkId(source.typeId),
+			driverId: normalizeFkId(source.driverId),
+			teamLeaderId: normalizeFkId(source.teamLeaderId),
+			actionId: normalizeFkId(source.actionId)
 		};
 	}
 
@@ -195,6 +215,7 @@
 	// Reset form when incident prop changes (only track `incident`, not form edits)
 	$effect(() => {
 		showConfirm = false;
+		submitError = null;
 		const source = incident;
 		const initial = source ? normalizeIncident(source) : emptyIncident();
 		form = initial;
@@ -206,14 +227,25 @@
 	function handleSubmit() {
 		syncReceivedAt();
 		syncRespondedAt();
+		submitError = null;
 
-		if (!form.dateReceived || !form.typeId) {
+		const typeId = normalizeFkId(form.typeId);
+		if (!form.dateReceived?.trim()) {
+			submitError = 'Date Received is required.';
+			return;
+		}
+		if (!typeId) {
+			submitError = 'Type is required — please select an incident type.';
 			return;
 		}
 
 		const payload: Incident = {
 			...form,
 			source: form.source === 'import' ? 'import' : 'ui',
+			typeId,
+			driverId: normalizeFkId(form.driverId),
+			teamLeaderId: normalizeFkId(form.teamLeaderId),
+			actionId: normalizeFkId(form.actionId),
 			time: form.time.trim(),
 			timeResponse: form.timeResponse.trim()
 		};
@@ -279,15 +311,31 @@
 		</div>
 		<div>
 			<label for="action" class={labelClass}>Action</label>
-			<select id="action" bind:value={form.actionId} class="{inputClass} uppercase">
-				<option value={null}>— None —</option>
+			<select
+				id="action"
+				value={form.actionId ?? FK_EMPTY}
+				onchange={(e) => setFkField('actionId', e.currentTarget.value)}
+				class="{inputClass} uppercase"
+			>
+				<option value={FK_EMPTY}>— None —</option>
+				{#if form.actionId && !fkInList(form.actionId, incidentActions)}
+					<option value={form.actionId}>{incident?.action ?? 'Current action'}</option>
+				{/if}
 				{#each incidentActions as a}<option value={a.id} class="uppercase">{a.name}</option>{/each}
 			</select>
 		</div>
 		<div>
 			<label for="type" class={labelClass}>Type *</label>
-			<select id="type" bind:value={form.typeId} class="{inputClass} uppercase">
-				<option value={null}>— Select type —</option>
+			<select
+				id="type"
+				value={form.typeId ?? FK_EMPTY}
+				onchange={(e) => setFkField('typeId', e.currentTarget.value)}
+				class="{inputClass} uppercase"
+			>
+				<option value={FK_EMPTY}>— Select type —</option>
+				{#if form.typeId && !fkInList(form.typeId, incidentTypes)}
+					<option value={form.typeId}>{incident?.type ?? 'Current type'}</option>
+				{/if}
 				{#each incidentTypes as t}<option value={t.id} class="uppercase">{t.name}</option>{/each}
 			</select>
 		</div>
@@ -326,8 +374,16 @@
 		</div>
 		<div>
 			<label for="teamLeader" class={labelClass}>Team Leader</label>
-			<select id="teamLeader" bind:value={form.teamLeaderId} class={inputClass}>
-				<option value={null}>— None —</option>
+			<select
+				id="teamLeader"
+				value={form.teamLeaderId ?? FK_EMPTY}
+				onchange={(e) => setFkField('teamLeaderId', e.currentTarget.value)}
+				class={inputClass}
+			>
+				<option value={FK_EMPTY}>— None —</option>
+				{#if form.teamLeaderId && !fkInList(form.teamLeaderId, teamLeaders)}
+					<option value={form.teamLeaderId}>{incident?.teamLeader ?? 'Current team leader'}</option>
+				{/if}
 				{#each teamLeaders as tl}<option value={tl.id}>{tl.name}</option>{/each}
 			</select>
 		</div>
@@ -337,8 +393,16 @@
 		</div>
 		<div>
 			<label for="driver" class={labelClass}>Driver</label>
-			<select id="driver" bind:value={form.driverId} class={inputClass}>
-				<option value={null}>— None —</option>
+			<select
+				id="driver"
+				value={form.driverId ?? FK_EMPTY}
+				onchange={(e) => setFkField('driverId', e.currentTarget.value)}
+				class={inputClass}
+			>
+				<option value={FK_EMPTY}>— None —</option>
+				{#if form.driverId && !fkInList(form.driverId, drivers)}
+					<option value={form.driverId}>{incident?.driver ?? 'Current driver'}</option>
+				{/if}
 				{#each drivers as d}<option value={d.id}>{d.username}</option>{/each}
 			</select>
 		</div>
@@ -369,13 +433,25 @@
 		</div>
 	</div>
 
+	{#if submitError}
+		<p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+			{submitError}
+		</p>
+	{/if}
+
+	{#if isEdit && showConfirm}
+		<p class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+			Review your changes, then click <strong>Confirm Update</strong> to save.
+		</p>
+	{/if}
+
 	<div class="flex gap-3 border-t border-warm-200 pt-4">
 		{#if isEdit && showConfirm}
 			<button type="button" onclick={handleSubmit}
 				class="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-500">
 				Confirm Update
 			</button>
-			<button type="button" onclick={() => { showConfirm = false; }}
+			<button type="button" onclick={() => { showConfirm = false; submitError = null; }}
 				class="rounded-lg px-5 py-2 text-sm text-warm-500 hover:text-white">
 				Cancel
 			</button>

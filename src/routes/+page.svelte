@@ -211,6 +211,7 @@
 
 	function openAdd() {
 		resetModalState();
+		incidentStore.clearError();
 		editingIncident = undefined;
 		mode = 'add';
 	}
@@ -218,17 +219,21 @@
 	// CRUD handlers (moved from admin page)
 	function startEdit(incident: Incident) {
 		resetModalState();
+		incidentStore.clearError();
 		editingIncident = incident;
 		mode = 'edit';
 	}
 
 	async function handleSubmit(incident: Incident) {
+		let success = false;
 		if (mode === 'edit' && editingIncident) {
-			await incidentStore.update(editingIncident.id, incident);
+			success = await incidentStore.update(editingIncident.id, incident);
 		} else {
-			await incidentStore.add(incident, data.user?.id);
+			success = await incidentStore.add(incident, data.user?.id);
 		}
-		closeModal();
+		if (success) {
+			closeModal();
+		}
 	}
 
 	async function handleDelete(id: string) {
@@ -422,6 +427,11 @@
 						</button>
 					{/if}
 				</div>
+				{#if incidentStore.error}
+					<p class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+						{incidentStore.error}
+					</p>
+				{/if}
 				<IncidentForm
 					bind:this={incidentFormRef}
 					incident={editingIncident}

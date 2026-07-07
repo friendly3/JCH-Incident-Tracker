@@ -61,8 +61,12 @@ export const incidentStore = {
 			return false;
 		}
 	},
+	clearError() {
+		_error = null;
+	},
 	async update(id: string, updated: Incident) {
 		if (!_db) return false;
+		_error = null;
 		try {
 			const success = await _db.updateIncident(id, updated);
 			if (success) {

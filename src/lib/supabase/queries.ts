@@ -132,12 +132,12 @@ export function toIncidentUpdate(updates: Partial<Incident>, existingSource: Inc
 	if (updates.referenceNo !== undefined) payload.reference_no = updates.referenceNo;
 	if (updates.dateReceived !== undefined) payload.date_received = updates.dateReceived;
 	if (updates.time !== undefined) payload.time = updates.time?.trim() || '';
-	if (updates.typeId !== undefined) payload.type_id = updates.typeId;
-	if (updates.driverId !== undefined) payload.driver_id = updates.driverId;
-	if (updates.teamLeaderId !== undefined) payload.team_leader_id = updates.teamLeaderId;
+	if (updates.typeId !== undefined) payload.type_id = updates.typeId || null;
+	if (updates.driverId !== undefined) payload.driver_id = updates.driverId || null;
+	if (updates.teamLeaderId !== undefined) payload.team_leader_id = updates.teamLeaderId || null;
 	if (updates.response !== undefined) payload.response = updates.response;
 	if (updates.referenceText !== undefined) payload.reference_text = updates.referenceText;
-	if (updates.actionId !== undefined) payload.action_id = updates.actionId;
+	if (updates.actionId !== undefined) payload.action_id = updates.actionId || null;
 	if (updates.dateResponse !== undefined) payload.date_response = updates.dateResponse;
 	if (updates.timeResponse !== undefined) payload.time_response = updates.timeResponse;
 	if (allowEmailUpdate && updates.emailSender !== undefined) {
