@@ -12,13 +12,30 @@
 		onSubmit: (incident: Incident) => void;
 		onCancel: (hasUnsavedChanges: boolean) => void;
 		onUnsavedChangesChange?: (hasChanges: boolean) => void;
+		/** When false, parent shell renders the form title (modal/fullscreen header). */
+		showTitle?: boolean;
+		/** `shell` = gray inset surface (modal/fullscreen); `inline` = flat background for legacy wrappers. */
+		variant?: 'shell' | 'inline';
 	}
 
-	let { incident, incidentTypes, incidentActions, drivers, teamLeaders, onSubmit, onCancel, onUnsavedChangesChange }: Props = $props();
+	let {
+		incident,
+		incidentTypes,
+		incidentActions,
+		drivers,
+		teamLeaders,
+		onSubmit,
+		onCancel,
+		onUnsavedChangesChange,
+		showTitle = true,
+		variant = 'shell'
+	}: Props = $props();
 
 	const isEdit = $derived(!!incident);
 	let showConfirm = $state(false);
 	let submitError = $state<string | null>(null);
+	type SubmitErrorField = 'dateReceived' | 'type';
+	let submitErrorField = $state<SubmitErrorField | null>(null);
 	let receivedAt = $state('');
 	let respondedAt = $state('');
 
@@ -216,6 +233,7 @@
 	$effect(() => {
 		showConfirm = false;
 		submitError = null;
+		submitErrorField = null;
 		const source = incident;
 		const initial = source ? normalizeIncident(source) : emptyIncident();
 		form = initial;
@@ -228,14 +246,17 @@
 		syncReceivedAt();
 		syncRespondedAt();
 		submitError = null;
+		submitErrorField = null;
 
 		const typeId = normalizeFkId(form.typeId);
 		if (!form.dateReceived?.trim()) {
 			submitError = 'Date Received is required.';
+			submitErrorField = 'dateReceived';
 			return;
 		}
 		if (!typeId) {
 			submitError = 'Type is required — please select an incident type.';
+			submitErrorField = 'type';
 			return;
 		}
 
@@ -262,10 +283,10 @@
 		requestClose();
 	}
 
-	const inputClass = 'w-full rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus';
-	const labelClass = 'mb-1 block text-sm text-warm-500';
+	const inputClass =
+		'w-full rounded-md border border-warm-200 bg-white px-3 py-2 text-sm text-warm-700 input-focus dark:bg-warm-200';
 	const dateTimeFieldClass =
-		'input-focus-within form-field-surface relative w-full rounded-lg border border-warm-200 bg-warm-50';
+		'input-focus-within form-field-surface relative w-full rounded-md border border-warm-200 bg-white dark:bg-warm-200';
 	const dateTimeDisplayClass =
 		'pointer-events-none flex min-h-[2.375rem] items-center px-3 py-2 text-sm';
 	const dateTimeOverlayClass = 'absolute inset-0 h-full w-full cursor-pointer opacity-0';
@@ -273,198 +294,293 @@
 	const receivedAtDesc = $derived(formatDateTimeLocal(receivedAt) || 'Select date and time');
 	const respondedAtDesc = $derived(formatDateTimeLocal(respondedAt) || 'Select date and time');
 	const emailFieldsEditable = $derived((form.source ?? 'ui') === 'ui');
-	const readonlyEmailClass = `${inputClass} bg-warm-100 text-warm-400 cursor-default select-all`;
+	const readonlyEmailClass = `${inputClass} bg-warm-100 text-warm-400 cursor-default select-all dark:bg-warm-300`;
+	const footerBtnFocus =
+		'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500';
+
+	const receivedAtDescribedBy = $derived(
+		submitErrorField === 'dateReceived'
+			? 'receivedAt-desc incident-submit-error'
+			: 'receivedAt-desc'
+	);
 </script>
 
-<form novalidate onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-6">
-	<h2 id="incident-form-title" class="text-xl font-semibold text-warm-800">Incident Details</h2>
+<form
+	novalidate
+	onsubmit={(e) => {
+		e.preventDefault();
+		handleSubmit();
+	}}
+	class="flex min-h-0 flex-1 flex-col"
+>
+	<div
+		class="{variant === 'shell'
+			? 'sn-form-surface'
+			: 'bg-transparent'} flex-1 overflow-y-auto"
+	>
+		<div class="mx-auto w-full max-w-3xl px-6 py-6">
+			{#if showTitle}
+				<h2 id="incident-form-title" class="mb-6 text-xl font-semibold text-warm-800">
+					{isEdit ? 'Edit Incident' : 'New Incident'}
+				</h2>
+			{/if}
 
-	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-		<div>
-			<label for="referenceNo" class={labelClass}>Reference No.</label>
-			<input
-				id="referenceNo"
-				type="text"
-				bind:value={form.referenceNo}
-				class="{inputClass} text-accent-600"
-			/>
-		</div>
-		<div>
-			<label for="emailSender" class={labelClass}>Email Sender</label>
-			<input
-				id="emailSender"
-				type="text"
-				bind:value={form.emailSender}
-				readonly={!emailFieldsEditable}
-				class={emailFieldsEditable ? inputClass : readonlyEmailClass}
-			/>
-		</div>
-		<div class="sm:col-span-2">
-			<label for="emailSubject" class={labelClass}>Email Subject</label>
-			<input
-				id="emailSubject"
-				type="text"
-				bind:value={form.emailSubject}
-				readonly={!emailFieldsEditable}
-				class={emailFieldsEditable ? inputClass : readonlyEmailClass}
-			/>
-		</div>
-		<div>
-			<label for="action" class={labelClass}>Action</label>
-			<select
-				id="action"
-				value={form.actionId ?? FK_EMPTY}
-				onchange={(e) => setFkField('actionId', e.currentTarget.value)}
-				class="{inputClass} uppercase"
-			>
-				<option value={FK_EMPTY}>— None —</option>
-				{#if form.actionId && !fkInList(form.actionId, incidentActions)}
-					<option value={form.actionId}>{incident?.action ?? 'Current action'}</option>
-				{/if}
-				{#each incidentActions as a}<option value={a.id} class="uppercase">{a.name}</option>{/each}
-			</select>
-		</div>
-		<div>
-			<label for="type" class={labelClass}>Type *</label>
-			<select
-				id="type"
-				value={form.typeId ?? FK_EMPTY}
-				onchange={(e) => setFkField('typeId', e.currentTarget.value)}
-				class="{inputClass} uppercase"
-			>
-				<option value={FK_EMPTY}>— Select type —</option>
-				{#if form.typeId && !fkInList(form.typeId, incidentTypes)}
-					<option value={form.typeId}>{incident?.type ?? 'Current type'}</option>
-				{/if}
-				{#each incidentTypes as t}<option value={t.id} class="uppercase">{t.name}</option>{/each}
-			</select>
-		</div>
-		<div>
-			<label for="marked" class={labelClass}>Marked</label>
-			<select id="marked" bind:value={form.marked} class="{inputClass} uppercase">
-				<option value="" class="uppercase">None</option>
-				<option value="High" class="uppercase">High</option>
-			</select>
-		</div>
-		<div class="col-span-full border-t border-warm-200/60"></div>
-		<div>
-			<label id="receivedAt-label" for="receivedAt" class={labelClass}>Date Received *</label>
-			<span id="receivedAt-desc" class="sr-only">{receivedAtDesc}</span>
-			<div class={dateTimeFieldClass}>
-				<div
-					class="{dateTimeDisplayClass} {receivedAt ? 'text-warm-700' : 'text-warm-400'}"
-					aria-hidden="true"
-				>
-					{formatDateTimeLocal(receivedAt) || 'Select date & time'}
+			<section class="mb-8" aria-labelledby="section-details-heading">
+				<h3 id="section-details-heading" class="sn-section-title">Details</h3>
+				<div class="sn-field-row">
+					<label for="referenceNo" class="sn-field-label">Reference No.</label>
+					<div class="sn-field-control">
+						<input
+							id="referenceNo"
+							type="text"
+							bind:value={form.referenceNo}
+							class="{inputClass} text-accent-600"
+						/>
+					</div>
 				</div>
-				<input
-					id="receivedAt"
-					type="datetime-local"
-					bind:value={receivedAt}
-					oninput={syncReceivedAt}
-					onchange={syncReceivedAt}
-					aria-labelledby="receivedAt-label receivedAt-desc"
-					class={dateTimeOverlayClass}
-				/>
-			</div>
-		</div>
-		<div>
-			<label for="sender" class={labelClass}>Sender</label>
-			<input id="sender" type="text" bind:value={form.sender} class={inputClass} />
-		</div>
-		<div>
-			<label for="teamLeader" class={labelClass}>Team Leader</label>
-			<select
-				id="teamLeader"
-				value={form.teamLeaderId ?? FK_EMPTY}
-				onchange={(e) => setFkField('teamLeaderId', e.currentTarget.value)}
-				class={inputClass}
-			>
-				<option value={FK_EMPTY}>— None —</option>
-				{#if form.teamLeaderId && !fkInList(form.teamLeaderId, teamLeaders)}
-					<option value={form.teamLeaderId}>{incident?.teamLeader ?? 'Current team leader'}</option>
-				{/if}
-				{#each teamLeaders as tl}<option value={tl.id}>{tl.name}</option>{/each}
-			</select>
-		</div>
-		<div class="sm:col-span-2">
-			<label for="referenceText" class={labelClass}>Reference Text</label>
-			<input id="referenceText" type="text" bind:value={form.referenceText} class={inputClass} />
-		</div>
-		<div>
-			<label for="driver" class={labelClass}>Driver</label>
-			<select
-				id="driver"
-				value={form.driverId ?? FK_EMPTY}
-				onchange={(e) => setFkField('driverId', e.currentTarget.value)}
-				class={inputClass}
-			>
-				<option value={FK_EMPTY}>— None —</option>
-				{#if form.driverId && !fkInList(form.driverId, drivers)}
-					<option value={form.driverId}>{incident?.driver ?? 'Current driver'}</option>
-				{/if}
-				{#each drivers as d}<option value={d.id}>{d.username}</option>{/each}
-			</select>
-		</div>
-		<div>
-			<label for="response" class={labelClass}>Response By</label>
-			<input id="response" type="text" bind:value={form.response} class={inputClass} />
-		</div>
-		<div>
-			<label id="respondedAt-label" for="respondedAt" class={labelClass}>Responded</label>
-			<span id="respondedAt-desc" class="sr-only">{respondedAtDesc}</span>
-			<div class={dateTimeFieldClass}>
-				<div
-					class="{dateTimeDisplayClass} {respondedAt ? 'text-warm-700' : 'text-warm-400'}"
-					aria-hidden="true"
-				>
-					{formatDateTimeLocal(respondedAt) || 'Select date & time'}
+				<div class="sn-field-row">
+					<label for="emailSender" class="sn-field-label">Email Sender</label>
+					<div class="sn-field-control">
+						<input
+							id="emailSender"
+							type="text"
+							bind:value={form.emailSender}
+							readonly={!emailFieldsEditable}
+							class={emailFieldsEditable ? inputClass : readonlyEmailClass}
+						/>
+					</div>
 				</div>
-				<input
-					id="respondedAt"
-					type="datetime-local"
-					bind:value={respondedAt}
-					oninput={syncRespondedAt}
-					onchange={syncRespondedAt}
-					aria-labelledby="respondedAt-label respondedAt-desc"
-					class={dateTimeOverlayClass}
-				/>
-			</div>
+				<div class="sn-field-row">
+					<label for="emailSubject" class="sn-field-label">Email Subject</label>
+					<div class="sn-field-control">
+						<input
+							id="emailSubject"
+							type="text"
+							bind:value={form.emailSubject}
+							readonly={!emailFieldsEditable}
+							class={emailFieldsEditable ? inputClass : readonlyEmailClass}
+						/>
+					</div>
+				</div>
+				<div class="sn-field-row">
+					<label for="referenceText" class="sn-field-label">Reference Text</label>
+					<div class="sn-field-control">
+						<input id="referenceText" type="text" bind:value={form.referenceText} class={inputClass} />
+					</div>
+				</div>
+				<div class="sn-field-row">
+					<label id="receivedAt-label" for="receivedAt" class="sn-field-label">
+						Date Received <span class="text-red-600">*</span>
+					</label>
+					<div class="sn-field-control">
+						<span id="receivedAt-desc" class="sr-only">{receivedAtDesc}</span>
+						<div class={dateTimeFieldClass}>
+							<div
+								class="{dateTimeDisplayClass} {receivedAt ? 'text-warm-700' : 'text-warm-400'}"
+								aria-hidden="true"
+							>
+								{formatDateTimeLocal(receivedAt) || 'Select date & time'}
+							</div>
+							<input
+								id="receivedAt"
+								type="datetime-local"
+								bind:value={receivedAt}
+								oninput={syncReceivedAt}
+								onchange={syncReceivedAt}
+								aria-labelledby="receivedAt-label"
+								aria-describedby={receivedAtDescribedBy}
+								aria-required="true"
+								aria-invalid={submitErrorField === 'dateReceived' ? 'true' : undefined}
+								class={dateTimeOverlayClass}
+							/>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<section class="mb-8" aria-labelledby="section-classification-heading">
+				<h3 id="section-classification-heading" class="sn-section-title">Classification</h3>
+				<div class="sn-field-row">
+					<label for="action" class="sn-field-label">Action</label>
+					<div class="sn-field-control">
+						<select
+							id="action"
+							value={form.actionId ?? FK_EMPTY}
+							onchange={(e) => setFkField('actionId', e.currentTarget.value)}
+							class="{inputClass} uppercase"
+						>
+							<option value={FK_EMPTY}>— None —</option>
+							{#if form.actionId && !fkInList(form.actionId, incidentActions)}
+								<option value={form.actionId}>{incident?.action ?? 'Current action'}</option>
+							{/if}
+							{#each incidentActions as a}<option value={a.id} class="uppercase">{a.name}</option>{/each}
+						</select>
+					</div>
+				</div>
+				<div class="sn-field-row">
+					<label for="type" class="sn-field-label">Type <span class="text-red-600">*</span></label>
+					<div class="sn-field-control">
+						<select
+							id="type"
+							value={form.typeId ?? FK_EMPTY}
+							onchange={(e) => setFkField('typeId', e.currentTarget.value)}
+							aria-required="true"
+							aria-invalid={submitErrorField === 'type' ? 'true' : undefined}
+							aria-describedby={submitErrorField === 'type' ? 'incident-submit-error' : undefined}
+							class="{inputClass} uppercase"
+						>
+							<option value={FK_EMPTY}>— Select type —</option>
+							{#if form.typeId && !fkInList(form.typeId, incidentTypes)}
+								<option value={form.typeId}>{incident?.type ?? 'Current type'}</option>
+							{/if}
+							{#each incidentTypes as t}<option value={t.id} class="uppercase">{t.name}</option>{/each}
+						</select>
+					</div>
+				</div>
+				<div class="sn-field-row">
+					<label for="marked" class="sn-field-label">Marked</label>
+					<div class="sn-field-control">
+						<select id="marked" bind:value={form.marked} class="{inputClass} uppercase">
+							<option value="" class="uppercase">None</option>
+							<option value="High" class="uppercase">High</option>
+						</select>
+					</div>
+				</div>
+			</section>
+
+			<section class="mb-8" aria-labelledby="section-assignment-heading">
+				<h3 id="section-assignment-heading" class="sn-section-title">Assignment</h3>
+				<div class="sn-field-row">
+					<label for="sender" class="sn-field-label">Sender</label>
+					<div class="sn-field-control">
+						<input id="sender" type="text" bind:value={form.sender} class={inputClass} />
+					</div>
+				</div>
+				<div class="sn-field-row">
+					<label for="teamLeader" class="sn-field-label">Team Leader</label>
+					<div class="sn-field-control">
+						<select
+							id="teamLeader"
+							value={form.teamLeaderId ?? FK_EMPTY}
+							onchange={(e) => setFkField('teamLeaderId', e.currentTarget.value)}
+							class={inputClass}
+						>
+							<option value={FK_EMPTY}>— None —</option>
+							{#if form.teamLeaderId && !fkInList(form.teamLeaderId, teamLeaders)}
+								<option value={form.teamLeaderId}>{incident?.teamLeader ?? 'Current team leader'}</option>
+							{/if}
+							{#each teamLeaders as tl}<option value={tl.id}>{tl.name}</option>{/each}
+						</select>
+					</div>
+				</div>
+				<div class="sn-field-row">
+					<label for="driver" class="sn-field-label">Driver</label>
+					<div class="sn-field-control">
+						<select
+							id="driver"
+							value={form.driverId ?? FK_EMPTY}
+							onchange={(e) => setFkField('driverId', e.currentTarget.value)}
+							class={inputClass}
+						>
+							<option value={FK_EMPTY}>— None —</option>
+							{#if form.driverId && !fkInList(form.driverId, drivers)}
+								<option value={form.driverId}>{incident?.driver ?? 'Current driver'}</option>
+							{/if}
+							{#each drivers as d}<option value={d.id}>{d.username}</option>{/each}
+						</select>
+					</div>
+				</div>
+			</section>
+
+			<section class="mb-2" aria-labelledby="section-response-heading">
+				<h3 id="section-response-heading" class="sn-section-title">Response</h3>
+				<div class="sn-field-row">
+					<label for="response" class="sn-field-label">Response By</label>
+					<div class="sn-field-control">
+						<input id="response" type="text" bind:value={form.response} class={inputClass} />
+					</div>
+				</div>
+				<div class="sn-field-row">
+					<label id="respondedAt-label" for="respondedAt" class="sn-field-label">Responded</label>
+					<div class="sn-field-control">
+						<span id="respondedAt-desc" class="sr-only">{respondedAtDesc}</span>
+						<div class={dateTimeFieldClass}>
+							<div
+								class="{dateTimeDisplayClass} {respondedAt ? 'text-warm-700' : 'text-warm-400'}"
+								aria-hidden="true"
+							>
+								{formatDateTimeLocal(respondedAt) || 'Select date & time'}
+							</div>
+							<input
+								id="respondedAt"
+								type="datetime-local"
+								bind:value={respondedAt}
+								oninput={syncRespondedAt}
+								onchange={syncRespondedAt}
+								aria-labelledby="respondedAt-label respondedAt-desc"
+								class={dateTimeOverlayClass}
+							/>
+						</div>
+					</div>
+				</div>
+			</section>
 		</div>
 	</div>
 
-	{#if submitError}
-		<p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
-			{submitError}
-		</p>
-	{/if}
+	<footer class="sn-form-footer shrink-0 bg-white px-6 py-4 dark:bg-warm-100">
+		<div class="mx-auto w-full max-w-3xl space-y-3">
+			{#if submitError}
+				<p
+					id="incident-submit-error"
+					class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+					role="alert"
+				>
+					{submitError}
+				</p>
+			{/if}
 
-	{#if isEdit && showConfirm}
-		<p class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-			Review your changes, then click <strong>Confirm Update</strong> to save.
-		</p>
-	{/if}
+			{#if isEdit && showConfirm}
+				<p class="rounded-md border border-amber-200 bg-amber-100 px-4 py-3 text-sm text-amber-700">
+					Review your changes, then click <strong>Confirm Update</strong> to save.
+				</p>
+			{/if}
 
-	<div class="flex gap-3 border-t border-warm-200 pt-4">
-		{#if isEdit && showConfirm}
-			<button type="button" onclick={handleSubmit}
-				class="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-500">
-				Confirm Update
-			</button>
-			<button type="button" onclick={() => { showConfirm = false; submitError = null; }}
-				class="rounded-lg px-5 py-2 text-sm text-warm-500 hover:text-white">
-				Cancel
-			</button>
-		{:else}
-			<button type="submit"
-				class="rounded-lg bg-accent-600 px-5 py-2 text-sm font-medium text-white hover:bg-accent-500">
-				{isEdit ? 'Update' : 'Add'} Incident
-			</button>
-			<button type="button" onclick={handleCancel}
-				class="rounded-lg border-2 border-warm-400 px-5 py-2 text-sm text-warm-700 hover:bg-warm-50">
-				Cancel
-			</button>
-		{/if}
-	</div>
-
+			<div class="flex flex-wrap items-center gap-3">
+				{#if isEdit && showConfirm}
+					<button
+						type="button"
+						onclick={handleSubmit}
+						class="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+					>
+						Confirm Update
+					</button>
+					<button
+						type="button"
+						onclick={() => {
+							showConfirm = false;
+							submitError = null;
+							submitErrorField = null;
+						}}
+						class="rounded-md border border-warm-200 px-5 py-2 text-sm text-warm-600 hover:bg-warm-50 {footerBtnFocus}"
+					>
+						Cancel
+					</button>
+				{:else}
+					<button
+						type="submit"
+						class="rounded-md bg-accent-600 px-5 py-2 text-sm font-medium text-white hover:bg-accent-500 {footerBtnFocus}"
+					>
+						{isEdit ? 'Update' : 'Add'} Incident
+					</button>
+					<button
+						type="button"
+						onclick={handleCancel}
+						class="rounded-md border border-warm-300 bg-white px-5 py-2 text-sm text-warm-700 hover:bg-warm-50 dark:bg-warm-200 {footerBtnFocus}"
+					>
+						Cancel
+					</button>
+				{/if}
+			</div>
+		</div>
+	</footer>
 </form>
