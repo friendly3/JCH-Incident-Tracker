@@ -145,12 +145,41 @@
 				<p class="mt-8 text-center text-warm-400">No incidents found.</p>
 			{/if}
 		{:else}
-			<div class="rounded-lg border border-warm-200 bg-white p-6 shadow-sm">
+			<div
+				class="mx-auto flex w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-warm-200 bg-white shadow-sm"
+			>
+				<header
+					class="flex shrink-0 items-center justify-between gap-4 border-b border-warm-200 bg-warm-50 px-5 py-3.5"
+				>
+					<div class="min-w-0">
+						<h2 id="incident-form-title" class="truncate text-lg font-semibold text-warm-800">
+							{mode === 'edit' ? 'Edit Incident' : 'New Incident'}
+							{#if editingIncident?.referenceNo?.trim()}
+								<span class="ml-2 font-mono text-base font-normal text-accent-600">
+									{editingIncident.referenceNo}
+								</span>
+							{/if}
+						</h2>
+						<p class="mt-0.5 text-xs text-warm-500">
+							{mode === 'edit' ? 'Update incident record' : 'Create a new incident record'}
+						</p>
+					</div>
+					<button
+						type="button"
+						onclick={() => handleCancel()}
+						aria-label="Return to incidents list"
+						class="rounded-md border border-warm-200 bg-white px-3 py-1.5 text-sm text-warm-700 hover:bg-warm-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:bg-warm-200"
+					>
+						Back to list
+					</button>
+				</header>
+
 				{#if incidentStore.error}
-					<p class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
-						{incidentStore.error}
-					</p>
+					<div class="shrink-0 border-b border-red-200 bg-red-50 px-5 py-3" role="alert">
+						<p class="text-sm text-red-700">{incidentStore.error}</p>
+					</div>
 				{/if}
+
 				<IncidentForm
 					incident={editingIncident}
 					incidentTypes={data.incidentTypes ?? []}
@@ -159,6 +188,8 @@
 					teamLeaders={data.teamLeaders ?? []}
 					onSubmit={handleSubmit}
 					onCancel={handleCancel}
+					showTitle={false}
+					variant="shell"
 				/>
 			</div>
 		{/if}
