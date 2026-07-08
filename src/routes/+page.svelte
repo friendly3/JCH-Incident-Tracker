@@ -57,7 +57,7 @@
 	let showDiscardModal = $state(false);
 	let addIncidentBtn = $state<HTMLButtonElement | undefined>(undefined);
 	let backToListBtn = $state<HTMLButtonElement | undefined>(undefined);
-	let incidentDialogRef = $state<HTMLDivElement | undefined>(undefined);
+	let modalCloseBtn = $state<HTMLButtonElement | undefined>(undefined);
 
 	const isModalOpen = $derived(mode !== 'list' && !isFormExpanded);
 
@@ -215,7 +215,7 @@
 	async function focusIncidentDialog() {
 		await tick();
 		if (!isFormExpanded) {
-			incidentDialogRef?.focus();
+			modalCloseBtn?.focus();
 		}
 	}
 
@@ -290,11 +290,6 @@
 		}
 		if (mode === 'list') return;
 		incidentFormRef?.requestClose();
-	}
-
-	function handleBackdropClick(e: MouseEvent) {
-		if (e.target !== e.currentTarget) return;
-		requestModalClose();
 	}
 
 	function handleDiscardBackdrop(e: MouseEvent) {
@@ -632,7 +627,12 @@
 	<!-- Add/Edit: single form instance — modal overlay or expanded inline (preserves form state) -->
 	{#if mode !== 'list'}
 		{#if !isFormExpanded}
-			<div class="fixed inset-0 z-40 bg-black/50" onclick={handleBackdropClick}></div>
+			<button
+				type="button"
+				class="fixed inset-0 z-40 cursor-default border-0 bg-black/50 p-0"
+				aria-label="Close incident editor"
+				onclick={requestModalClose}
+			></button>
 		{/if}
 
 		<div
@@ -641,7 +641,6 @@
 				: 'fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none'}
 		>
 			<div
-				bind:this={incidentDialogRef}
 				class={isFormExpanded
 					? 'mx-auto flex h-full w-full max-w-4xl min-h-0 flex-col overflow-hidden rounded-lg border border-warm-200 bg-white shadow-sm'
 					: 'pointer-events-auto flex max-h-[92vh] w-full max-w-4xl min-h-0 flex-col overflow-hidden rounded-lg border border-warm-200 bg-white shadow-2xl'}
@@ -651,7 +650,6 @@
 				role={isFormExpanded ? 'region' : 'dialog'}
 				aria-modal={isFormExpanded ? undefined : 'true'}
 				aria-labelledby="incident-form-title"
-				tabindex={isFormExpanded ? undefined : -1}
 			>
 				<header
 					class="flex shrink-0 items-center justify-between gap-4 border-b border-warm-200 bg-warm-50 px-5 py-3.5"
@@ -705,6 +703,7 @@
 								</svg>
 							</button>
 							<button
+								bind:this={modalCloseBtn}
 								type="button"
 								onclick={requestModalClose}
 								aria-label="Close incident editor"
@@ -759,11 +758,9 @@
 		>
 			<div
 				class="rounded-lg bg-white p-6 shadow-xl"
-				onclick={(e) => e.stopPropagation()}
 				role="alertdialog"
 				aria-modal="true"
 				aria-labelledby="discard-dialog-title"
-				tabindex="-1"
 			>
 				<h3 id="discard-dialog-title" class="mb-2 text-lg font-semibold text-warm-800">Unsaved Changes</h3>
 				<p class="mb-6 text-sm text-warm-600">You have unsaved changes. Are you sure you want to discard them?</p>
