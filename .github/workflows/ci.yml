@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verify +page.svelte content guard
+        run: |
+          PAGE="src/routes/+page.svelte"
+          LINES=$(wc -l < "$PAGE" | tr -d ' ')
+          if [ "$LINES" -lt 200 ]; then
+            echo "ERROR: $PAGE has $LINES lines (minimum 200)"
+            exit 1
+          fi
+          if grep -qE 'PLACEHOLDER|LOAD_FROM_FILE|WILL_FAIL' "$PAGE"; then
+            echo "ERROR: $PAGE contains stub marker (PLACEHOLDER, LOAD_FROM_FILE, or WILL_FAIL)"
+            exit 1
+          fi
+          echo "OK: $PAGE has $LINES lines and no stub markers"
+
+      - run: bash scripts/verify-page-svelte.sh
