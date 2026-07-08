@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PAGE_SVELTE="${ROOT}/src/routes/+page.svelte"
-MIN_LINES=200
+MIN_LINES=600
 
 if [[ ! -f "${PAGE_SVELTE}" ]]; then
   echo "ERROR: Missing ${PAGE_SVELTE}" >&2
@@ -22,7 +22,14 @@ if grep -qE 'PLACEHOLDER|LOAD_FROM_FILE|WILL_FAIL' "${PAGE_SVELTE}"; then
   exit 1
 fi
 
-echo "OK: ${PAGE_SVELTE} has ${line_count} lines and no stub markers"
+for symbol in isFormExpanded IncidentForm groupedByMonth; do
+  if ! grep -q "${symbol}" "${PAGE_SVELTE}"; then
+    echo "ERROR: ${PAGE_SVELTE} missing required symbol: ${symbol}" >&2
+    exit 1
+  fi
+done
+
+echo "OK: ${PAGE_SVELTE} has ${line_count} lines, no stub markers, and required symbols present"
 
 cd "${ROOT}"
 npm run check

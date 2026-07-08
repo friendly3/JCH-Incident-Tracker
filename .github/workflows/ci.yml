@@ -19,18 +19,10 @@ jobs:
 
       - run: npm ci
 
-      - name: Verify +page.svelte content guard
-        run: |
-          PAGE="src/routes/+page.svelte"
-          LINES=$(wc -l < "$PAGE" | tr -d ' ')
-          if [ "$LINES" -lt 200 ]; then
-            echo "ERROR: $PAGE has $LINES lines (minimum 200)"
-            exit 1
-          fi
-          if grep -qE 'PLACEHOLDER|LOAD_FROM_FILE|WILL_FAIL' "$PAGE"; then
-            echo "ERROR: $PAGE contains stub marker (PLACEHOLDER, LOAD_FROM_FILE, or WILL_FAIL)"
-            exit 1
-          fi
-          echo "OK: $PAGE has $LINES lines and no stub markers"
-
       - run: bash scripts/verify-page-svelte.sh
+
+      - name: Build
+        env:
+          VITE_SUPABASE_URL: https://placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: placeholder_anon_key_for_ci_build
+        run: npm run build
