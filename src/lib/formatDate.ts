@@ -46,18 +46,25 @@ export function formatDate(dateStr: string): string {
 	return `${day}-${month}-${year}`;
 }
 
-/** Formats a datetime-local value (YYYY-MM-DDTHH:mm) as dd-mmm-yyyy with optional time. */
-export function formatDateTimeLocal(value: string): string {
-	if (!value?.trim()) return '';
+/** Normalizes a time field to HH:mm or empty when unset. */
+export function normalizeTimeField(time?: string): string {
+	return time?.trim().slice(0, 5) ?? '';
+}
 
-	const [datePart, timePart] = value.trim().split('T');
-	const formattedDate = formatDate(datePart);
+/** Formats a time field (HH:mm) for display; returns empty string when unset. */
+export function formatTimeField(time?: string): string {
+	return normalizeTimeField(time);
+}
+
+/** Formats separate date (YYYY-MM-DD) and time (HH:mm) fields for display and assistive text. */
+export function formatDateTimeFields(date: string, time?: string): string {
+	const formattedDate = formatDate(date);
 	if (!formattedDate) return '';
 
-	const time = timePart?.trim().slice(0, 5) ?? '';
-	if (!time || time === '00:00') return formattedDate;
+	const trimmedTime = normalizeTimeField(time);
+	if (!trimmedTime) return formattedDate;
 
-	return `${formattedDate} ${time}`;
+	return `${formattedDate} ${trimmedTime}`;
 }
 
 /** Returns YYYY-MM month key, or 'unknown' for invalid/missing dates. */
