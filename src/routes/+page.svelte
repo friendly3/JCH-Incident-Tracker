@@ -310,7 +310,10 @@
 	function handleModalKeydownCapture(e: KeyboardEvent) {
 		if (e.key !== 'Escape') return;
 		const target = e.target;
-		if (target instanceof HTMLInputElement && target.type === 'datetime-local') {
+		if (
+			target instanceof HTMLInputElement &&
+			(target.type === 'datetime-local' || target.type === 'date' || target.type === 'time')
+		) {
 			return;
 		}
 		if (showDiscardModal) {
