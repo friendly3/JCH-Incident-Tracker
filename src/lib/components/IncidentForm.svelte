@@ -357,9 +357,272 @@
 						<input
 							id="emailSubject"
 							type="text"
-							bind:value={form.emailSender}
+							bind:value={form.emailSubject}
 							readonly={!emailFieldsEditable}
 							class={emailFieldsEditable ? inputClass : readonlyEmailClass}
 						/>
 					</div>
 				</div>
+				<div class="sn-field-row">
+					<label for="referenceText" class="sn-field-label">Reference Text</label>
+					<div class="sn-field-control">
+						<input id="referenceText" type="text" bind:value={form.referenceText} class={inputClass} />
+					</div>
+				</div>
+				<div class="sn-field-row">
+					<span id="receivedAt-label" class="sn-field-label">
+						Date Received <span class="text-red-600">*</span>
+					</span>
+					<div class="sn-field-control">
+						<span id="receivedAt-desc" class="sr-only">{receivedAtDesc}</span>
+						<div class={dateTimeControlClass} role="group" aria-labelledby="receivedAt-label">
+							<div class="{dateTimeFieldClass} min-w-0 flex-1">
+								<div
+									class="{dateTimeDisplayClass} {form.dateReceived ? 'text-warm-700' : 'text-warm-400'}"
+									aria-hidden="true"
+								>
+									{formatDate(form.dateReceived) || emptyDateTimeDisplay}
+								</div>
+								{@render dateTimeCalendarIcon()}
+								<input
+									id="receivedAt"
+									type="date"
+									bind:value={form.dateReceived}
+									aria-labelledby="receivedAt-label receivedAt-date-hint"
+									aria-describedby={receivedAtDescribedBy}
+									aria-required="true"
+									aria-invalid={submitErrorField === 'dateReceived' ? 'true' : undefined}
+									class={dateTimeOverlayClass}
+								/>
+							</div>
+							<span id="receivedAt-date-hint" class="sr-only">Date</span>
+							<div class={timeFieldClass}>
+								<div
+									class="{dateTimeDisplayClass} {form.time ? 'text-warm-700' : 'text-warm-400'}"
+									aria-hidden="true"
+								>
+									{formatTimeField(form.time) || emptyDateTimeDisplay}
+								</div>
+								{@render dateTimeClockIcon()}
+								<input
+									id="receivedAt-time"
+									type="time"
+									bind:value={form.time}
+									aria-labelledby="receivedAt-label receivedAt-time-hint"
+									aria-describedby="receivedAt-desc"
+									class={dateTimeOverlayClass}
+								/>
+							</div>
+							<span id="receivedAt-time-hint" class="sr-only">Time</span>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<section class="mb-8" aria-labelledby="section-classification-heading">
+				<h3 id="section-classification-heading" class="sn-section-title">Classification</h3>
+				<div class="sn-field-row">
+					<label for="action" class="sn-field-label">Action</label>
+					<div class="sn-field-control">
+						<select
+							id="action"
+							value={form.actionId ?? FK_EMPTY}
+							onchange={(e) => setFkField('actionId', e.currentTarget.value)}
+							class="{inputClass} uppercase"
+						>
+							<option value={FK_EMPTY}>— None —</option>
+							{#if form.actionId && !fkInList(form.actionId, incidentActions)}
+								<option value={form.actionId}>{incident?.action ?? 'Current action'}</option>
+							{/if}
+							{#each incidentActions as a}<option value={a.id} class="uppercase">{a.name}</option>{/each}
+						</select>
+					</div>
+				</div>
+				<div class="sn-field-row">
+					<label for="type" class="sn-field-label">Type <span class="text-red-600">*</span></label>
+					<div class="sn-field-control">
+						<select
+							id="type"
+							value={form.typeId ?? FK_EMPTY}
+							onchange={(e) => setFkField('typeId', e.currentTarget.value)}
+							aria-required="true"
+							aria-invalid={submitErrorField === 'type' ? 'true' : undefined}
+							aria-describedby={submitErrorField === 'type' ? 'incident-submit-error' : undefined}
+							class="{inputClass} uppercase"
+						>
+							<option value={FK_EMPTY}>— Select type —</option>
+							{#if form.typeId && !fkInList(form.typeId, incidentTypes)}
+								<option value={form.typeId}>{incident?.type ?? 'Current type'}</option>
+							{/if}
+							{#each incidentTypes as t}<option value={t.id} class="uppercase">{t.name}</option>{/each}
+						</select>
+					</div>
+				</div>
+				<div class="sn-field-row">
+					<label for="marked" class="sn-field-label">Marked</label>
+					<div class="sn-field-control">
+						<select id="marked" bind:value={form.marked} class="{inputClass} uppercase">
+							<option value="" class="uppercase">None</option>
+							<option value="High" class="uppercase">High</option>
+						</select>
+					</div>
+				</div>
+			</section>
+
+			<section class="mb-8" aria-labelledby="section-assignment-heading">
+				<h3 id="section-assignment-heading" class="sn-section-title">Assignment</h3>
+				<div class="sn-field-row">
+					<label for="sender" class="sn-field-label">Sender</label>
+					<div class="sn-field-control">
+						<input id="sender" type="text" bind:value={form.sender} class={inputClass} />
+					</div>
+				</div>
+				<div class="sn-field-row">
+					<label for="teamLeader" class="sn-field-label">Team Leader</label>
+					<div class="sn-field-control">
+						<select
+							id="teamLeader"
+							value={form.teamLeaderId ?? FK_EMPTY}
+							onchange={(e) => setFkField('teamLeaderId', e.currentTarget.value)}
+							class={inputClass}
+						>
+							<option value={FK_EMPTY}>— None —</option>
+							{#if form.teamLeaderId && !fkInList(form.teamLeaderId, teamLeaders)}
+								<option value={form.teamLeaderId}>{incident?.teamLeader ?? 'Current team leader'}</option>
+							{/if}
+							{#each teamLeaders as tl}<option value={tl.id}>{tl.name}</option>{/each}
+						</select>
+					</div>
+				</div>
+				<div class="sn-field-row">
+					<label for="driver" class="sn-field-label">Driver</label>
+					<div class="sn-field-control">
+						<select
+							id="driver"
+							value={form.driverId ?? FK_EMPTY}
+							onchange={(e) => setFkField('driverId', e.currentTarget.value)}
+							class={inputClass}
+						>
+							<option value={FK_EMPTY}>— None —</option>
+							{#if form.driverId && !fkInList(form.driverId, drivers)}
+								<option value={form.driverId}>{incident?.driver ?? 'Current driver'}</option>
+							{/if}
+							{#each drivers as d}<option value={d.id}>{d.username}</option>{/each}
+						</select>
+					</div>
+				</div>
+			</section>
+
+			<section class="mb-2" aria-labelledby="section-response-heading">
+				<h3 id="section-response-heading" class="sn-section-title">Response</h3>
+				<div class="sn-field-row">
+					<label for="response" class="sn-field-label">Response By</label>
+					<div class="sn-field-control">
+						<input id="response" type="text" bind:value={form.response} class={inputClass} />
+					</div>
+				</div>
+				<div class="sn-field-row">
+					<span id="respondedAt-label" class="sn-field-label">Responded</span>
+					<div class="sn-field-control">
+						<span id="respondedAt-desc" class="sr-only">{respondedAtDesc}</span>
+						<div class={dateTimeControlClass} role="group" aria-labelledby="respondedAt-label">
+							<div class="{dateTimeFieldClass} min-w-0 flex-1">
+								<div
+									class="{dateTimeDisplayClass} {form.dateResponse ? 'text-warm-700' : 'text-warm-400'}"
+									aria-hidden="true"
+								>
+									{formatDate(form.dateResponse) || emptyDateTimeDisplay}
+								</div>
+								{@render dateTimeCalendarIcon()}
+								<input
+									id="respondedAt"
+									type="date"
+									bind:value={form.dateResponse}
+									aria-labelledby="respondedAt-label respondedAt-date-hint"
+									aria-describedby="respondedAt-desc"
+									class={dateTimeOverlayClass}
+								/>
+							</div>
+							<span id="respondedAt-date-hint" class="sr-only">Date</span>
+							<div class={timeFieldClass}>
+								<div
+									class="{dateTimeDisplayClass} {form.timeResponse ? 'text-warm-700' : 'text-warm-400'}"
+									aria-hidden="true"
+								>
+									{formatTimeField(form.timeResponse) || emptyDateTimeDisplay}
+								</div>
+								{@render dateTimeClockIcon()}
+								<input
+									id="respondedAt-time"
+									type="time"
+									bind:value={form.timeResponse}
+									aria-labelledby="respondedAt-label respondedAt-time-hint"
+									aria-describedby="respondedAt-desc"
+									class={dateTimeOverlayClass}
+								/>
+							</div>
+							<span id="respondedAt-time-hint" class="sr-only">Time</span>
+						</div>
+					</div>
+				</div>
+			</section>
+		</div>
+	</div>
+
+	<footer class="sn-form-footer shrink-0 bg-white px-6 py-4 dark:bg-warm-100">
+		<div class="mx-auto w-full max-w-3xl space-y-3">
+			{#if submitError}
+				<p
+					id="incident-submit-error"
+					class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+					role="alert"
+				>
+					{submitError}
+				</p>
+			{/if}
+
+			{#if isEdit && showConfirm}
+				<p class="rounded-md border border-amber-200 bg-amber-100 px-4 py-3 text-sm text-amber-700">
+					Review your changes, then click <strong>Confirm Update</strong> to save.
+				</p>
+			{/if}
+
+			<div class="flex flex-wrap items-center gap-3">
+				{#if isEdit && showConfirm}
+					<button
+						type="button"
+						onclick={handleSubmit}
+						class="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+					>
+						Confirm Update
+					</button>
+					<button
+						type="button"
+						onclick={() => {
+							showConfirm = false;
+							submitError = null;
+							submitErrorField = null;
+						}}
+						class="rounded-md border border-warm-200 px-5 py-2 text-sm text-warm-600 hover:bg-warm-50 {footerBtnFocus}"
+					>
+						Cancel
+					</button>
+				{:else}
+					<button
+						type="submit"
+						class="rounded-md bg-accent-600 px-5 py-2 text-sm font-medium text-white hover:bg-accent-500 {footerBtnFocus}"
+					>
+						{isEdit ? 'Update' : 'Add'} Incident
+					</button>
+					<button
+						type="button"
+						onclick={handleCancel}
+						class="rounded-md border border-warm-300 bg-white px-5 py-2 text-sm text-warm-700 hover:bg-warm-50 dark:bg-warm-200 {footerBtnFocus}"
+					>
+						Cancel
+					</button>
+				{/if}
+			</div>
+		</div>
+	</footer>
+</form>
