@@ -98,7 +98,8 @@ body {
 	/*
 	 * Native date/time inputs with a full-field click target.
 	 * Stretch the webkit picker indicator across the whole control so clicks
-	 * on the field open the browser picker. Icon buttons also call showPicker().
+	 * on the field open the browser picker (date fields / native fallback).
+	 * Time clock icons open a custom TimePickerPopover (not showPicker alone).
 	 * Note: opacity:0 can disable hit-testing on some Chromium builds — use ~0.
 	 */
 	.native-datetime {
