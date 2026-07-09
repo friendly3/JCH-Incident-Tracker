@@ -242,11 +242,31 @@
 	const dateTimeDisplayClass =
 		'pointer-events-none flex min-h-[2.375rem] items-center px-3 py-2 pr-10 text-sm';
 	const dateTimeIconClass =
-		'pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-warm-500 dark:text-warm-400';
-	const dateTimeOverlayClass = 'absolute inset-0 h-full w-full cursor-pointer opacity-0';
+		'pointer-events-none absolute right-3 top-1/2 z-0 -translate-y-1/2 text-warm-500 dark:text-warm-400';
+	// z-10 so the invisible native control sits above the display/icon and receives clicks.
+	// opacity-0 alone is not enough for type=time in Chromium — openNativePicker() calls showPicker().
+	const dateTimeOverlayClass =
+		'absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 disabled:cursor-default';
 	const dateTimeControlClass = 'flex flex-col gap-2 sm:flex-row sm:items-stretch';
 	const timeFieldClass = `${dateTimeFieldClass} w-full sm:w-[8.5rem] sm:shrink-0`;
 	const emptyDateTimeDisplay = '—';
+
+	/**
+	 * Open the browser's native date/time picker for our custom overlay fields.
+	 * Chromium only opens type=time when the tiny clock glyph is hit; a full-field
+	 * transparent overlay therefore needs an explicit showPicker() on user click.
+	 */
+	function openNativePicker(event: MouseEvent) {
+		const input = event.currentTarget;
+		if (!(input instanceof HTMLInputElement) || input.disabled) return;
+		try {
+			if (typeof input.showPicker === 'function') {
+				input.showPicker();
+			}
+		} catch {
+			// NotAllowedError / unsupported — focus still allows typing a value.
+		}
+	}
 
 	const receivedAtDesc = $derived(
 		formatDateTimeFields(form.dateReceived, form.time) || 'Date and time not set'
@@ -393,6 +413,7 @@
 									aria-required="true"
 									aria-invalid={submitErrorField === 'dateReceived' ? 'true' : undefined}
 									class={dateTimeOverlayClass}
+									onclick={openNativePicker}
 								/>
 							</div>
 							<span id="receivedAt-date-hint" class="sr-only">Date</span>
@@ -411,6 +432,7 @@
 									aria-labelledby="receivedAt-label receivedAt-time-hint"
 									aria-describedby="receivedAt-desc"
 									class={dateTimeOverlayClass}
+									onclick={openNativePicker}
 								/>
 							</div>
 							<span id="receivedAt-time-hint" class="sr-only">Time</span>
@@ -541,6 +563,7 @@
 									aria-labelledby="respondedAt-label respondedAt-date-hint"
 									aria-describedby="respondedAt-desc"
 									class={dateTimeOverlayClass}
+									onclick={openNativePicker}
 								/>
 							</div>
 							<span id="respondedAt-date-hint" class="sr-only">Date</span>
@@ -559,6 +582,7 @@
 									aria-labelledby="respondedAt-label respondedAt-time-hint"
 									aria-describedby="respondedAt-desc"
 									class={dateTimeOverlayClass}
+									onclick={openNativePicker}
 								/>
 							</div>
 							<span id="respondedAt-time-hint" class="sr-only">Time</span>
