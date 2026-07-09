@@ -3,7 +3,8 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'patches/**'
+      - 'patches/_v3_b64_*.txt'
+      - 'patches/timepicker-icon-button-v3.patch'
       - '.github/workflows/apply-time-picker-v2.yml'
 permissions:
   contents: write
@@ -14,30 +15,27 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Rebuild form patch from chunks and apply
+      - name: Rebuild patch and apply
         run: |
           set -euo pipefail
-          cat patches/_tp_form_b64_*.txt | tr -d '\n' | base64 -d > patches/timepicker-native-controls-form.patch
-          test -f patches/timepicker-native-controls-css.patch
-          head -1 patches/timepicker-native-controls-form.patch | grep -q 'IncidentForm'
-          if grep -q PLACEHOLDER_WILL_FAIL src/lib/components/IncidentForm.svelte 2>/dev/null || ! grep -q openNativePicker src/lib/components/IncidentForm.svelte 2>/dev/null; then
-            git show 2c40293:src/lib/components/IncidentForm.svelte > src/lib/components/IncidentForm.svelte
-            git show 2c40293:src/app.css > src/app.css
+          if ls patches/_v3_b64_*.txt >/dev/null 2>&1; then
+            cat patches/_v3_b64_*.txt | tr -d '\n' | base64 -d > patches/timepicker-icon-button-v3.patch
           fi
-          if ! grep -q native-datetime src/lib/components/IncidentForm.svelte; then
-            git apply --verbose patches/timepicker-native-controls-form.patch
-            git apply --verbose patches/timepicker-native-controls-css.patch
+          test -f patches/timepicker-icon-button-v3.patch
+          if grep -q openPickerFromButton src/lib/components/IncidentForm.svelte; then
+            echo "Already applied"
+          else
+            git apply --verbose patches/timepicker-icon-button-v3.patch
           fi
-          grep -q native-datetime src/lib/components/IncidentForm.svelte
-          grep -q onpointerdown src/lib/components/IncidentForm.svelte
-          grep -q webkit-calendar-picker-indicator src/app.css
-          ! grep -q PLACEHOLDER src/lib/components/IncidentForm.svelte
+          grep -q openPickerFromButton src/lib/components/IncidentForm.svelte
+          grep -q data-datetime-wrap src/lib/components/IncidentForm.svelte
+          grep -q '0.001' src/app.css
       - name: Commit and push
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/lib/components/IncidentForm.svelte src/app.css patches/timepicker-native-controls-form.patch
+          git add src/lib/components/IncidentForm.svelte src/app.css patches/timepicker-icon-button-v3.patch
           if git diff --cached --quiet; then echo "No changes"; exit 0; fi
-          git commit -m "fix: visible native date/time inputs so time picker opens on click"
+          git commit -m "fix: clock icon button opens native time picker via showPicker"
           git push
