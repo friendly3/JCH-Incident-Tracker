@@ -1,0 +1,40 @@
+name: Apply custom time picker form wiring
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'patches/custom-timepicker.patch'
+      - '.github/workflows/apply-custom-timepicker.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply patch and verify
+        run: |
+          set -euo pipefail
+          test -f patches/custom-timepicker.patch
+          if grep -q TimePickerPopover src/lib/components/IncidentForm.svelte; then
+            echo "Already wired"
+          else
+            git apply --verbose patches/custom-timepicker.patch
+          fi
+          grep -q TimePickerPopover src/lib/components/IncidentForm.svelte
+          grep -q openTimePickerField src/lib/components/IncidentForm.svelte
+          grep -q applyTimePicker src/lib/components/IncidentForm.svelte
+          test -f src/lib/components/TimePickerPopover.svelte
+          grep -q 'role="dialog"' src/lib/components/TimePickerPopover.svelte
+          grep -q 'TimePickerPopover' src/app.css
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/components/IncidentForm.svelte src/app.css patches/custom-timepicker.patch
+          if git diff --cached --quiet; then echo "No changes"; exit 0; fi
+          git commit -m "fix: wire custom time picker into IncidentForm clock icons"
+          git push

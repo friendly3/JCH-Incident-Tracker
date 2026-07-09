@@ -1,0 +1,184 @@
+diff --git a/src/app.css b/src/app.css
+index 1816aab..8fee04d 100644
+--- a/src/app.css
++++ b/src/app.css
+@@ -98,7 +98,8 @@ body {
+ 	/*
+ 	 * Native date/time inputs with a full-field click target.
+ 	 * Stretch the webkit picker indicator across the whole control so clicks
+-	 * on the field open the browser picker. Icon buttons also call showPicker().
++	 * on the field open the browser picker (date fields / native fallback).
++	 * Time clock icons open a custom TimePickerPopover (not showPicker alone).
+ 	 * Note: opacity:0 can disable hit-testing on some Chromium builds — use ~0.
+ 	 */
+ 	.native-datetime {
+diff --git a/src/lib/components/IncidentForm.svelte b/src/lib/components/IncidentForm.svelte
+index e5e92a8..209513f 100644
+--- a/src/lib/components/IncidentForm.svelte
++++ b/src/lib/components/IncidentForm.svelte
+@@ -2,6 +2,7 @@
+ 	import type { Incident, IncidentType, IncidentAction } from '$lib/data/incidents';
+ 	import type { Driver, TeamLeader } from '$lib/data/team';
+ 	import { formatDateTimeFields, normalizeTimeField } from '$lib/formatDate';
++	import TimePickerPopover from '$lib/components/TimePickerPopover.svelte';
+ 
+ 	interface Props {
+ 		incident?: Incident;
+@@ -240,14 +241,20 @@
+ 	/** Visible native date/time control with room for a trailing picker button. */
+ 	const nativeDateTimeClass =
+ 		'native-datetime form-field-surface input-focus relative w-full min-h-[2.375rem] rounded-md border border-warm-200 bg-white px-3 py-2 pr-10 text-sm text-warm-700 dark:bg-warm-200';
+-	/** Clickable icon button that opens the native picker for its sibling input. */
++	/** Clickable icon button that opens the native date picker or custom time popover. */
+ 	const dateTimeIconBtnClass =
+ 		'absolute right-1 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-warm-500 hover:bg-warm-100 hover:text-warm-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-warm-400 dark:hover:bg-warm-300 dark:hover:text-warm-800';
+ 	const dateTimeControlClass = 'flex flex-col gap-2 sm:flex-row sm:items-stretch';
+ 	const timeFieldWrapClass = 'relative w-full sm:w-[9.5rem] sm:shrink-0';
+ 	const dateFieldWrapClass = 'relative min-w-0 flex-1';
+ 
+-	/** Open the OS/browser date or time picker for a native input. */
++	/** Which custom time popover is open (null = closed). */
++	type TimePickerField = 'time' | 'timeResponse';
++	let openTimePickerField = $state<TimePickerField | null>(null);
++	let receivedTimeWrapEl = $state<HTMLDivElement | undefined>(undefined);
++	let respondedTimeWrapEl = $state<HTMLDivElement | undefined>(undefined);
++
++	/** Open the OS/browser date picker for a native date input. */
+ 	function openPickerFor(input: HTMLInputElement | null | undefined) {
+ 		if (!input || input.disabled) return;
+ 		try {
+@@ -272,17 +279,34 @@
+ 		if (input instanceof HTMLInputElement) openPickerFor(input);
+ 	}
+ 
+-	/** Icon button handler: find the sibling input inside the same wrap. */
+-	function openPickerFromButton(event: MouseEvent) {
++	/** Date calendar icon: open native date picker for sibling input. */
++	function openDatePickerFromButton(event: MouseEvent) {
+ 		event.preventDefault();
+ 		event.stopPropagation();
+ 		const btn = event.currentTarget;
+ 		if (!(btn instanceof HTMLElement)) return;
+ 		const wrap = btn.closest('[data-datetime-wrap]');
+-		const input = wrap?.querySelector('input[type="date"], input[type="time"]');
++		const input = wrap?.querySelector('input[type="date"]');
+ 		if (input instanceof HTMLInputElement) openPickerFor(input);
+ 	}
+ 
++	function toggleTimePicker(field: TimePickerField, event?: Event) {
++		event?.preventDefault();
++		event?.stopPropagation();
++		openTimePickerField = openTimePickerField === field ? null : field;
++	}
++
++	function closeTimePicker() {
++		openTimePickerField = null;
++	}
++
++	function applyTimePicker(field: TimePickerField, time: string) {
++		const normalized = normalizeTimeField(time);
++		if (field === 'time') form.time = normalized;
++		else form.timeResponse = normalized;
++		openTimePickerField = null;
++	}
++
+ 	const receivedAtDesc = $derived(
+ 		formatDateTimeFields(form.dateReceived, form.time) || 'Date and time not set'
+ 	);
+@@ -307,7 +331,7 @@
+ 		tabindex="-1"
+ 		class={dateTimeIconBtnClass}
+ 		aria-label="Open date picker"
+-		onclick={openPickerFromButton}
++		onclick={openDatePickerFromButton}
+ 	>
+ 		<svg
+ 			xmlns="http://www.w3.org/2000/svg"
+@@ -327,13 +351,15 @@
+ 	</button>
+ {/snippet}
+ 
+-{#snippet dateTimeClockButton()}
++{#snippet dateTimeClockButton(field: TimePickerField, label: string)}
+ 	<button
+ 		type="button"
+-		tabindex="-1"
+ 		class={dateTimeIconBtnClass}
+-		aria-label="Open time picker"
+-		onclick={openPickerFromButton}
++		aria-label={label}
++		aria-haspopup="dialog"
++		aria-expanded={openTimePickerField === field}
++		data-time-picker-trigger
++		onclick={(e) => toggleTimePicker(field, e)}
+ 	>
+ 		<svg
+ 			xmlns="http://www.w3.org/2000/svg"
+@@ -439,7 +465,11 @@
+ 								{@render dateTimeCalendarButton()}
+ 							</div>
+ 							<span id="receivedAt-date-hint" class="sr-only">Date</span>
+-							<div class={timeFieldWrapClass} data-datetime-wrap>
++							<div
++								class={timeFieldWrapClass}
++								data-datetime-wrap
++								bind:this={receivedTimeWrapEl}
++							>
+ 								<input
+ 									id="receivedAt-time"
+ 									type="time"
+@@ -447,10 +477,17 @@
+ 									aria-labelledby="receivedAt-label receivedAt-time-hint"
+ 									aria-describedby="receivedAt-desc"
+ 									class={nativeDateTimeClass}
+-									onclick={openNativePicker}
+-									onpointerdown={openNativePicker}
+ 								/>
+-								{@render dateTimeClockButton()}
++								{@render dateTimeClockButton('time', 'Open time picker for date received')}
++								<TimePickerPopover
++									open={openTimePickerField === 'time'}
++									value={form.time}
++									title="Time received"
++									idPrefix="receivedAt-time-picker"
++									anchorEl={receivedTimeWrapEl}
++									onApply={(t) => applyTimePicker('time', t)}
++									onClose={closeTimePicker}
++								/>
+ 							</div>
+ 							<span id="receivedAt-time-hint" class="sr-only">Time</span>
+ 						</div>
+@@ -579,7 +616,11 @@
+ 								{@render dateTimeCalendarButton()}
+ 							</div>
+ 							<span id="respondedAt-date-hint" class="sr-only">Date</span>
+-							<div class={timeFieldWrapClass} data-datetime-wrap>
++							<div
++								class={timeFieldWrapClass}
++								data-datetime-wrap
++								bind:this={respondedTimeWrapEl}
++							>
+ 								<input
+ 									id="respondedAt-time"
+ 									type="time"
+@@ -587,10 +628,17 @@
+ 									aria-labelledby="respondedAt-label respondedAt-time-hint"
+ 									aria-describedby="respondedAt-desc"
+ 									class={nativeDateTimeClass}
+-									onclick={openNativePicker}
+-									onpointerdown={openNativePicker}
+ 								/>
+-								{@render dateTimeClockButton()}
++								{@render dateTimeClockButton('timeResponse', 'Open time picker for responded')}
++								<TimePickerPopover
++									open={openTimePickerField === 'timeResponse'}
++									value={form.timeResponse}
++									title="Time responded"
++									idPrefix="respondedAt-time-picker"
++									anchorEl={respondedTimeWrapEl}
++									onApply={(t) => applyTimePicker('timeResponse', t)}
++									onClose={closeTimePicker}
++								/>
+ 							</div>
+ 							<span id="respondedAt-time-hint" class="sr-only">Time</span>
+ 						</div>
