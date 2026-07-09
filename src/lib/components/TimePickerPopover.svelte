@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { normalizeTimeField } from '$lib/formatDate';
 
 	interface Props {
@@ -13,7 +13,10 @@
 		idPrefix?: string;
 		/** Element to anchor the fixed popover under (time field wrap). */
 		anchorEl?: HTMLElement | null;
-		/** Called with HH:mm when the user applies a selection. */
+		/**
+		 * Called with HH:mm when the user applies a selection.
+		 * Parent owns closing (set `open` false); this component does not call `onClose` after apply.
+		 */
 		onApply?: (time: string) => void;
 		/** Called when the popover should close (cancel, escape, outside click). */
 		onClose?: () => void;
@@ -31,6 +34,8 @@
 
 	const hourId = $derived(`${idPrefix}-hour`);
 	const minuteId = $derived(`${idPrefix}-minute`);
+	const dialogId = $derived(`${idPrefix}-dialog`);
+	const titleId = $derived(`${idPrefix}-title`);
 
 	const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
 	const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
@@ -63,9 +68,9 @@
 		onClose?.();
 	}
 
+	/** Apply selected time. Parent owns closing via onApply handler. */
 	function apply() {
 		onApply?.(`${hour}:${minute}`);
-		onClose?.();
 	}
 
 	function positionPanel() {
@@ -76,20 +81,33 @@
 		}
 		const rect = anchor.getBoundingClientRect();
 		const gap = 6;
-		const width = Math.min(window.innerWidth - 16, 264);
-		const estimatedHeight = 180;
+		const margin = 8;
+		const measured = panelEl?.getBoundingClientRect();
+		const width = measured && measured.width > 0
+			? Math.min(window.innerWidth - margin * 2, measured.width)
+			: Math.min(window.innerWidth - margin * 2, 264);
+		const height = measured && measured.height > 0 ? measured.height : 180;
+
 		let left = rect.left;
-		if (left + width > window.innerWidth - 8) {
-			left = Math.max(8, window.innerWidth - width - 8);
+		if (left + width > window.innerWidth - margin) {
+			left = Math.max(margin, window.innerWidth - width - margin);
 		}
-		// Prefer below the field; flip above if not enough room.
+		left = Math.max(margin, left);
+
+		// Prefer below the field; flip above if not enough room for measured height.
 		const spaceBelow = window.innerHeight - rect.bottom - gap;
 		const spaceAbove = rect.top - gap;
-		if (spaceBelow >= estimatedHeight || spaceBelow >= spaceAbove) {
-			panelStyle = `top: ${Math.round(rect.bottom + gap)}px; left: ${Math.round(left)}px; width: ${width}px;`;
+		let top: number;
+		if (spaceBelow >= height || spaceBelow >= spaceAbove) {
+			top = rect.bottom + gap;
 		} else {
-			panelStyle = `top: ${Math.round(rect.top - gap - estimatedHeight)}px; left: ${Math.round(left)}px; width: ${width}px;`;
+			top = rect.top - gap - height;
 		}
+		// Clamp into the viewport so the panel stays fully visible when possible.
+		const maxTop = Math.max(margin, window.innerHeight - height - margin);
+		top = Math.min(Math.max(margin, top), maxTop);
+
+		panelStyle = `top: ${Math.round(top)}px; left: ${Math.round(left)}px; width: ${Math.round(width)}px;`;
 	}
 
 	function focusables(): HTMLElement[] {
@@ -102,9 +120,20 @@
 
 	function onPanelKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
+			// Capture-phase window listener is primary; this is a bubble fallback.
 			event.preventDefault();
 			event.stopPropagation();
 			close();
+			return;
+		}
+		if (event.key === 'Enter') {
+			const t = event.target;
+			if (t instanceof HTMLTextAreaElement) return;
+			// Let focused buttons activate via their own click/keydown handling.
+			if (t instanceof HTMLButtonElement) return;
+			event.preventDefault();
+			event.stopPropagation();
+			apply();
 			return;
 		}
 		if (event.key !== 'Tab' || !panelEl) return;
@@ -134,30 +163,51 @@
 		close();
 	}
 
+	/**
+	 * Window capture Escape must win over the incidents page modal's
+	 * svelte:window onkeydowncapture, which otherwise closes the editor.
+	 * Host page also early-returns when focus is inside .time-picker-popover.
+	 */
+	function onWindowKeydownCapture(event: KeyboardEvent) {
+		if (!open) return;
+		if (event.key !== 'Escape') return;
+		event.preventDefault();
+		event.stopPropagation();
+		close();
+	}
+
 	$effect(() => {
 		if (!open) return;
 
-		const parsed = parseValue(value);
+		// Seed hour/minute only from value at open — do not re-init when parent
+		// reassigns form fields while the popover stays open.
+		const parsed = parseValue(untrack(() => value));
 		hour = parsed.h;
 		minute = parsed.m;
 		previouslyFocused =
 			document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
+		// Track anchor for reposition; untrack panel reads inside positionPanel's first call.
+		void anchorEl;
+
 		positionPanel();
 
 		const onDoc = (e: PointerEvent) => onDocumentPointerDown(e);
 		const onReposition = () => positionPanel();
+		window.addEventListener('keydown', onWindowKeydownCapture, true);
 		document.addEventListener('pointerdown', onDoc, true);
 		window.addEventListener('resize', onReposition);
 		// Capture scroll on any scrollable ancestor (form body, window).
 		window.addEventListener('scroll', onReposition, true);
 
 		void tick().then(() => {
+			// Reposition with real measured panel height/width after paint.
 			positionPanel();
 			hourSelectEl?.focus();
 		});
 
 		return () => {
+			window.removeEventListener('keydown', onWindowKeydownCapture, true);
 			document.removeEventListener('pointerdown', onDoc, true);
 			window.removeEventListener('resize', onReposition);
 			window.removeEventListener('scroll', onReposition, true);
@@ -172,15 +222,19 @@
 {#if open}
 	<div
 		bind:this={panelEl}
+		id={dialogId}
 		class="time-picker-popover fixed z-[80] rounded-md border border-warm-200 bg-white p-3 shadow-lg dark:border-warm-300 dark:bg-warm-100"
 		style={panelStyle}
 		role="dialog"
-		aria-modal="true"
-		aria-label={title}
+		aria-modal="false"
+		aria-labelledby={titleId}
 		tabindex="-1"
 		onkeydown={onPanelKeydown}
 	>
-		<p class="mb-2 text-xs font-semibold uppercase tracking-wide text-warm-500 dark:text-warm-600">
+		<p
+			id={titleId}
+			class="mb-2 text-xs font-semibold uppercase tracking-wide text-warm-500 dark:text-warm-600"
+		>
 			{title}
 		</p>
 		<div class="flex items-end gap-2">
