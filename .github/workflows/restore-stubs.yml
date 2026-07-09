@@ -1,0 +1,59 @@
+name: Restore LOAD_FROM_FILE stubs
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-stubs.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Restore full source from known-good commits
+        run: |
+          set -euo pipefail
+          # These commits contain the full files (verified by sha256 locally)
+          git show 955d365216a76de78d2ea60aa5857437e50b2bb3:src/lib/components/IncidentForm.svelte \
+            > src/lib/components/IncidentForm.svelte
+          git show f934a382d0f798826adff34ceeb0e7bcf83966a9:src/routes/+page.svelte \
+            > src/routes/+page.svelte
+
+          # Sanity checks
+          for f in src/lib/components/IncidentForm.svelte src/routes/+page.svelte; do
+            bytes=$(wc -c < "$f" | tr -d ' ')
+            echo "$f bytes=$bytes"
+            if [ "$bytes" -lt 10000 ]; then
+              echo "ERROR: $f still too small" >&2
+              exit 1
+            fi
+            if grep -qE '^(LOAD_FROM_FILE|LOAD_FROM_TMP|PLACEHOLDER_WILL_FAIL)$' "$f"; then
+              echo "ERROR: $f is still a stub" >&2
+              exit 1
+            fi
+            if ! head -1 "$f" | grep -q '<script'; then
+              echo "ERROR: $f does not start with script" >&2
+              exit 1
+            fi
+          done
+
+      - name: Commit and push restore if needed
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/components/IncidentForm.svelte src/routes/+page.svelte
+          if git diff --cached --quiet; then
+            echo "No changes — files already restored"
+            exit 0
+          fi
+          git commit -m "fix: restore incident list and form overwritten with LOAD_FROM_FILE stubs"
+          git push origin HEAD:main
