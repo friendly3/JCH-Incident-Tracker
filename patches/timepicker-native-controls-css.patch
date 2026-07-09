@@ -1,0 +1,48 @@
+--- a/src/app.css
++++ b/src/app.css
+@@ -89,12 +89,44 @@
+ 		color: var(--color-accent-600);
+ 	}
+ 
+-	/* Datetime overlay display — match elevated input surface in dark mode */
++	/* Datetime field surface — match elevated input surface in dark mode */
+ 	.dark .form-field-surface {
+ 		background-color: var(--color-warm-200);
+ 		color: var(--color-warm-900);
+ 	}
+ 
++	/*
++	 * Native date/time inputs with a full-field click target.
++	 * Stretch the webkit picker indicator across the whole control so clicks
++	 * anywhere (including our decorative icon) open the browser picker.
++	 * Firefox already opens on field click; showPicker() is also wired in JS.
++	 */
++	.native-datetime {
++		/* Icon sits in pr-10 gutter; keep native control behavior intact */
++		color-scheme: light;
++	}
++
++	.dark .native-datetime {
++		color-scheme: dark;
++	}
++
++	.native-datetime::-webkit-calendar-picker-indicator {
++		position: absolute;
++		inset: 0;
++		width: 100%;
++		height: 100%;
++		margin: 0;
++		padding: 0;
++		cursor: pointer;
++		opacity: 0;
++	}
++
++	/* Some Chromium builds use a separate clear/spin UI — keep the field clickable */
++	.native-datetime::-webkit-clear-button,
++	.native-datetime::-webkit-inner-spin-button {
++		display: none;
++	}
++
+ 	.dark input::placeholder,
+ 	.dark textarea::placeholder {
+ 		color: var(--color-warm-500);
