@@ -1,0 +1,41 @@
+name: Apply time picker fix
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-time-picker-fix.yml'
+      - 'patches/timepicker-showpicker.patch'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply time picker patch
+        run: |
+          set -euo pipefail
+          if grep -q openNativePicker src/lib/components/IncidentForm.svelte; then
+            echo "Fix already present"
+            exit 0
+          fi
+          patch -p1 < patches/timepicker-showpicker.patch
+          grep -q openNativePicker src/lib/components/IncidentForm.svelte
+          test "$(grep -c 'onclick={openNativePicker}' src/lib/components/IncidentForm.svelte)" -eq 4
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/components/IncidentForm.svelte
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "fix: open native time/date pickers on overlay click via showPicker()"
+          git push origin HEAD:main
