@@ -1,0 +1,42 @@
+name: Apply time picker review a11y fixes
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'patches/review-timepicker-a11y.patch'
+      - '.github/workflows/apply-review-timepicker.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply patch and verify
+        run: |
+          set -euo pipefail
+          test -f patches/review-timepicker-a11y.patch
+          if grep -q 'native-time' src/lib/components/IncidentForm.svelte && grep -q 'time-picker-popover' src/routes/+page.svelte; then
+            echo "Already applied"
+          else
+            git apply --verbose patches/review-timepicker-a11y.patch
+          fi
+          grep -q 'native-time' src/lib/components/IncidentForm.svelte
+          grep -q 'aria-controls' src/lib/components/IncidentForm.svelte
+          grep -q 'openTimePickerField = null' src/lib/components/IncidentForm.svelte
+          grep -q 'time-picker-popover' src/routes/+page.svelte
+          grep -q 'native-time' src/app.css
+          grep -q 'aria-modal="false"' src/lib/components/TimePickerPopover.svelte
+          grep -q 'onWindowKeydownCapture\|keydown.*capture' src/lib/components/TimePickerPopover.svelte || grep -q "addEventListener('keydown'" src/lib/components/TimePickerPopover.svelte
+          ! grep -qE 'PLACEHOLDER|LOAD_FROM_FILE' src/lib/components/IncidentForm.svelte src/lib/components/TimePickerPopover.svelte
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/components/IncidentForm.svelte src/app.css src/routes/+page.svelte patches/review-timepicker-a11y.patch
+          if git diff --cached --quiet; then echo "No changes"; exit 0; fi
+          git commit -m "fix: time popover Escape host skip, a11y, native-time field path"
+          git push
