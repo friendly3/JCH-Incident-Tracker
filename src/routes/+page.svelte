@@ -310,8 +310,11 @@
 	function handleModalKeydownCapture(e: KeyboardEvent) {
 		if (e.key !== 'Escape') return;
 		const target = e.target;
-		// Nested custom time popover owns Escape (closes popover only, not the editor).
-		if (target instanceof Element && target.closest('.time-picker-popover')) {
+		// Nested custom time popover (portaled to body) owns Escape.
+		if (
+			target instanceof Element &&
+			(target.closest('.time-picker-popover') || target.closest('[data-time-picker-portal]'))
+		) {
 			return;
 		}
 		if (

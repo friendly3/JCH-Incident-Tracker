@@ -256,13 +256,10 @@
 		'native-time form-field-surface input-focus relative w-full min-h-[2.375rem] rounded-md border border-warm-200 bg-white px-3 py-2 pr-10 text-sm text-warm-700 dark:bg-warm-200';
 	/** Clickable icon button that opens the native date picker or custom time popover. */
 	const dateTimeIconBtnClass =
-		'absolute right-1 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-warm-500 hover:bg-warm-100 hover:text-warm-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-warm-400 dark:hover:bg-warm-300 dark:hover:text-warm-800';
+		'absolute right-1 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md border border-warm-200 bg-white text-warm-600 shadow-sm hover:bg-warm-50 hover:text-warm-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:border-warm-300 dark:bg-warm-200 dark:text-warm-800 dark:hover:bg-warm-300';
 	const dateTimeControlClass = 'flex flex-col gap-2 sm:flex-row sm:items-stretch';
 	const timeFieldWrapClass = 'relative w-full sm:w-[9.5rem] sm:shrink-0';
 	const dateFieldWrapClass = 'relative min-w-0 flex-1';
-
-	let receivedTimeWrapEl = $state<HTMLDivElement | undefined>(undefined);
-	let respondedTimeWrapEl = $state<HTMLDivElement | undefined>(undefined);
 
 	const timePickerDialogId = {
 		time: 'receivedAt-time-picker-dialog',
@@ -303,6 +300,12 @@
 		const wrap = btn.closest('[data-datetime-wrap]');
 		const input = wrap?.querySelector('input[type="date"]');
 		if (input instanceof HTMLInputElement) openPickerFor(input);
+	}
+
+	function openTimePicker(field: TimePickerField, event?: Event) {
+		event?.preventDefault();
+		event?.stopPropagation();
+		openTimePickerField = field;
 	}
 
 	function toggleTimePicker(field: TimePickerField, event?: Event) {
@@ -376,7 +379,8 @@
 		aria-expanded={openTimePickerField === field}
 		aria-controls={timePickerDialogId[field]}
 		data-time-picker-trigger
-		onclick={(e) => toggleTimePicker(field, e)}
+		data-time-field={field}
+		onclick={(e) => openTimePicker(field, e)}
 	>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
@@ -482,11 +486,7 @@
 								{@render dateTimeCalendarButton()}
 							</div>
 							<span id="receivedAt-date-hint" class="sr-only">Date</span>
-							<div
-								class={timeFieldWrapClass}
-								data-datetime-wrap
-								bind:this={receivedTimeWrapEl}
-							>
+							<div class={timeFieldWrapClass} data-datetime-wrap>
 								<input
 									id="receivedAt-time"
 									type="time"
@@ -494,6 +494,7 @@
 									aria-labelledby="receivedAt-label receivedAt-time-hint"
 									aria-describedby="receivedAt-desc"
 									class={nativeTimeClass}
+									onclick={(e) => openTimePicker('time', e)}
 								/>
 								{@render dateTimeClockButton('time', 'Open time picker for date received')}
 								<TimePickerPopover
@@ -501,7 +502,6 @@
 									value={form.time}
 									title="Time received"
 									idPrefix="receivedAt-time-picker"
-									anchorEl={receivedTimeWrapEl}
 									onApply={(t) => applyTimePicker('time', t)}
 									onClose={closeTimePicker}
 								/>
@@ -633,11 +633,7 @@
 								{@render dateTimeCalendarButton()}
 							</div>
 							<span id="respondedAt-date-hint" class="sr-only">Date</span>
-							<div
-								class={timeFieldWrapClass}
-								data-datetime-wrap
-								bind:this={respondedTimeWrapEl}
-							>
+							<div class={timeFieldWrapClass} data-datetime-wrap>
 								<input
 									id="respondedAt-time"
 									type="time"
@@ -645,6 +641,7 @@
 									aria-labelledby="respondedAt-label respondedAt-time-hint"
 									aria-describedby="respondedAt-desc"
 									class={nativeTimeClass}
+									onclick={(e) => openTimePicker('timeResponse', e)}
 								/>
 								{@render dateTimeClockButton('timeResponse', 'Open time picker for responded')}
 								<TimePickerPopover
@@ -652,7 +649,6 @@
 									value={form.timeResponse}
 									title="Time responded"
 									idPrefix="respondedAt-time-picker"
-									anchorEl={respondedTimeWrapEl}
 									onApply={(t) => applyTimePicker('timeResponse', t)}
 									onClose={closeTimePicker}
 								/>
