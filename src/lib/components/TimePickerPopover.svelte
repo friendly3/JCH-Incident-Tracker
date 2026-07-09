@@ -11,14 +11,12 @@
 		title?: string;
 		/** Prefix for control ids (unique when multiple pickers exist). */
 		idPrefix?: string;
-		/** Element to anchor the fixed popover under (time field wrap). */
-		anchorEl?: HTMLElement | null;
 		/**
 		 * Called with HH:mm when the user applies a selection.
-		 * Parent owns closing (set `open` false); this component does not call `onClose` after apply.
+		 * Parent owns closing (set `open` false).
 		 */
 		onApply?: (time: string) => void;
-		/** Called when the popover should close (cancel, escape, outside click). */
+		/** Called when the popover should close (cancel, escape, backdrop). */
 		onClose?: () => void;
 	}
 
@@ -27,7 +25,6 @@
 		value = '',
 		title = 'Select time',
 		idPrefix = 'time-picker',
-		anchorEl = null,
 		onApply,
 		onClose
 	}: Props = $props();
@@ -44,8 +41,9 @@
 	let minute = $state('00');
 	let panelEl = $state<HTMLDivElement | undefined>(undefined);
 	let hourSelectEl = $state<HTMLSelectElement | undefined>(undefined);
-	let panelStyle = $state('');
 	let previouslyFocused: HTMLElement | null = null;
+	/** Portal host on document.body so modal overflow cannot clip the dialog. */
+	let portalHost: HTMLDivElement | null = null;
 
 	function parseValue(raw: string): { h: string; m: string } {
 		const t = normalizeTimeField(raw);
@@ -68,46 +66,8 @@
 		onClose?.();
 	}
 
-	/** Apply selected time. Parent owns closing via onApply handler. */
 	function apply() {
 		onApply?.(`${hour}:${minute}`);
-	}
-
-	function positionPanel() {
-		const anchor = anchorEl;
-		if (!anchor) {
-			panelStyle = 'top: 50%; left: 50%; transform: translate(-50%, -50%);';
-			return;
-		}
-		const rect = anchor.getBoundingClientRect();
-		const gap = 6;
-		const margin = 8;
-		const measured = panelEl?.getBoundingClientRect();
-		const width = measured && measured.width > 0
-			? Math.min(window.innerWidth - margin * 2, measured.width)
-			: Math.min(window.innerWidth - margin * 2, 264);
-		const height = measured && measured.height > 0 ? measured.height : 180;
-
-		let left = rect.left;
-		if (left + width > window.innerWidth - margin) {
-			left = Math.max(margin, window.innerWidth - width - margin);
-		}
-		left = Math.max(margin, left);
-
-		// Prefer below the field; flip above if not enough room for measured height.
-		const spaceBelow = window.innerHeight - rect.bottom - gap;
-		const spaceAbove = rect.top - gap;
-		let top: number;
-		if (spaceBelow >= height || spaceBelow >= spaceAbove) {
-			top = rect.bottom + gap;
-		} else {
-			top = rect.top - gap - height;
-		}
-		// Clamp into the viewport so the panel stays fully visible when possible.
-		const maxTop = Math.max(margin, window.innerHeight - height - margin);
-		top = Math.min(Math.max(margin, top), maxTop);
-
-		panelStyle = `top: ${Math.round(top)}px; left: ${Math.round(left)}px; width: ${Math.round(width)}px;`;
 	}
 
 	function focusables(): HTMLElement[] {
@@ -120,7 +80,6 @@
 
 	function onPanelKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
-			// Capture-phase window listener is primary; this is a bubble fallback.
 			event.preventDefault();
 			event.stopPropagation();
 			close();
@@ -129,7 +88,6 @@
 		if (event.key === 'Enter') {
 			const t = event.target;
 			if (t instanceof HTMLTextAreaElement) return;
-			// Let focused buttons activate via their own click/keydown handling.
 			if (t instanceof HTMLButtonElement) return;
 			event.preventDefault();
 			event.stopPropagation();
@@ -153,20 +111,16 @@
 		}
 	}
 
-	function onDocumentPointerDown(event: PointerEvent) {
-		if (!open || !panelEl) return;
-		const target = event.target;
-		if (!(target instanceof Node)) return;
-		if (panelEl.contains(target)) return;
-		// Ignore the clock button that toggles this picker.
-		if (target instanceof Element && target.closest('[data-time-picker-trigger]')) return;
-		close();
+	function onBackdropPointerDown(event: PointerEvent) {
+		// Only close when pressing the backdrop itself, not the panel.
+		if (event.target === event.currentTarget) {
+			event.preventDefault();
+			close();
+		}
 	}
 
 	/**
-	 * Window capture Escape must win over the incidents page modal's
-	 * svelte:window onkeydowncapture, which otherwise closes the editor.
-	 * Host page also early-returns when focus is inside .time-picker-popover.
+	 * Capture Escape on window so the host page modal does not steal it.
 	 */
 	function onWindowKeydownCapture(event: KeyboardEvent) {
 		if (!open) return;
@@ -176,41 +130,40 @@
 		close();
 	}
 
+	/** Move the dialog tree onto document.body (escape overflow/stacking). */
+	function portal(node: HTMLElement) {
+		if (typeof document === 'undefined') return {};
+		const host = document.createElement('div');
+		host.className = 'time-picker-portal-root';
+		host.setAttribute('data-time-picker-portal', idPrefix);
+		document.body.appendChild(host);
+		host.appendChild(node);
+		portalHost = host;
+		return {
+			destroy() {
+				if (host.parentNode) host.parentNode.removeChild(host);
+				if (portalHost === host) portalHost = null;
+			}
+		};
+	}
+
 	$effect(() => {
 		if (!open) return;
 
-		// Seed hour/minute only from value at open — do not re-init when parent
-		// reassigns form fields while the popover stays open.
 		const parsed = parseValue(untrack(() => value));
 		hour = parsed.h;
 		minute = parsed.m;
 		previouslyFocused =
 			document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
-		// Track anchor for reposition; untrack panel reads inside positionPanel's first call.
-		void anchorEl;
-
-		positionPanel();
-
-		const onDoc = (e: PointerEvent) => onDocumentPointerDown(e);
-		const onReposition = () => positionPanel();
 		window.addEventListener('keydown', onWindowKeydownCapture, true);
-		document.addEventListener('pointerdown', onDoc, true);
-		window.addEventListener('resize', onReposition);
-		// Capture scroll on any scrollable ancestor (form body, window).
-		window.addEventListener('scroll', onReposition, true);
 
 		void tick().then(() => {
-			// Reposition with real measured panel height/width after paint.
-			positionPanel();
 			hourSelectEl?.focus();
 		});
 
 		return () => {
 			window.removeEventListener('keydown', onWindowKeydownCapture, true);
-			document.removeEventListener('pointerdown', onDoc, true);
-			window.removeEventListener('resize', onReposition);
-			window.removeEventListener('scroll', onReposition, true);
 			if (previouslyFocused && document.contains(previouslyFocused)) {
 				previouslyFocused.focus({ preventScroll: true });
 			}
@@ -220,66 +173,76 @@
 </script>
 
 {#if open}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
-		bind:this={panelEl}
-		id={dialogId}
-		class="time-picker-popover fixed z-[80] rounded-md border border-warm-200 bg-white p-3 shadow-lg dark:border-warm-300 dark:bg-warm-100"
-		style={panelStyle}
-		role="dialog"
-		aria-modal="false"
-		aria-labelledby={titleId}
-		tabindex="-1"
-		onkeydown={onPanelKeydown}
+		use:portal
+		class="time-picker-popover fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4"
+		data-time-picker-backdrop
+		onpointerdown={onBackdropPointerDown}
+		role="presentation"
 	>
-		<p
-			id={titleId}
-			class="mb-2 text-xs font-semibold uppercase tracking-wide text-warm-500 dark:text-warm-600"
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+		<div
+			bind:this={panelEl}
+			id={dialogId}
+			class="w-full max-w-[18rem] rounded-lg border border-warm-200 bg-white p-4 shadow-2xl dark:border-warm-300 dark:bg-warm-100"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby={titleId}
+			tabindex="-1"
+			onkeydown={onPanelKeydown}
+			onpointerdown={(e) => e.stopPropagation()}
 		>
-			{title}
-		</p>
-		<div class="flex items-end gap-2">
-			<div class="min-w-0 flex-1">
-				<label class="mb-1 block text-xs text-warm-600" for={hourId}>Hour</label>
-				<select
-					id={hourId}
-					bind:this={hourSelectEl}
-					bind:value={hour}
-					class="input-focus w-full rounded-md border border-warm-200 bg-white px-2 py-1.5 text-sm text-warm-800 dark:bg-warm-200 dark:text-warm-900"
-				>
-					{#each HOURS as h}
-						<option value={h}>{h}</option>
-					{/each}
-				</select>
-			</div>
-			<span class="pb-1.5 text-lg font-semibold text-warm-500" aria-hidden="true">:</span>
-			<div class="min-w-0 flex-1">
-				<label class="mb-1 block text-xs text-warm-600" for={minuteId}>Minute</label>
-				<select
-					id={minuteId}
-					bind:value={minute}
-					class="input-focus w-full rounded-md border border-warm-200 bg-white px-2 py-1.5 text-sm text-warm-800 dark:bg-warm-200 dark:text-warm-900"
-				>
-					{#each MINUTES as m}
-						<option value={m}>{m}</option>
-					{/each}
-				</select>
-			</div>
-		</div>
-		<div class="mt-3 flex items-center justify-end gap-2">
-			<button
-				type="button"
-				class="rounded-md border border-warm-300 bg-white px-3 py-1.5 text-sm text-warm-700 hover:bg-warm-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:bg-warm-200 dark:hover:bg-warm-300"
-				onclick={close}
+			<p
+				id={titleId}
+				class="mb-3 text-sm font-semibold text-warm-800 dark:text-warm-900"
 			>
-				Cancel
-			</button>
-			<button
-				type="button"
-				class="rounded-md bg-accent-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
-				onclick={apply}
-			>
-				Apply
-			</button>
+				{title}
+			</p>
+			<div class="flex items-end gap-2">
+				<div class="min-w-0 flex-1">
+					<label class="mb-1 block text-xs font-medium text-warm-600" for={hourId}>Hour</label>
+					<select
+						id={hourId}
+						bind:this={hourSelectEl}
+						bind:value={hour}
+						class="input-focus w-full rounded-md border border-warm-200 bg-white px-2 py-2 text-sm text-warm-800 dark:bg-warm-200 dark:text-warm-900"
+					>
+						{#each HOURS as h (h)}
+							<option value={h}>{h}</option>
+						{/each}
+					</select>
+				</div>
+				<span class="pb-2 text-lg font-semibold text-warm-500" aria-hidden="true">:</span>
+				<div class="min-w-0 flex-1">
+					<label class="mb-1 block text-xs font-medium text-warm-600" for={minuteId}>Minute</label>
+					<select
+						id={minuteId}
+						bind:value={minute}
+						class="input-focus w-full rounded-md border border-warm-200 bg-white px-2 py-2 text-sm text-warm-800 dark:bg-warm-200 dark:text-warm-900"
+					>
+						{#each MINUTES as m (m)}
+							<option value={m}>{m}</option>
+						{/each}
+					</select>
+				</div>
+			</div>
+			<div class="mt-4 flex items-center justify-end gap-2">
+				<button
+					type="button"
+					class="rounded-md border border-warm-300 bg-white px-3 py-1.5 text-sm text-warm-700 hover:bg-warm-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:bg-warm-200 dark:hover:bg-warm-300"
+					onclick={close}
+				>
+					Cancel
+				</button>
+				<button
+					type="button"
+					class="rounded-md bg-accent-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+					onclick={apply}
+				>
+					Apply
+				</button>
+			</div>
 		</div>
 	</div>
 {/if}
