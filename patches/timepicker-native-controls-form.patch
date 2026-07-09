@@ -1,0 +1,158 @@
+--- a/src/lib/components/IncidentForm.svelte
++++ b/src/lib/components/IncidentForm.svelte
+@@ -1,7 +1,7 @@
+ <script lang="ts">
+ 	import type { Incident, IncidentType, IncidentAction } from '$lib/data/incidents';
+ 	import type { Driver, TeamLeader } from '$lib/data/team';
+-	import { formatDate, formatDateTimeFields, formatTimeField, normalizeTimeField } from '$lib/formatDate';
++	import { formatDateTimeFields, normalizeTimeField } from '$lib/formatDate';
+ 
+ 	interface Props {
+ 		incident?: Incident;
+@@ -237,26 +237,17 @@
+ 
+ 	const inputClass =
+ 		'w-full rounded-md border border-warm-200 bg-white px-3 py-2 text-sm text-warm-700 input-focus dark:bg-warm-200';
+-	const dateTimeFieldClass =
+-		'input-focus-within form-field-surface relative w-full rounded-md border border-warm-200 bg-white dark:bg-warm-200';
+-	const dateTimeDisplayClass =
+-		'pointer-events-none flex min-h-[2.375rem] items-center px-3 py-2 pr-10 text-sm';
++	/** Visible native date/time control with room for a trailing decorative icon. */
++	const nativeDateTimeClass =
++		'native-datetime form-field-surface input-focus relative w-full min-h-[2.375rem] rounded-md border border-warm-200 bg-white px-3 py-2 pr-10 text-sm text-warm-700 dark:bg-warm-200';
+ 	const dateTimeIconClass =
+-		'pointer-events-none absolute right-3 top-1/2 z-0 -translate-y-1/2 text-warm-500 dark:text-warm-400';
+-	// z-10 so the invisible native control sits above the display/icon and receives clicks.
+-	// opacity-0 alone is not enough for type=time in Chromium — openNativePicker() calls showPicker().
+-	const dateTimeOverlayClass =
+-		'absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 disabled:cursor-default';
++		'pointer-events-none absolute right-3 top-1/2 z-[1] -translate-y-1/2 text-warm-500 dark:text-warm-400';
+ 	const dateTimeControlClass = 'flex flex-col gap-2 sm:flex-row sm:items-stretch';
+-	const timeFieldClass = `${dateTimeFieldClass} w-full sm:w-[8.5rem] sm:shrink-0`;
+-	const emptyDateTimeDisplay = '—';
++	const timeFieldWrapClass = 'relative w-full sm:w-[9.5rem] sm:shrink-0';
++	const dateFieldWrapClass = 'relative min-w-0 flex-1';
+ 
+-	/**
+-	 * Open the browser's native date/time picker for our custom overlay fields.
+-	 * Chromium only opens type=time when the tiny clock glyph is hit; a full-field
+-	 * transparent overlay therefore needs an explicit showPicker() on user click.
+-	 */
+-	function openNativePicker(event: MouseEvent) {
++	/** Force-open the browser picker; used as a belt-and-braces with the full-size webkit indicator. */
++	function openNativePicker(event: Event) {
+ 		const input = event.currentTarget;
+ 		if (!(input instanceof HTMLInputElement) || input.disabled) return;
+ 		try {
+@@ -264,7 +255,7 @@
+ 				input.showPicker();
+ 			}
+ 		} catch {
+-			// NotAllowedError / unsupported — focus still allows typing a value.
++			// NotAllowedError / unsupported — native control still accepts typed values.
+ 		}
+ 	}
+ 
+@@ -396,14 +387,7 @@
+ 					<div class="sn-field-control">
+ 						<span id="receivedAt-desc" class="sr-only">{receivedAtDesc}</span>
+ 						<div class={dateTimeControlClass} role="group" aria-labelledby="receivedAt-label">
+-							<div class="{dateTimeFieldClass} min-w-0 flex-1">
+-								<div
+-									class="{dateTimeDisplayClass} {form.dateReceived ? 'text-warm-700' : 'text-warm-400'}"
+-									aria-hidden="true"
+-								>
+-									{formatDate(form.dateReceived) || emptyDateTimeDisplay}
+-								</div>
+-								{@render dateTimeCalendarIcon()}
++							<div class={dateFieldWrapClass}>
+ 								<input
+ 									id="receivedAt"
+ 									type="date"
+@@ -412,28 +396,23 @@
+ 									aria-describedby={receivedAtDescribedBy}
+ 									aria-required="true"
+ 									aria-invalid={submitErrorField === 'dateReceived' ? 'true' : undefined}
+-									class={dateTimeOverlayClass}
+-									onclick={openNativePicker}
++									class={nativeDateTimeClass}
++									onpointerdown={openNativePicker}
+ 								/>
++								{@render dateTimeCalendarIcon()}
+ 							</div>
+ 							<span id="receivedAt-date-hint" class="sr-only">Date</span>
+-							<div class={timeFieldClass}>
+-								<div
+-									class="{dateTimeDisplayClass} {form.time ? 'text-warm-700' : 'text-warm-400'}"
+-									aria-hidden="true"
+-								>
+-									{formatTimeField(form.time) || emptyDateTimeDisplay}
+-								</div>
+-								{@render dateTimeClockIcon()}
++							<div class={timeFieldWrapClass}>
+ 								<input
+ 									id="receivedAt-time"
+ 									type="time"
+ 									bind:value={form.time}
+ 									aria-labelledby="receivedAt-label receivedAt-time-hint"
+ 									aria-describedby="receivedAt-desc"
+-									class={dateTimeOverlayClass}
+-									onclick={openNativePicker}
++									class={nativeDateTimeClass}
++									onpointerdown={openNativePicker}
+ 								/>
++								{@render dateTimeClockIcon()}
+ 							</div>
+ 							<span id="receivedAt-time-hint" class="sr-only">Time</span>
+ 						</div>
+@@ -548,42 +527,30 @@
+ 					<div class="sn-field-control">
+ 						<span id="respondedAt-desc" class="sr-only">{respondedAtDesc}</span>
+ 						<div class={dateTimeControlClass} role="group" aria-labelledby="respondedAt-label">
+-							<div class="{dateTimeFieldClass} min-w-0 flex-1">
+-								<div
+-									class="{dateTimeDisplayClass} {form.dateResponse ? 'text-warm-700' : 'text-warm-400'}"
+-									aria-hidden="true"
+-								>
+-									{formatDate(form.dateResponse) || emptyDateTimeDisplay}
+-								</div>
+-								{@render dateTimeCalendarIcon()}
++							<div class={dateFieldWrapClass}>
+ 								<input
+ 									id="respondedAt"
+ 									type="date"
+ 									bind:value={form.dateResponse}
+ 									aria-labelledby="respondedAt-label respondedAt-date-hint"
+ 									aria-describedby="respondedAt-desc"
+-									class={dateTimeOverlayClass}
+-									onclick={openNativePicker}
++									class={nativeDateTimeClass}
++									onpointerdown={openNativePicker}
+ 								/>
++								{@render dateTimeCalendarIcon()}
+ 							</div>
+ 							<span id="respondedAt-date-hint" class="sr-only">Date</span>
+-							<div class={timeFieldClass}>
+-								<div
+-									class="{dateTimeDisplayClass} {form.timeResponse ? 'text-warm-700' : 'text-warm-400'}"
+-									aria-hidden="true"
+-								>
+-									{formatTimeField(form.timeResponse) || emptyDateTimeDisplay}
+-								</div>
+-								{@render dateTimeClockIcon()}
++							<div class={timeFieldWrapClass}>
+ 								<input
+ 									id="respondedAt-time"
+ 									type="time"
+ 									bind:value={form.timeResponse}
+ 									aria-labelledby="respondedAt-label respondedAt-time-hint"
+ 									aria-describedby="respondedAt-desc"
+-									class={dateTimeOverlayClass}
+-									onclick={openNativePicker}
++									class={nativeDateTimeClass}
++									onpointerdown={openNativePicker}
+ 								/>
++								{@render dateTimeClockIcon()}
+ 							</div>
+ 							<span id="respondedAt-time-hint" class="sr-only">Time</span>
+ 						</div>
