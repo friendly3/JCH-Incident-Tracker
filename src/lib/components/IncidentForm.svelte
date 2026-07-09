@@ -237,26 +237,50 @@
 
 	const inputClass =
 		'w-full rounded-md border border-warm-200 bg-white px-3 py-2 text-sm text-warm-700 input-focus dark:bg-warm-200';
-	/** Visible native date/time control with room for a trailing decorative icon. */
+	/** Visible native date/time control with room for a trailing picker button. */
 	const nativeDateTimeClass =
 		'native-datetime form-field-surface input-focus relative w-full min-h-[2.375rem] rounded-md border border-warm-200 bg-white px-3 py-2 pr-10 text-sm text-warm-700 dark:bg-warm-200';
-	const dateTimeIconClass =
-		'pointer-events-none absolute right-3 top-1/2 z-[1] -translate-y-1/2 text-warm-500 dark:text-warm-400';
+	/** Clickable icon button that opens the native picker for its sibling input. */
+	const dateTimeIconBtnClass =
+		'absolute right-1 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-warm-500 hover:bg-warm-100 hover:text-warm-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-warm-400 dark:hover:bg-warm-300 dark:hover:text-warm-800';
 	const dateTimeControlClass = 'flex flex-col gap-2 sm:flex-row sm:items-stretch';
 	const timeFieldWrapClass = 'relative w-full sm:w-[9.5rem] sm:shrink-0';
 	const dateFieldWrapClass = 'relative min-w-0 flex-1';
 
-	/** Force-open the browser picker; used as a belt-and-braces with the full-size webkit indicator. */
-	function openNativePicker(event: Event) {
-		const input = event.currentTarget;
-		if (!(input instanceof HTMLInputElement) || input.disabled) return;
+	/** Open the OS/browser date or time picker for a native input. */
+	function openPickerFor(input: HTMLInputElement | null | undefined) {
+		if (!input || input.disabled) return;
 		try {
+			input.focus({ preventScroll: true });
 			if (typeof input.showPicker === 'function') {
 				input.showPicker();
+				return;
 			}
 		} catch {
-			// NotAllowedError / unsupported — native control still accepts typed values.
+			// NotAllowedError / unsupported on this browser/platform.
 		}
+		// Last resort: synthetic click can open the picker on some engines.
+		try {
+			input.click();
+		} catch {
+			/* ignore */
+		}
+	}
+
+	function openNativePicker(event: Event) {
+		const input = event.currentTarget;
+		if (input instanceof HTMLInputElement) openPickerFor(input);
+	}
+
+	/** Icon button handler: find the sibling input inside the same wrap. */
+	function openPickerFromButton(event: MouseEvent) {
+		event.preventDefault();
+		event.stopPropagation();
+		const btn = event.currentTarget;
+		if (!(btn instanceof HTMLElement)) return;
+		const wrap = btn.closest('[data-datetime-wrap]');
+		const input = wrap?.querySelector('input[type="date"], input[type="time"]');
+		if (input instanceof HTMLInputElement) openPickerFor(input);
 	}
 
 	const receivedAtDesc = $derived(
@@ -277,8 +301,14 @@
 	);
 </script>
 
-{#snippet dateTimeCalendarIcon()}
-	<span class={dateTimeIconClass} aria-hidden="true">
+{#snippet dateTimeCalendarButton()}
+	<button
+		type="button"
+		tabindex="-1"
+		class={dateTimeIconBtnClass}
+		aria-label="Open date picker"
+		onclick={openPickerFromButton}
+	>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			class="h-4 w-4"
@@ -294,11 +324,17 @@
 				d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
 			/>
 		</svg>
-	</span>
+	</button>
 {/snippet}
 
-{#snippet dateTimeClockIcon()}
-	<span class={dateTimeIconClass} aria-hidden="true">
+{#snippet dateTimeClockButton()}
+	<button
+		type="button"
+		tabindex="-1"
+		class={dateTimeIconBtnClass}
+		aria-label="Open time picker"
+		onclick={openPickerFromButton}
+	>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			class="h-4 w-4"
@@ -314,7 +350,7 @@
 				d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
 			/>
 		</svg>
-	</span>
+	</button>
 {/snippet}
 
 <form
@@ -387,7 +423,7 @@
 					<div class="sn-field-control">
 						<span id="receivedAt-desc" class="sr-only">{receivedAtDesc}</span>
 						<div class={dateTimeControlClass} role="group" aria-labelledby="receivedAt-label">
-							<div class={dateFieldWrapClass}>
+							<div class={dateFieldWrapClass} data-datetime-wrap>
 								<input
 									id="receivedAt"
 									type="date"
@@ -397,12 +433,13 @@
 									aria-required="true"
 									aria-invalid={submitErrorField === 'dateReceived' ? 'true' : undefined}
 									class={nativeDateTimeClass}
+									onclick={openNativePicker}
 									onpointerdown={openNativePicker}
 								/>
-								{@render dateTimeCalendarIcon()}
+								{@render dateTimeCalendarButton()}
 							</div>
 							<span id="receivedAt-date-hint" class="sr-only">Date</span>
-							<div class={timeFieldWrapClass}>
+							<div class={timeFieldWrapClass} data-datetime-wrap>
 								<input
 									id="receivedAt-time"
 									type="time"
@@ -410,9 +447,10 @@
 									aria-labelledby="receivedAt-label receivedAt-time-hint"
 									aria-describedby="receivedAt-desc"
 									class={nativeDateTimeClass}
+									onclick={openNativePicker}
 									onpointerdown={openNativePicker}
 								/>
-								{@render dateTimeClockIcon()}
+								{@render dateTimeClockButton()}
 							</div>
 							<span id="receivedAt-time-hint" class="sr-only">Time</span>
 						</div>
@@ -527,7 +565,7 @@
 					<div class="sn-field-control">
 						<span id="respondedAt-desc" class="sr-only">{respondedAtDesc}</span>
 						<div class={dateTimeControlClass} role="group" aria-labelledby="respondedAt-label">
-							<div class={dateFieldWrapClass}>
+							<div class={dateFieldWrapClass} data-datetime-wrap>
 								<input
 									id="respondedAt"
 									type="date"
@@ -535,12 +573,13 @@
 									aria-labelledby="respondedAt-label respondedAt-date-hint"
 									aria-describedby="respondedAt-desc"
 									class={nativeDateTimeClass}
+									onclick={openNativePicker}
 									onpointerdown={openNativePicker}
 								/>
-								{@render dateTimeCalendarIcon()}
+								{@render dateTimeCalendarButton()}
 							</div>
 							<span id="respondedAt-date-hint" class="sr-only">Date</span>
-							<div class={timeFieldWrapClass}>
+							<div class={timeFieldWrapClass} data-datetime-wrap>
 								<input
 									id="respondedAt-time"
 									type="time"
@@ -548,9 +587,10 @@
 									aria-labelledby="respondedAt-label respondedAt-time-hint"
 									aria-describedby="respondedAt-desc"
 									class={nativeDateTimeClass}
+									onclick={openNativePicker}
 									onpointerdown={openNativePicker}
 								/>
-								{@render dateTimeClockIcon()}
+								{@render dateTimeClockButton()}
 							</div>
 							<span id="respondedAt-time-hint" class="sr-only">Time</span>
 						</div>
