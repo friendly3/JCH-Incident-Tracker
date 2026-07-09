@@ -1,0 +1,45 @@
+name: Apply time picker native controls
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-time-picker-v2.yml'
+      - 'patches/timepicker-native-controls-form.patch'
+      - 'patches/timepicker-native-controls-css.patch'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply patches
+        run: |
+          set -euo pipefail
+          if grep -q 'native-datetime' src/lib/components/IncidentForm.svelte; then
+            echo "Native datetime controls already present"
+            exit 0
+          fi
+          patch -p1 < patches/timepicker-native-controls-form.patch
+          patch -p1 < patches/timepicker-native-controls-css.patch
+          grep -q 'native-datetime' src/lib/components/IncidentForm.svelte
+          grep -q 'native-datetime' src/app.css
+          grep -q '::-webkit-calendar-picker-indicator' src/app.css
+          test "$(grep -c 'type=\"time\"' src/lib/components/IncidentForm.svelte)" -ge 2
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/components/IncidentForm.svelte src/app.css
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "fix: use visible native date/time controls so time picker always opens"
+          git push origin HEAD:main
