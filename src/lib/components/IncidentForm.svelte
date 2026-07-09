@@ -171,6 +171,10 @@
 
 	const hasUnsavedChanges = $derived(computeHasUnsavedChanges());
 
+	/** Which custom time popover is open (null = closed). Declared early for requestClose/reset. */
+	type TimePickerField = 'time' | 'timeResponse';
+	let openTimePickerField = $state<TimePickerField | null>(null);
+
 	/** Synchronous dirty check for parent dismiss handlers (backdrop/Escape). */
 	export function getHasUnsavedChanges(): boolean {
 		return computeHasUnsavedChanges();
@@ -178,6 +182,8 @@
 
 	/** Report dirty state to parent for close/discard flow. */
 	export function requestClose(): void {
+		// Nested time popover must not stay logically open under discard/close.
+		openTimePickerField = null;
 		onCancel(computeHasUnsavedChanges());
 	}
 
@@ -191,6 +197,7 @@
 		showConfirm = false;
 		submitError = null;
 		submitErrorField = null;
+		openTimePickerField = null;
 		const source = incident;
 		const initial = source ? normalizeIncident(source) : emptyIncident();
 		form = initial;
@@ -238,9 +245,15 @@
 
 	const inputClass =
 		'w-full rounded-md border border-warm-200 bg-white px-3 py-2 text-sm text-warm-700 input-focus dark:bg-warm-200';
-	/** Visible native date/time control with room for a trailing picker button. */
-	const nativeDateTimeClass =
+	/** Visible native date control with full-field picker hit target + trailing icon. */
+	const nativeDateClass =
 		'native-datetime form-field-surface input-focus relative w-full min-h-[2.375rem] rounded-md border border-warm-200 bg-white px-3 py-2 pr-10 text-sm text-warm-700 dark:bg-warm-200';
+	/**
+	 * Native time control for typed HH:mm entry. No full-field webkit indicator —
+	 * the clock icon opens TimePickerPopover (reliable custom UI).
+	 */
+	const nativeTimeClass =
+		'native-time form-field-surface input-focus relative w-full min-h-[2.375rem] rounded-md border border-warm-200 bg-white px-3 py-2 pr-10 text-sm text-warm-700 dark:bg-warm-200';
 	/** Clickable icon button that opens the native date picker or custom time popover. */
 	const dateTimeIconBtnClass =
 		'absolute right-1 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-warm-500 hover:bg-warm-100 hover:text-warm-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-warm-400 dark:hover:bg-warm-300 dark:hover:text-warm-800';
@@ -248,11 +261,13 @@
 	const timeFieldWrapClass = 'relative w-full sm:w-[9.5rem] sm:shrink-0';
 	const dateFieldWrapClass = 'relative min-w-0 flex-1';
 
-	/** Which custom time popover is open (null = closed). */
-	type TimePickerField = 'time' | 'timeResponse';
-	let openTimePickerField = $state<TimePickerField | null>(null);
 	let receivedTimeWrapEl = $state<HTMLDivElement | undefined>(undefined);
 	let respondedTimeWrapEl = $state<HTMLDivElement | undefined>(undefined);
+
+	const timePickerDialogId = {
+		time: 'receivedAt-time-picker-dialog',
+		timeResponse: 'respondedAt-time-picker-dialog'
+	} as const;
 
 	/** Open the OS/browser date picker for a native date input. */
 	function openPickerFor(input: HTMLInputElement | null | undefined) {
@@ -300,6 +315,7 @@
 		openTimePickerField = null;
 	}
 
+	/** Apply chosen HH:mm and close — single close ownership (parent of popover). */
 	function applyTimePicker(field: TimePickerField, time: string) {
 		const normalized = normalizeTimeField(time);
 		if (field === 'time') form.time = normalized;
@@ -358,6 +374,7 @@
 		aria-label={label}
 		aria-haspopup="dialog"
 		aria-expanded={openTimePickerField === field}
+		aria-controls={timePickerDialogId[field]}
 		data-time-picker-trigger
 		onclick={(e) => toggleTimePicker(field, e)}
 	>
@@ -458,7 +475,7 @@
 									aria-describedby={receivedAtDescribedBy}
 									aria-required="true"
 									aria-invalid={submitErrorField === 'dateReceived' ? 'true' : undefined}
-									class={nativeDateTimeClass}
+									class={nativeDateClass}
 									onclick={openNativePicker}
 									onpointerdown={openNativePicker}
 								/>
@@ -476,7 +493,7 @@
 									bind:value={form.time}
 									aria-labelledby="receivedAt-label receivedAt-time-hint"
 									aria-describedby="receivedAt-desc"
-									class={nativeDateTimeClass}
+									class={nativeTimeClass}
 								/>
 								{@render dateTimeClockButton('time', 'Open time picker for date received')}
 								<TimePickerPopover
@@ -609,7 +626,7 @@
 									bind:value={form.dateResponse}
 									aria-labelledby="respondedAt-label respondedAt-date-hint"
 									aria-describedby="respondedAt-desc"
-									class={nativeDateTimeClass}
+									class={nativeDateClass}
 									onclick={openNativePicker}
 									onpointerdown={openNativePicker}
 								/>
@@ -627,7 +644,7 @@
 									bind:value={form.timeResponse}
 									aria-labelledby="respondedAt-label respondedAt-time-hint"
 									aria-describedby="respondedAt-desc"
-									class={nativeDateTimeClass}
+									class={nativeTimeClass}
 								/>
 								{@render dateTimeClockButton('timeResponse', 'Open time picker for responded')}
 								<TimePickerPopover

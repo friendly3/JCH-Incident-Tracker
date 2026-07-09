@@ -310,6 +310,10 @@
 	function handleModalKeydownCapture(e: KeyboardEvent) {
 		if (e.key !== 'Escape') return;
 		const target = e.target;
+		// Nested custom time popover owns Escape (closes popover only, not the editor).
+		if (target instanceof Element && target.closest('.time-picker-popover')) {
+			return;
+		}
 		if (
 			target instanceof HTMLInputElement &&
 			(target.type === 'datetime-local' || target.type === 'date' || target.type === 'time')
@@ -325,6 +329,7 @@
 		if (mode !== 'list') {
 			e.preventDefault();
 			e.stopPropagation();
+			// requestClose also clears any open time popover state.
 			incidentFormRef?.requestClose();
 		}
 	}
