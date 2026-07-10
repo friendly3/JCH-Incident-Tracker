@@ -452,44 +452,18 @@
 <div class="flex-1 flex flex-col bg-warm-50 text-warm-900 overflow-hidden">
 	<div class="flex min-h-0 flex-1 flex-col overflow-hidden" inert={isModalOpen || undefined}>
 	<header class="border-b border-warm-200 bg-white/80 px-6 py-5 backdrop-blur flex-shrink-0">
-		<div class="w-full">
-			<div class="flex items-center justify-between">
-				<div class="flex min-w-0 items-start gap-3">
-					<CourierTruckIcon />
-					<div class="min-w-0">
-						<h1 class="text-2xl font-bold text-warm-800">JCH Pham AusPost Incident Tracker</h1>
-						{#if data.loadError}
-							<p class="mt-1 text-sm text-red-600 font-medium">Unable to load incidents</p>
-						{:else if incidentStore.error}
-							<p class="mt-1 text-sm text-red-600 font-medium">{incidentStore.error}</p>
-						{:else}
-							<p class="mt-1 text-sm text-warm-500">
-								{incidents.length} incidents recorded
-							</p>
-						{/if}
-					</div>
-				</div>
-				{#if mode === 'list'}
-					<div class="flex items-center gap-2">
-						<button
-							type="button"
-							onclick={handleRefresh}
-							title="Refresh data"
-							aria-label="Refresh incidents data"
-							class="rounded-lg border border-warm-200 bg-white p-2 text-warm-500 hover:text-warm-800 hover:border-warm-300 transition disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
-							disabled={isRefreshing}
-						>
-							<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-							</svg>
-						</button>
-						<button
-							bind:this={addIncidentBtn}
-							onclick={openAdd}
-							class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-500 transition">
-							+ Add Incident
-						</button>
-					</div>
+		<div class="flex w-full min-w-0 items-start gap-3">
+			<CourierTruckIcon />
+			<div class="min-w-0">
+				<h1 class="text-2xl font-bold text-warm-800">JCH Pham AusPost Incident Tracker</h1>
+				{#if data.loadError}
+					<p class="mt-1 text-sm text-red-600 font-medium">Unable to load incidents</p>
+				{:else if incidentStore.error}
+					<p class="mt-1 text-sm text-red-600 font-medium">{incidentStore.error}</p>
+				{:else}
+					<p class="mt-1 text-sm text-warm-500">
+						{incidents.length} incidents recorded
+					</p>
 				{/if}
 			</div>
 		</div>
@@ -620,6 +594,40 @@
 				</button>
 			</div>
 			<p class="mt-3 text-sm text-warm-500">{filtered.length} {filtered.length === 1 ? 'incident' : 'incidents'} found</p>
+		</div>
+		<!-- Actions under filters (left-aligned) -->
+		<div class="mt-3 flex items-center justify-start gap-2">
+			<button
+				type="button"
+				onclick={handleRefresh}
+				title="Refresh data"
+				aria-label="Refresh incidents data"
+				class="rounded-lg border border-warm-200 bg-white p-2 text-warm-500 transition hover:border-warm-300 hover:text-warm-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-40"
+				disabled={isRefreshing}
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+					stroke-width="2"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+					/>
+				</svg>
+			</button>
+			<button
+				type="button"
+				bind:this={addIncidentBtn}
+				onclick={openAdd}
+				class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+			>
+				+ Add Incident
+			</button>
 		</div>
 	{/if}
 
