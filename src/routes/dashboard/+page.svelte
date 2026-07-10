@@ -6,6 +6,7 @@
 		incidentsFromPageData,
 		syncIncidentStoreFromPageData
 	} from '$lib/syncIncidentStore';
+	import CourierTruckIcon from '$lib/components/CourierTruckIcon.svelte';
 	import { theme } from '$lib/theme.svelte';
 	import type { Chart as ChartJS, ChartOptions } from 'chart.js';
 	import { Chart, registerables } from 'chart.js';
@@ -708,8 +709,13 @@
 <div class="flex-1 flex flex-col bg-warm-50 text-warm-900 overflow-hidden">
 	<header class="border-b border-warm-200 bg-white/80 px-6 py-5 backdrop-blur flex-shrink-0">
 		<div class="mx-auto max-w-[1600px]">
-			<h1 class="text-2xl font-bold text-warm-800">Dashboard</h1>
-			<p class="mt-1 text-sm text-warm-500">Overview of incident tracking metrics</p>
+			<div class="flex min-w-0 items-start gap-3">
+				<CourierTruckIcon />
+				<div class="min-w-0">
+					<h1 class="text-2xl font-bold text-warm-800">Dashboard</h1>
+					<p class="mt-1 text-sm text-warm-500">Overview of incident tracking metrics</p>
+				</div>
+			</div>
 		</div>
 	</header>
 
