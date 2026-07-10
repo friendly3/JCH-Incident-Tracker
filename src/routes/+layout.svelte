@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { navigating } from '$app/stores';
 	import favicon from '$lib/assets/favicon.svg';
+	import { APP_BUILT_AT, APP_COMMIT, APP_VERSION_FULL, APP_VERSION_LABEL } from '$lib/appVersion';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { isAuthPath, theme } from '$lib/theme.svelte';
 	import '../app.css';
@@ -188,7 +189,7 @@
 			{/if}
 		</div>
 
-		<!-- User Profile & Logout -->
+		<!-- User Profile, Logout & build version -->
 		{#if data.session?.user}
 			<div class="border-t border-warm-200 p-3 space-y-2">
 				{#if isNavOpen}
@@ -202,6 +203,14 @@
 					>
 						Logout
 					</button>
+					<p
+						class="px-3 pt-1 text-[11px] leading-snug text-warm-400 tabular-nums"
+						title={APP_BUILT_AT ? `${APP_VERSION_FULL} · built ${APP_BUILT_AT}` : APP_VERSION_FULL}
+						aria-label={`Application version ${APP_VERSION_FULL}`}
+					>
+						<span class="font-medium text-warm-500">{APP_VERSION_LABEL}</span>
+						<span class="block truncate">build {APP_COMMIT}</span>
+					</p>
 				{:else}
 					<button
 						type="button"
@@ -211,6 +220,13 @@
 					>
 						Logout
 					</button>
+					<p
+						class="px-0.5 text-center text-[10px] leading-tight text-warm-400 tabular-nums"
+						title={APP_BUILT_AT ? `${APP_VERSION_FULL} · built ${APP_BUILT_AT}` : APP_VERSION_FULL}
+						aria-label={`Application version ${APP_VERSION_FULL}`}
+					>
+						{APP_VERSION_LABEL}
+					</p>
 				{/if}
 			</div>
 		{/if}
