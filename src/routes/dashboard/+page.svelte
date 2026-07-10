@@ -9,6 +9,7 @@
 		syncIncidentStoreFromPageData
 	} from '$lib/syncIncidentStore';
 	import CourierTruckIcon from '$lib/components/CourierTruckIcon.svelte';
+	import NswIncidentMap from '$lib/components/NswIncidentMap.svelte';
 	import { theme } from '$lib/theme.svelte';
 	import type { Chart as ChartJS, ChartOptions, Plugin } from 'chart.js';
 	import { Chart, registerables } from 'chart.js';
@@ -499,7 +500,7 @@
 		return { key: trimmed.toUpperCase(), label: trimmed };
 	}
 
-	function aggregateIncidentsBy(field: 'teamLeader' | 'driver', emptyLabel = 'Unassigned') {
+	function aggregateIncidentsBy(field: 'driver', emptyLabel = 'Unassigned') {
 		const grouped = new Map<string, { label: string; count: number }>();
 
 		incidents.forEach((incident) => {
@@ -972,12 +973,10 @@
 	let canvasElement: HTMLCanvasElement | undefined = $state();
 	let typeOverTimeCanvas: HTMLCanvasElement | undefined = $state();
 	let actionStatusCanvas: HTMLCanvasElement | undefined = $state();
-	let teamLeaderCanvas: HTMLCanvasElement | undefined = $state();
 	let driverCanvas: HTMLCanvasElement | undefined = $state();
 	let chartInstance = $state<ChartJS<'line'> | undefined>();
 	let typeOverTimeChart = $state<ChartJS<'line'> | undefined>();
 	let actionStatusChart = $state<ChartJS<'bar'> | undefined>();
-	let teamLeaderChart = $state<ChartJS<'doughnut'> | undefined>();
 	let driverChart = $state<ChartJS<'doughnut'> | undefined>();
 	let resizeHandler: (() => void) | undefined;
 	let isRetrying = $state(false);
@@ -1152,7 +1151,6 @@
 		return `Incidents by type over time (${timeRangeLabel}) for ${dateKeys.length} days. Types: ${typeNames}${more}.`;
 	});
 
-	const incidentsByTeamLeader = $derived.by(() => aggregateIncidentsBy('teamLeader'));
 	const incidentsByDriver = $derived.by(() => aggregateIncidentsBy('driver'));
 
 	/** Counts by action status (New, Resolved, LIT, …) — sorted high → low. */
@@ -1187,16 +1185,12 @@
 		buildChartAriaLabel('Incidents by Action Status', incidentsByActionStatus)
 	);
 
-	const teamLeaderChartData = $derived.by(() => buildPieChartData(incidentsByTeamLeader));
 	const driverChartData = $derived.by(() => buildPieChartData(incidentsByDriver));
 
-	const hasTeamLeaderData = $derived(incidentsByTeamLeader.length > 0);
 	const hasDriverData = $derived(incidentsByDriver.length > 0);
 
-	const teamLeaderChartAriaLabel = $derived(buildChartAriaLabel('Incidents by Team Leader', incidentsByTeamLeader));
 	const driverChartAriaLabel = $derived(buildChartAriaLabel('Incidents by Driver', incidentsByDriver));
 
-	const teamLeaderChartHeightClass = $derived(getPieChartHeightClass(incidentsByTeamLeader.length));
 	const driverChartHeightClass = $derived(getPieChartHeightClass(incidentsByDriver.length));
 
 	onMount(() => {
@@ -1204,7 +1198,6 @@
 			chartInstance?.resize();
 			typeOverTimeChart?.resize();
 			actionStatusChart?.resize();
-			teamLeaderChart?.resize();
 			driverChart?.resize();
 		};
 		window.addEventListener('resize', resizeHandler);
@@ -1285,29 +1278,6 @@
 
 	$effect(() => {
 		if (incidentStore.isLoading || incidentStore.error || data.loadError) return;
-		const canvas = teamLeaderCanvas;
-		if (!canvas || !hasTeamLeaderData) return;
-
-		const colors = untrack(() => getChartTheme(theme.isDark));
-		const initialData = untrack(() => teamLeaderChartData);
-		const sliceCount = untrack(() => incidentsByTeamLeader.length);
-		const instance = new Chart(canvas, {
-			type: 'doughnut',
-			data: initialData,
-			options: buildPieChartOptions(colors, sliceCount),
-			plugins: [doughnutSliceLabels]
-		});
-		applyPieChartTheme(instance, sliceCount);
-		teamLeaderChart = instance;
-
-		return () => {
-			instance.destroy();
-			teamLeaderChart = undefined;
-		};
-	});
-
-	$effect(() => {
-		if (incidentStore.isLoading || incidentStore.error || data.loadError) return;
 		const canvas = driverCanvas;
 		if (!canvas || !hasDriverData) return;
 
@@ -1357,26 +1327,12 @@
 	});
 
 	$effect(() => {
-		const instance = teamLeaderChart;
-		const dataset = instance?.data.datasets[0];
-		if (!instance || !dataset) return;
-		instance.data.labels = teamLeaderChartData.labels;
-		dataset.data = teamLeaderChartData.datasets[0].data;
-		applyPieChartTheme(instance, incidentsByTeamLeader.length);
-	});
-
-	$effect(() => {
 		const instance = driverChart;
 		const dataset = instance?.data.datasets[0];
 		if (!instance || !dataset) return;
 		instance.data.labels = driverChartData.labels;
 		dataset.data = driverChartData.datasets[0].data;
 		applyPieChartTheme(instance, incidentsByDriver.length);
-	});
-
-	$effect(() => {
-		teamLeaderChartHeightClass;
-		teamLeaderChart?.resize();
 	});
 
 	$effect(() => {
@@ -1394,9 +1350,6 @@
 		}
 		if (actionStatusChart) {
 			applyActionStatusBarTheme(actionStatusChart);
-		}
-		if (teamLeaderChart) {
-			applyPieChartTheme(teamLeaderChart, incidentsByTeamLeader.length);
 		}
 		if (driverChart) {
 			applyPieChartTheme(driverChart, incidentsByDriver.length);
@@ -1448,12 +1401,12 @@
 </svelte:head>
 
 <div class="flex-1 flex flex-col bg-warm-50 text-warm-900 overflow-hidden">
-	<header class="border-b border-warm-200 bg-white/80 px-6 py-5 backdrop-blur flex-shrink-0">
-		<div class="flex w-full min-w-0 items-start gap-3">
+	<header class="border-b border-warm-200 bg-white/80 px-4 py-3 backdrop-blur flex-shrink-0">
+		<div class="flex w-full min-w-0 items-start gap-2">
 			<CourierTruckIcon />
 			<div class="min-w-0">
-				<h1 class="text-2xl font-bold text-warm-800">Dashboard</h1>
-				<p class="mt-1 text-sm text-warm-500">Overview of incident tracking metrics</p>
+				<h1 class="text-xl font-bold text-warm-800">Dashboard</h1>
+				<p class="mt-0.5 text-sm text-warm-500">Overview of incident tracking metrics</p>
 			</div>
 		</div>
 	</header>
@@ -1505,20 +1458,20 @@
 		</div>
 	{:else}
 		<div class="flex-1 overflow-auto">
-			<div class="w-full px-6 py-6">
+			<div class="w-full px-3 py-3 sm:px-4">
 				<!-- Secondary stats (compact — less important than resolution callouts) -->
-				<div class="mb-4 grid grid-cols-3 gap-2">
-					<div class="rounded-md border border-warm-200 bg-white px-3 py-2.5 shadow-sm">
+				<div class="mb-2 grid grid-cols-3 gap-1.5">
+					<div class="rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm">
 						<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">Total Incidents</p>
 						<p class="mt-0.5 text-xl font-semibold tabular-nums text-accent-600">{totalIncidents}</p>
 						<p class="mt-0.5 text-[10px] leading-tight text-warm-400">All records</p>
 					</div>
-					<div class="rounded-md border border-warm-200 bg-white px-3 py-2.5 shadow-sm">
+					<div class="rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm">
 						<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">This Month</p>
 						<p class="mt-0.5 text-xl font-semibold tabular-nums text-warm-800">{incidentsThisMonth}</p>
 						<p class="mt-0.5 text-[10px] leading-tight text-warm-400">Calendar month</p>
 					</div>
-					<div class="rounded-md border border-warm-200 bg-white px-3 py-2.5 shadow-sm">
+					<div class="rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm">
 						<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">This Week</p>
 						<p class="mt-0.5 text-xl font-semibold tabular-nums text-warm-700">{incidentsThisWeek}</p>
 						<p class="mt-0.5 text-[10px] leading-tight text-warm-400">Last 7 days</p>
@@ -1527,38 +1480,38 @@
 
 				<!-- Resolution callouts + action status bar -->
 				<div
-					class="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-12"
+					class="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-12"
 					role="group"
 					aria-label="Incident resolution and action status summary"
 				>
 					<section
-						class="rounded-lg border-2 border-amber-300 bg-amber-50 p-5 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-3"
+						class="rounded-lg border-2 border-amber-300 bg-amber-50 p-3 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-3"
 						aria-labelledby="unresolved-callout-title"
 					>
-						<div class="flex items-start justify-between gap-3">
+						<div class="flex items-start justify-between gap-2">
 							<div>
 								<p
 									id="unresolved-callout-title"
-									class="text-sm font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
+									class="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
 								>
 									Unresolved
 								</p>
-								<p class="mt-2 text-4xl font-bold tabular-nums text-amber-900 dark:text-amber-100">
+								<p class="mt-1 text-3xl font-bold tabular-nums text-amber-900 dark:text-amber-100">
 									{unresolvedIncidents}
 								</p>
-								<p class="mt-2 text-xs leading-snug text-amber-800/90 dark:text-amber-200/90">
+								<p class="mt-1 text-xs leading-snug text-amber-800/90 dark:text-amber-200/90">
 									Not fully closed — action status is not <span class="font-semibold">Resolved</span>,
 									or responded date is missing
 									{#if totalIncidents > 0}
-										<span class="mt-1 block font-medium">{unresolvedPct}% of all incidents</span>
+										<span class="mt-0.5 block font-medium">{unresolvedPct}% of all incidents</span>
 									{/if}
 								</p>
 							</div>
 							<span
-								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100"
+								class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100"
 								aria-hidden="true"
 							>
-								<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 								</svg>
 							</span>
@@ -1566,32 +1519,32 @@
 					</section>
 
 					<section
-						class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-5 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-3"
+						class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-3 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-3"
 						aria-labelledby="resolved-callout-title"
 					>
-						<div class="flex items-start justify-between gap-3">
+						<div class="flex items-start justify-between gap-2">
 							<div>
 								<p
 									id="resolved-callout-title"
-									class="text-sm font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200"
+									class="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200"
 								>
 									Resolved
 								</p>
-								<p class="mt-2 text-4xl font-bold tabular-nums text-emerald-900 dark:text-emerald-100">
+								<p class="mt-1 text-3xl font-bold tabular-nums text-emerald-900 dark:text-emerald-100">
 									{resolvedIncidents}
 								</p>
-								<p class="mt-2 text-xs leading-snug text-emerald-800/90 dark:text-emerald-200/90">
+								<p class="mt-1 text-xs leading-snug text-emerald-800/90 dark:text-emerald-200/90">
 									Action status is <span class="font-semibold">Resolved</span> and a responded date is set
 									{#if totalIncidents > 0}
-										<span class="mt-1 block font-medium">{resolvedPct}% of all incidents</span>
+										<span class="mt-0.5 block font-medium">{resolvedPct}% of all incidents</span>
 									{/if}
 								</p>
 							</div>
 							<span
-								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100"
+								class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100"
 								aria-hidden="true"
 							>
-								<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
 								</svg>
 							</span>
@@ -1599,13 +1552,13 @@
 					</section>
 
 					<section
-						class="rounded-lg border border-warm-200 bg-white p-4 shadow-sm dark:bg-warm-100 lg:col-span-6"
+						class="rounded-lg border border-warm-200 bg-white p-3 shadow-sm dark:bg-warm-100 lg:col-span-6"
 						aria-labelledby="action-status-bar-title"
 						aria-describedby="action-status-bar-summary"
 					>
 						<h2
 							id="action-status-bar-title"
-							class="mb-2 text-sm font-semibold uppercase tracking-wide text-warm-700"
+							class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-warm-700"
 						>
 							Incidents by Action Status
 						</h2>
@@ -1646,20 +1599,20 @@
 				</div>
 
 				<!-- Time-series charts: total volume + type breakdown -->
-				<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+				<div class="grid grid-cols-1 gap-2 lg:grid-cols-2">
 					<section
-						class="rounded-lg border border-warm-200 bg-white p-6 shadow-sm"
+						class="rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="over-time-chart-title"
 					>
-						<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-							<h2 class="text-lg font-semibold text-warm-800" id="over-time-chart-title">
+						<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+							<h2 class="text-base font-semibold text-warm-800" id="over-time-chart-title">
 								Incidents Over Time
 							</h2>
 							<label class="flex items-center gap-2 text-sm text-warm-600">
 								<span class="sr-only">Time period for incidents over time</span>
 								<select
 									bind:value={timeRange}
-									class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-1.5 text-sm text-warm-700 input-focus dark:bg-warm-200"
+									class="rounded-lg border border-warm-200 bg-warm-50 px-2.5 py-1 text-sm text-warm-700 input-focus dark:bg-warm-200"
 									aria-controls="over-time-chart-canvas"
 								>
 									{#each TIME_RANGE_OPTIONS as opt (opt.value)}
@@ -1668,10 +1621,10 @@
 								</select>
 							</label>
 						</div>
-						<p class="mb-3 text-xs text-warm-500">{timeRangeLabel}</p>
+						<p class="mb-1.5 text-xs text-warm-500">{timeRangeLabel}</p>
 						<div
-							class="h-96 w-full overflow-visible"
-							style="position: relative; min-height: 400px;"
+							class="h-80 w-full overflow-visible sm:h-96"
+							style="position: relative; min-height: 320px;"
 						>
 							{#if incidentsByDate.length === 0}
 								<div class="flex h-full items-center justify-center">
@@ -1688,20 +1641,20 @@
 					</section>
 
 					<section
-						class="rounded-lg border border-warm-200 bg-white p-6 shadow-sm"
+						class="rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="type-over-time-chart-title"
 						aria-describedby="type-over-time-chart-summary"
 					>
-						<div class="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-							<h2 class="text-lg font-semibold text-warm-800" id="type-over-time-chart-title">
+						<div class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+							<h2 class="text-base font-semibold text-warm-800" id="type-over-time-chart-title">
 								Incidents by Type Over Time
 							</h2>
 							<p class="text-xs text-warm-500">{timeRangeLabel}</p>
 						</div>
 						<p id="type-over-time-chart-summary" class="sr-only">{typeOverTimeAriaLabel}</p>
 						<div
-							class="h-96 w-full overflow-visible"
-							style="position: relative; min-height: 400px;"
+							class="h-80 w-full overflow-visible sm:h-96"
+							style="position: relative; min-height: 320px;"
 						>
 							{#if !hasTypeOverTimeData}
 								<div class="flex h-full items-center justify-center">
@@ -1738,56 +1691,17 @@
 					</section>
 				</div>
 
-				<!-- Pie Charts -->
-				<div class="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+				<!-- Map + driver chart -->
+				<div class="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2 lg:items-stretch">
+					<div class="min-h-0 min-w-0">
+						<NswIncidentMap {incidents} />
+					</div>
 					<section
-						class="overflow-visible rounded-lg border border-warm-200 bg-white p-6 shadow-sm"
-						aria-labelledby="team-leader-chart-title"
-						aria-describedby="team-leader-chart-summary"
-					>
-						<h2 class="mb-4 text-lg font-semibold text-warm-800" id="team-leader-chart-title">
-							Incidents by Team Leader
-						</h2>
-						<p id="team-leader-chart-summary" class="sr-only">{teamLeaderChartAriaLabel}</p>
-						<div
-							class="{teamLeaderChartHeightClass} w-full overflow-visible"
-							style="position: relative;"
-						>
-							{#if incidentsByTeamLeader.length === 0}
-								<div class="flex h-full items-center justify-center">
-									<p class="text-sm text-warm-500">No incident data available.</p>
-								</div>
-							{/if}
-							<canvas
-								bind:this={teamLeaderCanvas}
-								class={incidentsByTeamLeader.length === 0 ? 'hidden' : 'block h-full w-full'}
-								aria-hidden="true"
-							></canvas>
-							<!-- Accessible data table (visually hidden); card h2 is the only visible title -->
-							<table class="sr-only" aria-labelledby="team-leader-chart-title">
-								<thead>
-									<tr>
-										<th scope="col">Team Leader</th>
-										<th scope="col">Incidents</th>
-									</tr>
-								</thead>
-								<tbody>
-									{#each incidentsByTeamLeader as [label, count] (label)}
-										<tr>
-											<td>{label}</td>
-											<td>{count}</td>
-										</tr>
-									{/each}
-								</tbody>
-							</table>
-						</div>
-					</section>
-					<section
-						class="overflow-visible rounded-lg border border-warm-200 bg-white p-6 shadow-sm"
+						class="overflow-visible rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="driver-chart-title"
 						aria-describedby="driver-chart-summary"
 					>
-						<h2 class="mb-4 text-lg font-semibold text-warm-800" id="driver-chart-title">
+						<h2 class="mb-2 text-base font-semibold text-warm-800" id="driver-chart-title">
 							Incidents by Driver
 						</h2>
 						<p id="driver-chart-summary" class="sr-only">{driverChartAriaLabel}</p>
