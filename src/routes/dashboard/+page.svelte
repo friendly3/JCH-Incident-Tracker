@@ -585,35 +585,25 @@
 
 	/** Share of a doughnut slice (0–1). Small slices get outside labels + leader lines. */
 	const SMALL_SLICE_SHARE = 0.08;
-	/** Distance from outer arc to outside label (must match leader geometry). */
-	const OUTSIDE_LABEL_OFFSET = 14;
+	/**
+	 * Radial distance from outer arc to the *centre* of the outside value+% text block.
+	 * Leaders end at the same point so they don’t fight multi-label offsets.
+	 */
+	const OUTSIDE_LABEL_RADIUS_GAP = 22;
 	/** Canvas layout padding so outside labels/leaders are never clipped by the bitmap edge. */
 	const DOUGHNUT_LAYOUT_PADDING = { top: 52, right: 48, bottom: 44, left: 48 } as const;
 
-	function getDoughnutSliceShare(context: {
-		dataset: { data: unknown[] };
-		dataIndex: number;
-	}): number {
-		const raw = context.dataset.data[context.dataIndex];
-		const value = typeof raw === 'number' ? raw : 0;
-		const total = sumNumericData(context.dataset.data as unknown[]);
+	function getDoughnutSliceShareFromValues(value: number, total: number): number {
 		return total > 0 ? value / total : 0;
 	}
 
-	function isSmallDoughnutSlice(context: {
-		dataset: { data: unknown[] };
-		dataIndex: number;
-	}): boolean {
-		const share = getDoughnutSliceShare(context);
-		return share > 0 && share < SMALL_SLICE_SHARE;
-	}
-
 	/**
-	 * Faint gray polylines from small slice midpoints to their outside data labels.
-	 * Registered per doughnut instance via `plugins: [doughnutOutsideLabelLeaders]`.
+	 * Custom donut labels: value stacked above percentage, same anchor for both.
+	 * Outside (small) slices also get a faint gray leader from the arc to the label block.
+	 * Replaces chartjs-plugin-datalabels for doughnuts (avoids multi-label misalignment).
 	 */
-	const doughnutOutsideLabelLeaders: Plugin<'doughnut'> = {
-		id: 'doughnutOutsideLabelLeaders',
+	const doughnutSliceLabels: Plugin<'doughnut'> = {
+		id: 'doughnutSliceLabels',
 		afterDatasetsDraw(chart) {
 			const dataset = chart.data.datasets[0];
 			const meta = chart.getDatasetMeta(0);
@@ -623,18 +613,21 @@
 			if (total <= 0) return;
 
 			const dark = isDarkMode();
-			// Faint gray — readable on white and dark cards without competing with labels
-			const stroke = dark ? 'rgba(170, 174, 180, 0.55)' : 'rgba(120, 124, 130, 0.5)';
+			const themeColors = getChartTheme(dark);
+			const leaderStroke = dark ? 'rgba(170, 174, 180, 0.55)' : 'rgba(120, 124, 130, 0.5)';
 			const ctx = chart.ctx;
+			const sliceCount = meta.data.length;
+			const fontStack = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
 
 			meta.data.forEach((element, index) => {
 				const raw = dataset.data[index];
 				const value = typeof raw === 'number' ? raw : 0;
 				if (value <= 0) return;
-				const share = value / total;
-				if (share >= SMALL_SLICE_SHARE) return;
 
-				// Arc geometry (Chart.js angles: 0 = east, clockwise positive)
+				const share = getDoughnutSliceShareFromValues(value, total);
+				const small = share > 0 && share < SMALL_SLICE_SHARE;
+				const percentage = Math.round(share * 100);
+
 				const arc = element as unknown as {
 					getProps: (
 						keys: string[],
@@ -642,43 +635,101 @@
 					) => {
 						startAngle: number;
 						endAngle: number;
+						innerRadius: number;
 						outerRadius: number;
 						x: number;
 						y: number;
 					};
 				};
 				const props = arc.getProps(
-					['startAngle', 'endAngle', 'outerRadius', 'x', 'y'],
+					['startAngle', 'endAngle', 'innerRadius', 'outerRadius', 'x', 'y'],
 					true
 				);
 				const mid = (props.startAngle + props.endAngle) / 2;
 				const cos = Math.cos(mid);
 				const sin = Math.sin(mid);
 
-				const x0 = props.x + cos * props.outerRadius;
-				const y0 = props.y + sin * props.outerRadius;
-				const rElbow = props.outerRadius + 6;
-				const rEnd = props.outerRadius + OUTSIDE_LABEL_OFFSET - 2;
-				const x1 = props.x + cos * rElbow;
-				const y1 = props.y + sin * rElbow;
-				const x2 = props.x + cos * rEnd;
-				const y2 = props.y + sin * rEnd;
+				// Label block centre: mid-ring for large slices, outside for small
+				const rLabel = small
+					? props.outerRadius + OUTSIDE_LABEL_RADIUS_GAP
+					: (props.innerRadius + props.outerRadius) / 2;
+				const x = props.x + cos * rLabel;
+				const y = props.y + sin * rLabel;
 
+				const base = small ? 10 : sliceCount > 8 ? 11 : 12;
+				const valueSize = base + 2;
+				const pctSize = base;
+				const valueText = String(value);
+				const pctText = `(${percentage}%)`;
+				const lineGap = 3;
+				const valueH = valueSize * 1.2;
+				const pctH = pctSize * 1.2;
+				const blockH = valueH + lineGap + pctH;
+				const valueY = y - blockH / 2 + valueH / 2;
+				const pctY = y + blockH / 2 - pctH / 2;
+
+				// Fill: outside uses legend colour; inside contrasts with slice
+				let fill: string;
+				if (small) {
+					fill = themeColors.legend;
+				} else {
+					const bg = Array.isArray(dataset.backgroundColor)
+						? dataset.backgroundColor[index]
+						: dataset.backgroundColor;
+					fill = contrastOnHex(typeof bg === 'string' ? bg : '#0072B2', dark);
+				}
+				const textStroke =
+					fill === '#f8f8f8' || fill === '#ffffff'
+						? 'rgba(0,0,0,0.55)'
+						: dark
+							? 'rgba(0,0,0,0.75)'
+							: 'rgba(255,255,255,0.9)';
+
+				// Leader for small slices → centre of the value+% block (not a second offset)
+				if (small) {
+					const x0 = props.x + cos * props.outerRadius;
+					const y0 = props.y + sin * props.outerRadius;
+					const rElbow = props.outerRadius + 7;
+					const x1 = props.x + cos * rElbow;
+					const y1 = props.y + sin * rElbow;
+					// End just before the text block so the line doesn’t cut through digits
+					const rEnd = rLabel - blockH / 2 - 2;
+					const x2 = props.x + cos * Math.max(rElbow, rEnd);
+					const y2 = props.y + sin * Math.max(rElbow, rEnd);
+
+					ctx.save();
+					ctx.strokeStyle = leaderStroke;
+					ctx.fillStyle = leaderStroke;
+					ctx.lineWidth = 1;
+					ctx.lineCap = 'round';
+					ctx.lineJoin = 'round';
+					ctx.beginPath();
+					ctx.moveTo(x0, y0);
+					ctx.lineTo(x1, y1);
+					ctx.lineTo(x2, y2);
+					ctx.stroke();
+					ctx.beginPath();
+					ctx.arc(x2, y2, 2, 0, Math.PI * 2);
+					ctx.fill();
+					ctx.restore();
+				}
+
+				// Value above percentage — single centre (x,y), no multi-label offset fights
 				ctx.save();
-				ctx.strokeStyle = stroke;
-				ctx.fillStyle = stroke;
-				ctx.lineWidth = 1;
-				ctx.lineCap = 'round';
+				ctx.textAlign = 'center';
+				ctx.textBaseline = 'middle';
 				ctx.lineJoin = 'round';
-				ctx.beginPath();
-				ctx.moveTo(x0, y0);
-				ctx.lineTo(x1, y1);
-				ctx.lineTo(x2, y2);
-				ctx.stroke();
-				// Small tick at the label end so the slice↔label link is obvious
-				ctx.beginPath();
-				ctx.arc(x2, y2, 2, 0, Math.PI * 2);
-				ctx.fill();
+				ctx.lineWidth = 3;
+				ctx.strokeStyle = textStroke;
+				ctx.fillStyle = fill;
+
+				ctx.font = `bold ${valueSize}px ${fontStack}`;
+				ctx.strokeText(valueText, x, valueY);
+				ctx.fillText(valueText, x, valueY);
+
+				ctx.font = `bold ${pctSize}px ${fontStack}`;
+				ctx.strokeText(pctText, x, pctY);
+				ctx.fillText(pctText, x, pctY);
 				ctx.restore();
 			});
 		}
@@ -733,122 +784,9 @@
 						}
 					}
 				},
-				// Always-visible count + %; outside the ring when the slice is small.
-				// Multi-label stack: value ABOVE percentage (separate align, not same centre).
+				// Labels drawn by doughnutSliceLabels plugin (aligned value above %)
 				datalabels: {
-					display: (context) => {
-						const raw = context.dataset.data[context.dataIndex];
-						const value = typeof raw === 'number' ? raw : 0;
-						return value > 0;
-					},
-					// Shared radial anchor; each label then stacks top/bottom
-					anchor: (context) => (isSmallDoughnutSlice(context) ? 'end' : 'center'),
-					textAlign: 'center',
-					clamp: false,
-					clip: false,
-					labels: {
-						// Count sits above the percentage
-						value: {
-							// 'top' = above the anchor point on screen
-							align: 'top',
-							// Small slices: push the pair outside the arc first
-							offset: (context) =>
-								isSmallDoughnutSlice(context) ? OUTSIDE_LABEL_OFFSET : 2,
-							formatter: (value) => {
-								const num = typeof value === 'number' ? value : 0;
-								return String(num);
-							},
-							font: (context) => {
-								const n = context.dataset.data?.length ?? 0;
-								const small = isSmallDoughnutSlice(context);
-								// Base was 10 / 11 / 12 — value is two increments larger
-								const base = small ? 10 : n > 8 ? 11 : 12;
-								return {
-									size: base + 2,
-									weight: 'bold' as const
-								};
-							},
-							color: (context) => {
-								if (isSmallDoughnutSlice(context)) return colors.legend;
-								const bg = Array.isArray(context.dataset.backgroundColor)
-									? context.dataset.backgroundColor[context.dataIndex]
-									: context.dataset.backgroundColor;
-								return contrastOnHex(
-									typeof bg === 'string' ? bg : '#0072B2',
-									isDarkMode()
-								);
-							},
-							textStrokeColor: (context) => {
-								if (isSmallDoughnutSlice(context)) {
-									return isDarkMode()
-										? 'rgba(0,0,0,0.75)'
-										: 'rgba(255,255,255,0.92)';
-								}
-								const bg = Array.isArray(context.dataset.backgroundColor)
-									? context.dataset.backgroundColor[context.dataIndex]
-									: context.dataset.backgroundColor;
-								const fg = contrastOnHex(
-									typeof bg === 'string' ? bg : '#0072B2',
-									isDarkMode()
-								);
-								return fg === '#f8f8f8'
-									? 'rgba(0,0,0,0.55)'
-									: 'rgba(255,255,255,0.75)';
-							},
-							textStrokeWidth: 3
-						},
-						// Percentage sits below the value
-						percentage: {
-							align: 'bottom',
-							offset: (context) =>
-								isSmallDoughnutSlice(context) ? OUTSIDE_LABEL_OFFSET : 2,
-							formatter: (value, context) => {
-								const num = typeof value === 'number' ? value : 0;
-								const total = sumNumericData(context.dataset.data as unknown[]);
-								const percentage =
-									total > 0 ? Math.round((num / total) * 100) : 0;
-								return `(${percentage}%)`;
-							},
-							font: (context) => {
-								const n = context.dataset.data?.length ?? 0;
-								const small = isSmallDoughnutSlice(context);
-								// Keep percentage at the original base size
-								const base = small ? 10 : n > 8 ? 11 : 12;
-								return {
-									size: base,
-									weight: 'bold' as const
-								};
-							},
-							color: (context) => {
-								if (isSmallDoughnutSlice(context)) return colors.legend;
-								const bg = Array.isArray(context.dataset.backgroundColor)
-									? context.dataset.backgroundColor[context.dataIndex]
-									: context.dataset.backgroundColor;
-								return contrastOnHex(
-									typeof bg === 'string' ? bg : '#0072B2',
-									isDarkMode()
-								);
-							},
-							textStrokeColor: (context) => {
-								if (isSmallDoughnutSlice(context)) {
-									return isDarkMode()
-										? 'rgba(0,0,0,0.75)'
-										: 'rgba(255,255,255,0.92)';
-								}
-								const bg = Array.isArray(context.dataset.backgroundColor)
-									? context.dataset.backgroundColor[context.dataIndex]
-									: context.dataset.backgroundColor;
-								const fg = contrastOnHex(
-									typeof bg === 'string' ? bg : '#0072B2',
-									isDarkMode()
-								);
-								return fg === '#f8f8f8'
-									? 'rgba(0,0,0,0.55)'
-									: 'rgba(255,255,255,0.75)';
-							},
-							textStrokeWidth: 3
-						}
-					}
+					display: false
 				}
 			}
 		};
@@ -883,16 +821,13 @@
 			chart.options.plugins.tooltip.titleColor = colors.tooltipTitle;
 			chart.options.plugins.tooltip.bodyColor = colors.tooltipTitle;
 		}
-		// Refresh datalabel colours that close over theme tokens
-		if (chart.options?.plugins?.datalabels) {
-			const rebuilt = buildPieChartOptions(colors, sliceCount).plugins?.datalabels;
-			if (rebuilt) {
-				Object.assign(chart.options.plugins.datalabels, rebuilt);
-			}
-		}
 		// Ensure Chart.js never draws a second title under the card heading
 		if (chart.options?.plugins) {
 			chart.options.plugins.title = { display: false };
+			// Labels are custom-drawn (doughnutSliceLabels), not chartjs-plugin-datalabels
+			if (chart.options.plugins.datalabels) {
+				chart.options.plugins.datalabels.display = false;
+			}
 		}
 		// Keep donut hole + padding consistent (padding is what prevents label clipping)
 		if (chart.options) {
@@ -1360,7 +1295,7 @@
 			type: 'doughnut',
 			data: initialData,
 			options: buildPieChartOptions(colors, sliceCount),
-			plugins: [doughnutOutsideLabelLeaders]
+			plugins: [doughnutSliceLabels]
 		});
 		applyPieChartTheme(instance, sliceCount);
 		teamLeaderChart = instance;
@@ -1383,7 +1318,7 @@
 			type: 'doughnut',
 			data: initialData,
 			options: buildPieChartOptions(colors, sliceCount),
-			plugins: [doughnutOutsideLabelLeaders]
+			plugins: [doughnutSliceLabels]
 		});
 		applyPieChartTheme(instance, sliceCount);
 		driverChart = instance;
