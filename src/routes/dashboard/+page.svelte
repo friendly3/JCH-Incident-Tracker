@@ -957,6 +957,116 @@
 		chart.update('none');
 	}
 
+	/** Horizontal bar options for Incidents by Driver (same layout as action status). */
+	function buildDriverBarOptions(
+		colors: ReturnType<typeof getChartTheme>
+	): ChartOptions<'bar'> {
+		return {
+			responsive: true,
+			maintainAspectRatio: false,
+			indexAxis: 'y',
+			layout: {
+				padding: { top: 2, right: 28, left: 2, bottom: 2 }
+			},
+			plugins: {
+				legend: { display: false },
+				title: { display: false },
+				tooltip: {
+					backgroundColor: colors.tooltipBg,
+					titleColor: colors.tooltipTitle,
+					bodyColor: colors.tooltipTitle,
+					titleFont: { size: 12, weight: 'bold' },
+					bodyFont: { size: 11 },
+					padding: 8,
+					cornerRadius: 8,
+					displayColors: true,
+					callbacks: {
+						label: (context) => {
+							const value = context.parsed.x ?? 0;
+							return `${value} ${value === 1 ? 'incident' : 'incidents'}`;
+						}
+					}
+				},
+				datalabels: {
+					anchor: 'end',
+					align: 'right',
+					offset: 3,
+					clamp: false,
+					clip: false,
+					display: (context) => {
+						const raw = context.dataset.data[context.dataIndex];
+						return typeof raw === 'number' && raw > 0;
+					},
+					formatter: (value: unknown) =>
+						typeof value === 'number' && Number.isFinite(value) ? String(value) : '',
+					color: colors.legend,
+					font: { size: 10, weight: 'bold' },
+					textStrokeColor: isDarkMode() ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.9)',
+					textStrokeWidth: 2
+				}
+			},
+			scales: {
+				x: {
+					beginAtZero: true,
+					grace: '10%',
+					ticks: {
+						color: colors.ticks,
+						stepSize: 1,
+						precision: 0,
+						font: { size: 10, weight: 500 }
+					},
+					grid: { color: colors.grid }
+				},
+				y: {
+					ticks: {
+						color: colors.ticks,
+						font: { size: 10, weight: 600 },
+						autoSkip: false
+					},
+					grid: { display: false }
+				}
+			}
+		};
+	}
+
+	function applyDriverBarTheme(chart: ChartJS<'bar'>) {
+		const colors = getChartTheme(theme.isDark);
+		const isDark = theme.isDark;
+		const dataset = chart.data.datasets[0];
+		if (!dataset) return;
+
+		const labels = (chart.data.labels ?? []).map((l) => String(l));
+		const solid = labels.map((label, index) => getChartCategoryColor(label, index, isDark));
+		dataset.backgroundColor = solid.map((c) => withAlpha(c, 0.75));
+		dataset.borderColor = solid;
+		dataset.borderWidth = 1.5;
+		dataset.borderRadius = 3;
+		dataset.barPercentage = 0.8;
+		dataset.categoryPercentage = 0.85;
+
+		if (chart.options?.plugins?.datalabels) {
+			chart.options.plugins.datalabels.color = colors.legend;
+			chart.options.plugins.datalabels.textStrokeColor = isDark
+				? 'rgba(0,0,0,0.75)'
+				: 'rgba(255,255,255,0.9)';
+		}
+		if (chart.options?.plugins?.tooltip) {
+			chart.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
+			chart.options.plugins.tooltip.titleColor = colors.tooltipTitle;
+			chart.options.plugins.tooltip.bodyColor = colors.tooltipTitle;
+		}
+		if (chart.options?.scales?.x?.ticks) {
+			chart.options.scales.x.ticks.color = colors.ticks;
+		}
+		if (chart.options?.scales?.x?.grid) {
+			chart.options.scales.x.grid.color = colors.grid;
+		}
+		if (chart.options?.scales?.y?.ticks) {
+			chart.options.scales.y.ticks.color = colors.ticks;
+		}
+		chart.update('none');
+	}
+
 	let { data } = $props();
 
 	const incidents = $derived(incidentsFromPageData(incidentStore.list, data.incidents));
@@ -968,7 +1078,7 @@
 	let chartInstance = $state<ChartJS<'line'> | undefined>();
 	let typeOverTimeChart = $state<ChartJS<'line'> | undefined>();
 	let actionStatusChart = $state<ChartJS<'bar'> | undefined>();
-	let driverChart = $state<ChartJS<'doughnut'> | undefined>();
+	let driverChart = $state<ChartJS<'bar'> | undefined>();
 	let resizeHandler: (() => void) | undefined;
 	let isRetrying = $state(false);
 	let retryError = $state<string | null>(null);
@@ -1176,7 +1286,16 @@
 		buildChartAriaLabel('Incidents by Action Status', incidentsByActionStatus)
 	);
 
-	const driverChartData = $derived.by(() => buildPieChartData(incidentsByDriver));
+	const driverBarData = $derived.by(() => ({
+		labels: incidentsByDriver.map(([label]) => label),
+		datasets: [
+			{
+				label: 'Incidents',
+				data: incidentsByDriver.map(([, count]) => count),
+				borderWidth: 1.5
+			}
+		]
+	}));
 
 	const hasDriverData = $derived(incidentsByDriver.length > 0);
 
@@ -1271,15 +1390,13 @@
 		if (!canvas || !hasDriverData) return;
 
 		const colors = untrack(() => getChartTheme(theme.isDark));
-		const initialData = untrack(() => driverChartData);
-		const sliceCount = untrack(() => incidentsByDriver.length);
+		const initialData = untrack(() => driverBarData);
 		const instance = new Chart(canvas, {
-			type: 'doughnut',
+			type: 'bar',
 			data: initialData,
-			options: buildPieChartOptions(colors, sliceCount),
-			plugins: [doughnutSliceLabels]
+			options: buildDriverBarOptions(colors)
 		});
-		applyPieChartTheme(instance, sliceCount);
+		applyDriverBarTheme(instance);
 		driverChart = instance;
 
 		return () => {
@@ -1319,9 +1436,9 @@
 		const instance = driverChart;
 		const dataset = instance?.data.datasets[0];
 		if (!instance || !dataset) return;
-		instance.data.labels = driverChartData.labels;
-		dataset.data = driverChartData.datasets[0].data;
-		applyPieChartTheme(instance, incidentsByDriver.length);
+		instance.data.labels = driverBarData.labels;
+		dataset.data = driverBarData.datasets[0].data;
+		applyDriverBarTheme(instance);
 	});
 
 	$effect(() => {
@@ -1336,7 +1453,7 @@
 			applyActionStatusBarTheme(actionStatusChart);
 		}
 		if (driverChart) {
-			applyPieChartTheme(driverChart, incidentsByDriver.length);
+			applyDriverBarTheme(driverChart);
 		}
 	});
 
