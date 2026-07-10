@@ -1610,7 +1610,7 @@
 						<p class="mb-1.5 text-xs text-warm-500">{timeRangeLabel}</p>
 						<div
 							class="min-h-0 w-full flex-1 overflow-visible"
-							style="position: relative; height: 16.5rem; min-height: 16.5rem;"
+							style="position: relative; height: 12.375rem; min-height: 12.375rem;"
 						>
 							{#if incidentsByDate.length === 0}
 								<div class="flex h-full items-center justify-center">
@@ -1640,7 +1640,7 @@
 						<p id="type-over-time-chart-summary" class="sr-only">{typeOverTimeAriaLabel}</p>
 						<div
 							class="min-h-0 w-full flex-1 overflow-visible"
-							style="position: relative; height: 16.5rem; min-height: 16.5rem;"
+							style="position: relative; height: 12.375rem; min-height: 12.375rem;"
 						>
 							{#if !hasTypeOverTimeData}
 								<div class="flex h-full items-center justify-center">
@@ -1687,7 +1687,7 @@
 						<p id="driver-chart-summary" class="sr-only">{driverChartAriaLabel}</p>
 						<div
 							class="min-h-0 w-full flex-1 overflow-visible"
-							style="position: relative; height: 16.5rem; min-height: 16.5rem;"
+							style="position: relative; height: 12.375rem; min-height: 12.375rem;"
 						>
 							{#if incidentsByDriver.length === 0}
 								<div class="flex h-full items-center justify-center">

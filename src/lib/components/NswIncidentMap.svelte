@@ -5,6 +5,7 @@
 		SYDNEY_CENTER,
 		SYDNEY_DEFAULT_ZOOM,
 		geocodeNswLocation,
+		spreadCoincidentPoints,
 		type GeoPoint
 	} from '$lib/geocodeNsw';
 	import {
@@ -398,31 +399,60 @@
 
 		statusText = `Geocoding ${locs.length} location${locs.length === 1 ? '' : 's'}…`;
 
+		type GeocodedPlace = {
+			key: string;
+			lat: number;
+			lng: number;
+			loc: LocationAggregate;
+			point: GeoPoint;
+		};
+
+		const geocoded: GeocodedPlace[] = [];
+
 		for (let i = 0; i < locs.length; i++) {
 			if (cancelled || gen !== plotGeneration) return;
 			const loc = locs[i];
 			statusText = `Geocoding ${i + 1} of ${locs.length}…`;
 
-			const point: GeoPoint | null = await geocodeNswLocation(loc.query, loc.suburb);
+			const point: GeoPoint | null = await geocodeNswLocation(loc.query, loc.suburb, {
+				street: loc.street
+			});
 			if (cancelled || gen !== plotGeneration) return;
 
 			if (!point) {
 				failedPlaceCount += 1;
 				geocodeFailedIncidentCount += loc.count;
-				await sleep(30);
+				await sleep(20);
 				continue;
 			}
 
+			geocoded.push({
+				key: loc.key,
+				lat: point.lat,
+				lng: point.lng,
+				loc,
+				point
+			});
+			await sleep(20);
+		}
+
+		if (cancelled || gen !== plotGeneration) return;
+
+		// Separate pins that share the same coordinates (common when many streets
+		// fall back to one suburb centre) so every place shows its own indicator.
+		const spread = spreadCoincidentPoints(geocoded);
+
+		for (const item of spread) {
+			const { loc, point } = item;
 			mappedPlaceCount += 1;
 			mappedIncidentCount += loc.count;
 
-			// Dot size scales lightly with count (core size in px; ring animates beyond)
 			const corePx = Math.min(16, 8 + Math.log2(loc.count + 1) * 2.5);
 			const precisionNote =
 				point.precision === 'street'
 					? 'Street-level'
 					: point.precision === 'suburb'
-						? 'Suburb centre (approx.)'
+						? 'Suburb area (spread for visibility)'
 						: 'Region';
 
 			const countLabel =
@@ -435,8 +465,8 @@
 
 			const entry: MapMarkerEntry = {
 				marker: null,
-				lat: point.lat,
-				lng: point.lng,
+				lat: item.lat,
+				lng: item.lng,
 				count: loc.count,
 				corePx,
 				nameLine,
@@ -446,15 +476,16 @@
 				sideOffset: 0
 			};
 
-			const marker = L.marker([point.lat, point.lng], {
+			const marker = L.marker([item.lat, item.lng], {
 				icon: buildMarkerIcon(entry, L),
 				keyboard: true,
 				riseOnHover: true,
-				title: placeLabel
+				title: placeLabel,
+				// Keep marker icons above labels of other markers when dense
+				zIndexOffset: Math.round(loc.count * 10)
 			});
 			entry.marker = marker;
 
-			// Hover: total incidents for this location
 			marker.bindTooltip(
 				`<div class="incident-map-tooltip-inner">
 					<span class="incident-map-tooltip-count">${escapeHtml(countLabel)}</span>
@@ -471,7 +502,6 @@
 				}
 			);
 
-			// Click: fuller detail
 			marker.bindPopup(
 				`<div style="min-width:12rem;font:12px/1.4 system-ui,sans-serif">
 					<strong>${escapeHtml(loc.street || loc.suburb)}</strong><br/>
@@ -483,25 +513,29 @@
 
 			markersLayer.addLayer(marker);
 			placedMarkers.push(entry);
-
-			// Nominatim: ~1 req/s when uncached — geocodeNswLocation caches aggressively
-			await sleep(80);
 		}
 
 		if (cancelled || gen !== plotGeneration) return;
 
-		// Keep default Sydney view after plotting (do not jump away)
-		applySydneyView(false);
-		statusText =
-			mappedPlaceCount > 0
-				? `Showing ${mappedPlaceCount} place${mappedPlaceCount === 1 ? '' : 's'} (${mappedIncidentCount} incident${mappedIncidentCount === 1 ? '' : 's'}) · centred on Sydney. Drag to pan · scroll or +/− to zoom.`
-				: 'Parsed locations but none could be geocoded yet.';
+		// Fit all indicators into view so nothing is stranded off-screen
+		if (placedMarkers.length > 0) {
+			const group = L.featureGroup(placedMarkers.map((p) => p.marker));
+			map.fitBounds(group.getBounds().pad(0.22), {
+				maxZoom: 14,
+				animate: false,
+				padding: [28, 28]
+			});
+			statusText = `Showing all ${mappedPlaceCount} place${mappedPlaceCount === 1 ? '' : 's'} (${mappedIncidentCount} incident${mappedIncidentCount === 1 ? '' : 's'}). Co-located streets are fanned out. Drag / zoom to explore.`;
+		} else {
+			applySydneyView(false);
+			statusText = 'Parsed locations but none could be geocoded yet.';
+		}
 
 		geocoding = false;
 		map.invalidateSize({ animate: false });
-		// Defer so container points match final view
 		requestAnimationFrame(() => resolveLabelLayout());
 		setTimeout(() => resolveLabelLayout(), 120);
+		setTimeout(() => resolveLabelLayout(), 400);
 	}
 
 	function sleep(ms: number) {
