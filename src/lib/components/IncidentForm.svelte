@@ -9,7 +9,12 @@
 	} from '$lib/formatDate';
 	import DatePickerPopover from '$lib/components/DatePickerPopover.svelte';
 	import TimePickerPopover from '$lib/components/TimePickerPopover.svelte';
-	import { parseEmailSubjectLocation } from '$lib/parseEmailSubjectLocation';
+	import {
+		matchDriverUsername,
+		matchIncidentTypeName,
+		parseEmailSubject,
+		parseEmailSubjectLocation
+	} from '$lib/parseEmailSubjectLocation';
 
 	interface Props {
 		incident?: Incident;
@@ -456,8 +461,15 @@
 	const footerBtnFocus =
 		'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500';
 
-	/** Subject-parsed location (hint only — manual fields override for the map). */
+	/** Full subject parse (ref / type / driver / location). */
+	const subjectParsed = $derived(parseEmailSubject(form.emailSubject));
 	const subjectParsedLocation = $derived(parseEmailSubjectLocation(form.emailSubject));
+	const subjectMatchedType = $derived(
+		matchIncidentTypeName(subjectParsed?.typeName, incidentTypes)
+	);
+	const subjectMatchedDriver = $derived(
+		matchDriverUsername(subjectParsed?.driver, drivers)
+	);
 	const hasManualLocation = $derived(
 		!!(form.locationSuburb?.trim() || form.locationStreet?.trim())
 	);
@@ -470,19 +482,92 @@
 				: `Map will use suburb centre: ${suburb}, NSW`;
 		}
 		if (subjectParsedLocation) {
-			return `Map will use subject: ${subjectParsedLocation.street}, ${subjectParsedLocation.suburb}, NSW`;
+			const st = subjectParsedLocation.street
+				? `${subjectParsedLocation.street}, `
+				: '';
+			return `Map will use subject: ${st}${subjectParsedLocation.suburb}, NSW`;
 		}
 		return 'No map location yet — enter suburb (and optional street) below, or use a matching email subject.';
 	});
 
+	const subjectDetectSummary = $derived.by(() => {
+		const p = subjectParsed;
+		if (!p) return null;
+		const bits: string[] = [];
+		if (p.referenceNo) bits.push(`Ref ${p.referenceNo}`);
+		if (p.typeName) {
+			bits.push(
+				subjectMatchedType
+					? `Type “${subjectMatchedType.name}”`
+					: `Type “${p.typeName}” (no exact match)`
+			);
+		}
+		if (p.driver) {
+			bits.push(
+				subjectMatchedDriver
+					? `Driver ${subjectMatchedDriver.username}`
+					: `Driver ${p.driver} (not in list)`
+			);
+		}
+		if (p.suburb) {
+			bits.push(
+				p.street ? `${p.street}, ${p.suburb}` : p.suburb
+			);
+		}
+		return bits.length ? bits.join(' · ') : null;
+	});
+
 	function applySubjectLocation() {
-		const parsed = parseEmailSubjectLocation(form.emailSubject);
-		if (!parsed) return;
-		form.locationStreet = parsed.street;
+		const parsed = parseEmailSubject(form.emailSubject);
+		if (!parsed?.suburb) return;
+		form.locationStreet = parsed.street ?? '';
 		form.locationSuburb = parsed.suburb;
 		if (submitErrorField === 'location') {
 			submitError = null;
 			submitErrorField = null;
+		}
+	}
+
+	function applySubjectReference() {
+		const ref = subjectParsed?.referenceNo;
+		if (!ref) return;
+		form.referenceNo = ref;
+	}
+
+	function applySubjectType() {
+		if (!subjectMatchedType) return;
+		form.typeId = subjectMatchedType.id;
+		if (submitErrorField === 'type') {
+			submitError = null;
+			submitErrorField = null;
+		}
+	}
+
+	function applySubjectDriver() {
+		if (!subjectMatchedDriver) return;
+		form.driverId = subjectMatchedDriver.id;
+	}
+
+	/** Apply every field we can confidently map from the subject. */
+	function applyAllFromSubject() {
+		const p = subjectParsed;
+		if (!p) return;
+		if (p.referenceNo) form.referenceNo = p.referenceNo;
+		if (subjectMatchedType) {
+			form.typeId = subjectMatchedType.id;
+			if (submitErrorField === 'type') {
+				submitError = null;
+				submitErrorField = null;
+			}
+		}
+		if (subjectMatchedDriver) form.driverId = subjectMatchedDriver.id;
+		if (p.suburb) {
+			form.locationStreet = p.street ?? '';
+			form.locationSuburb = p.suburb;
+			if (submitErrorField === 'location') {
+				submitError = null;
+				submitErrorField = null;
+			}
 		}
 	}
 
@@ -621,9 +706,77 @@
 							bind:value={form.emailSubject}
 							readonly={!emailFieldsEditable}
 							class={emailFieldsEditable ? inputClass : readonlyEmailClass}
+							placeholder="SOD Disputed Delivery: 72956318 N22226 Menai DRIVER - Street"
 						/>
 					</div>
 				</div>
+
+				{#if subjectDetectSummary}
+					<div
+						class="mb-4 mt-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs text-sky-950 dark:border-sky-700/50 dark:bg-sky-950/40 dark:text-sky-100"
+						role="status"
+					>
+						<p class="font-semibold text-sky-900 dark:text-sky-100">Detected from email subject</p>
+						<p class="mt-1 leading-snug opacity-95">{subjectDetectSummary}</p>
+						<div class="mt-2 flex flex-wrap gap-1.5">
+							<button
+								type="button"
+								class="rounded-md border border-sky-300 bg-white px-2.5 py-1 text-xs font-medium text-sky-900 hover:bg-sky-100 {footerBtnFocus} dark:border-sky-600 dark:bg-sky-900 dark:text-sky-50"
+								onclick={applyAllFromSubject}
+							>
+								Apply all matched fields
+							</button>
+							{#if subjectParsed?.referenceNo}
+								<button
+									type="button"
+									class="rounded-md border border-sky-200 bg-white/80 px-2 py-1 text-xs text-sky-900 hover:bg-sky-100 {footerBtnFocus} dark:border-sky-700 dark:bg-sky-900/80 dark:text-sky-100"
+									onclick={applySubjectReference}
+								>
+									Ref
+								</button>
+							{/if}
+							{#if subjectMatchedType}
+								<button
+									type="button"
+									class="rounded-md border border-sky-200 bg-white/80 px-2 py-1 text-xs text-sky-900 hover:bg-sky-100 {footerBtnFocus} dark:border-sky-700 dark:bg-sky-900/80 dark:text-sky-100"
+									onclick={applySubjectType}
+								>
+									Type
+								</button>
+							{/if}
+							{#if subjectMatchedDriver}
+								<button
+									type="button"
+									class="rounded-md border border-sky-200 bg-white/80 px-2 py-1 text-xs text-sky-900 hover:bg-sky-100 {footerBtnFocus} dark:border-sky-700 dark:bg-sky-900/80 dark:text-sky-100"
+									onclick={applySubjectDriver}
+								>
+									Driver
+								</button>
+							{/if}
+							{#if subjectParsed?.suburb}
+								<button
+									type="button"
+									class="rounded-md border border-sky-200 bg-white/80 px-2 py-1 text-xs text-sky-900 hover:bg-sky-100 {footerBtnFocus} dark:border-sky-700 dark:bg-sky-900/80 dark:text-sky-100"
+									onclick={applySubjectLocation}
+								>
+									Location
+								</button>
+							{/if}
+						</div>
+						{#if subjectParsed?.typeName && !subjectMatchedType}
+							<p class="mt-1.5 text-[11px] text-amber-800 dark:text-amber-200">
+								Type “{subjectParsed.typeName}” is not in the type list — pick the closest
+								manually or add it under Admin.
+							</p>
+						{/if}
+						{#if subjectParsed?.driver && !subjectMatchedDriver}
+							<p class="mt-1 text-[11px] text-amber-800 dark:text-amber-200">
+								Driver “{subjectParsed.driver}” is not in the team list — add them under Team
+								or assign manually.
+							</p>
+						{/if}
+					</div>
+				{/if}
 
 				<div class="mb-2 mt-6" role="group" aria-labelledby="section-location-heading">
 					<h3 id="section-location-heading" class="sn-section-title">Map location (NSW)</h3>
@@ -634,9 +787,11 @@
 						<p class="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-700/50 dark:bg-sky-950/40 dark:text-sky-100">
 							Detected from email subject:
 							<strong>
-								{subjectParsedLocation.street}, {subjectParsedLocation.suburb}
+								{subjectParsedLocation.street
+									? `${subjectParsedLocation.street}, `
+									: ''}{subjectParsedLocation.suburb}
 							</strong>
-							— save as-is for the map, or edit the fields below to correct it.
+							— use <em>Apply</em> above or edit the fields below.
 						</p>
 					{:else if !subjectParsedLocation && !hasManualLocation}
 						<p class="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-100">
