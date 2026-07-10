@@ -97,8 +97,15 @@ function suburbCentroid(suburb: string): GeoPoint | null {
 	};
 }
 
-/** NSW map default view (state overview). */
-export const NSW_CENTER: [number, number] = [-32.8, 147.0];
+/** Default map view: Sydney CBD, NSW, Australia. */
+export const SYDNEY_CENTER: [number, number] = [-33.8688, 151.2093];
+/** Zoom that shows greater Sydney (suburbs still readable). */
+export const SYDNEY_DEFAULT_ZOOM = 11;
+
+/** @deprecated Prefer SYDNEY_CENTER — kept as alias for callers. */
+export const NSW_CENTER: [number, number] = SYDNEY_CENTER;
+
+/** Soft NSW bounding box (pan clamp / fit fallback). */
 export const NSW_BOUNDS: [[number, number], [number, number]] = [
 	[-37.55, 140.95],
 	[-28.1, 153.7]

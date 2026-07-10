@@ -1,14 +1,14 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import type { Incident } from '$lib/data/incidents';
 	import {
-		NSW_BOUNDS,
-		NSW_CENTER,
+		SYDNEY_CENTER,
+		SYDNEY_DEFAULT_ZOOM,
 		geocodeNswLocation,
 		type GeoPoint
 	} from '$lib/geocodeNsw';
 	import {
-		aggregateLocationsFromSubjects,
+		summarizeLocationsFromSubjects,
 		type LocationAggregate
 	} from '$lib/parseEmailSubjectLocation';
 
@@ -20,10 +20,16 @@
 
 	let mapEl = $state<HTMLDivElement | undefined>(undefined);
 	let statusText = $state('Preparing map…');
-	let mappedCount = $state(0);
-	let parsedCount = $state(0);
-	let failedCount = $state(0);
+	/** Distinct places plotted on the map. */
+	let mappedPlaceCount = $state(0);
+	/** Distinct places that parsed but failed geocoding. */
+	let failedPlaceCount = $state(0);
+	/** Incident totals after geocoding finishes. */
+	let mappedIncidentCount = $state(0);
+	let geocodeFailedIncidentCount = $state(0);
+	let geocoding = $state(false);
 	let ready = $state(false);
+	let expanded = $state(false);
 
 	// Leaflet map instance (typed loosely to avoid SSR issues)
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,8 +41,24 @@
 	let cancelled = false;
 	let resizeObserver: ResizeObserver | null = null;
 	let plotGeneration = 0;
+	let previousBodyOverflow = '';
 
-	const locations = $derived(aggregateLocationsFromSubjects(incidents));
+	const summary = $derived(summarizeLocationsFromSubjects(incidents));
+	const locations = $derived(summary.locations);
+
+	/** All incidents that do not appear as a pin (unparseable + geocode failure). */
+	const undeterminedIncidentCount = $derived(
+		summary.unparseableIncidentCount + geocodeFailedIncidentCount
+	);
+
+	function applySydneyView(animate = false) {
+		if (!map) return;
+		if (animate) {
+			map.setView(SYDNEY_CENTER, SYDNEY_DEFAULT_ZOOM, { animate: true });
+		} else {
+			map.setView(SYDNEY_CENTER, SYDNEY_DEFAULT_ZOOM, { animate: false });
+		}
+	}
 
 	async function initMap() {
 		if (!mapEl || typeof window === 'undefined') return;
@@ -50,10 +72,10 @@
 			map = null;
 		}
 
-		// Full interactive map: drag to pan, scroll/buttons to zoom
+		// Full interactive map — default centred on Sydney
 		map = L.map(mapEl, {
-			center: NSW_CENTER,
-			zoom: 6,
+			center: SYDNEY_CENTER,
+			zoom: SYDNEY_DEFAULT_ZOOM,
 			minZoom: 5,
 			maxZoom: 18,
 			zoomControl: true,
@@ -73,14 +95,15 @@
 			worldCopyJump: false
 		});
 
-		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+		// Light basemap + CSS grayscale = black-and-white map style
+		L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
 			attribution:
-				'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-			maxZoom: 18
+				'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+			subdomains: 'abcd',
+			maxZoom: 20
 		}).addTo(map);
 
-		// Zoom +/- already added via zoomControl: true (top-left)
-		map.fitBounds(NSW_BOUNDS, { padding: [16, 16] });
+		applySydneyView(false);
 
 		markersLayer = L.layerGroup().addTo(map);
 
@@ -102,14 +125,53 @@
 	}
 
 	function resetView() {
+		if (!map) return;
+		applySydneyView(true);
+	}
+
+	function fitAllMarkers() {
 		if (!map || !Lref) return;
-		// Prefer fitted markers when present
 		const layers = markersLayer?.getLayers?.() ?? [];
 		if (layers.length > 0) {
 			const group = Lref.featureGroup(layers);
 			map.fitBounds(group.getBounds().pad(0.2), { maxZoom: 14, animate: true });
 		} else {
-			map.fitBounds(NSW_BOUNDS, { padding: [16, 16], animate: true });
+			applySydneyView(true);
+		}
+	}
+
+	async function setExpanded(next: boolean) {
+		expanded = next;
+		await tick();
+		// Allow layout to settle then refresh Leaflet size
+		requestAnimationFrame(() => {
+			map?.invalidateSize({ animate: false });
+			setTimeout(() => map?.invalidateSize({ animate: false }), 80);
+			setTimeout(() => map?.invalidateSize({ animate: false }), 250);
+		});
+
+		if (typeof document !== 'undefined') {
+			if (next) {
+				previousBodyOverflow = document.body.style.overflow;
+				document.body.style.overflow = 'hidden';
+			} else {
+				document.body.style.overflow = previousBodyOverflow;
+			}
+		}
+	}
+
+	function openExpand() {
+		void setExpanded(true);
+	}
+
+	function closeExpand() {
+		void setExpanded(false);
+	}
+
+	function onKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape' && expanded) {
+			e.preventDefault();
+			closeExpand();
 		}
 	}
 
@@ -121,18 +183,23 @@
 		if (!map || !markersLayer) return;
 		const gen = ++plotGeneration;
 		markersLayer.clearLayers();
-		parsedCount = locs.length;
-		mappedCount = 0;
-		failedCount = 0;
+		mappedPlaceCount = 0;
+		failedPlaceCount = 0;
+		mappedIncidentCount = 0;
+		geocodeFailedIncidentCount = 0;
+		geocoding = true;
 
 		if (locs.length === 0) {
-			statusText = 'No parseable locations in email subjects yet.';
-			map.fitBounds(NSW_BOUNDS, { padding: [16, 16] });
+			statusText =
+				summary.totalIncidents === 0
+					? 'No incidents to map yet.'
+					: 'No parseable locations in email subjects yet.';
+			applySydneyView(false);
+			geocoding = false;
 			return;
 		}
 
 		statusText = `Geocoding ${locs.length} location${locs.length === 1 ? '' : 's'}…`;
-		const latLngs: [number, number][] = [];
 
 		for (let i = 0; i < locs.length; i++) {
 			if (cancelled || gen !== plotGeneration) return;
@@ -143,17 +210,17 @@
 			if (cancelled || gen !== plotGeneration) return;
 
 			if (!point) {
-				failedCount += 1;
+				failedPlaceCount += 1;
+				geocodeFailedIncidentCount += loc.count;
 				await sleep(30);
 				continue;
 			}
 
-			mappedCount += 1;
-			latLngs.push([point.lat, point.lng]);
+			mappedPlaceCount += 1;
+			mappedIncidentCount += loc.count;
 
 			// Dot size scales lightly with count (core size in px; ring animates beyond)
 			const corePx = Math.min(16, 8 + Math.log2(loc.count + 1) * 2.5);
-			const iconPx = Math.ceil(corePx + 28); // room for expanding pulse ring
 			const precisionNote =
 				point.precision === 'street'
 					? 'Street-level'
@@ -163,24 +230,41 @@
 
 			const countLabel =
 				loc.count === 1 ? '1 incident' : `${loc.count} incidents`;
+			// Visible on-map label: street + suburb
 			const placeLabel = loc.street
 				? `${loc.street}, ${loc.suburb}`
 				: loc.suburb;
+			const nameLine = loc.street || loc.suburb;
+			const suburbLine = loc.street ? loc.suburb : 'NSW';
+
+			// Wide icon: pulse at left/top, permanent name label to the right
+			const labelW = 148;
+			const labelH = 36;
+			const iconW = Math.ceil(corePx / 2 + 10 + labelW);
+			const iconH = Math.max(Math.ceil(corePx + 20), labelH);
+			const anchorX = Math.ceil(corePx / 2 + 6);
+			const anchorY = Math.ceil(iconH / 2);
 
 			const icon = L.divIcon({
 				className: 'incident-pulse-icon',
-				html: `<span class="incident-pulse-dot" style="--core:${corePx}px" aria-hidden="true"></span>`,
-				iconSize: [iconPx, iconPx],
-				iconAnchor: [iconPx / 2, iconPx / 2],
-				popupAnchor: [0, -corePx / 2],
-				tooltipAnchor: [0, -corePx / 2 - 4]
+				html: `<div class="incident-marker" style="--core:${corePx}px">
+					<span class="incident-pulse-dot" aria-hidden="true"></span>
+					<span class="incident-marker-label">
+						<span class="incident-marker-name">${escapeHtml(nameLine)}</span>
+						<span class="incident-marker-suburb">${escapeHtml(suburbLine)}</span>
+					</span>
+				</div>`,
+				iconSize: [iconW, iconH],
+				iconAnchor: [anchorX, anchorY],
+				popupAnchor: [0, -anchorY + 4],
+				tooltipAnchor: [0, -anchorY + 4]
 			});
 
 			const marker = L.marker([point.lat, point.lng], {
 				icon,
 				keyboard: true,
 				riseOnHover: true,
-				title: '' // use Leaflet tooltip instead of native title
+				title: placeLabel
 			});
 
 			// Hover: total incidents for this location
@@ -196,7 +280,6 @@
 					sticky: false,
 					interactive: false,
 					className: 'incident-map-tooltip',
-					// open on hover (default for tooltips)
 					permanent: false
 				}
 			);
@@ -219,17 +302,14 @@
 
 		if (cancelled || gen !== plotGeneration) return;
 
-		if (latLngs.length > 0) {
-			const bounds = L.latLngBounds(latLngs);
-			map.fitBounds(bounds.pad(0.2), { maxZoom: 14 });
-			statusText = `Showing ${mappedCount} of ${parsedCount} parsed location${parsedCount === 1 ? '' : 's'}${
-				failedCount ? ` (${failedCount} could not be placed)` : ''
-			}. Drag to pan · scroll or use +/− to zoom · hover a pulse for counts.`;
-		} else {
-			map.fitBounds(NSW_BOUNDS, { padding: [16, 16] });
-			statusText = 'Parsed locations but none could be geocoded yet.';
-		}
+		// Keep default Sydney view after plotting (do not jump away)
+		applySydneyView(false);
+		statusText =
+			mappedPlaceCount > 0
+				? `Showing ${mappedPlaceCount} place${mappedPlaceCount === 1 ? '' : 's'} (${mappedIncidentCount} incident${mappedIncidentCount === 1 ? '' : 's'}) · centred on Sydney. Drag to pan · scroll or +/− to zoom.`
+				: 'Parsed locations but none could be geocoded yet.';
 
+		geocoding = false;
 		map.invalidateSize({ animate: false });
 	}
 
@@ -270,6 +350,9 @@
 
 	onDestroy(() => {
 		cancelled = true;
+		if (typeof document !== 'undefined') {
+			document.body.style.overflow = previousBodyOverflow;
+		}
 		resizeObserver?.disconnect();
 		resizeObserver = null;
 		if (map) {
@@ -281,9 +364,27 @@
 	});
 </script>
 
+<svelte:window onkeydown={onKeydown} />
+
+{#if expanded}
+	<!-- Backdrop for expanded modal (75% central takeover) -->
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div
+		class="map-expand-backdrop"
+		onclick={(e) => {
+			if (e.target === e.currentTarget) closeExpand();
+		}}
+		role="presentation"
+	></div>
+{/if}
+
 <section
-	class="flex h-full flex-col overflow-hidden rounded-lg border border-warm-200 bg-white shadow-sm"
+	class="map-chart-shell flex flex-col overflow-hidden rounded-lg border border-warm-200 bg-white shadow-sm {expanded
+		? 'map-chart-shell--expanded'
+		: 'h-full'}"
 	aria-labelledby="nsw-map-title"
+	aria-modal={expanded ? 'true' : undefined}
+	role={expanded ? 'dialog' : undefined}
 >
 	<div class="flex flex-wrap items-start justify-between gap-2 border-b border-warm-200 px-3 py-2.5 sm:px-4">
 		<div class="min-w-0 flex-1">
@@ -291,34 +392,197 @@
 				Incident locations (NSW)
 			</h2>
 			<p class="mt-0.5 text-xs text-warm-500 sm:text-sm">
-				Parsed from email subjects. Hover a pulse for counts; drag to pan; scroll or +/− to zoom.
+				Default view: Sydney. Hover a pulse for counts; drag to pan; scroll or +/− to zoom.
 			</p>
 			<p class="mt-0.5 text-xs text-warm-400" aria-live="polite">{statusText}</p>
 		</div>
-		<button
-			type="button"
-			class="shrink-0 rounded-md border border-warm-200 bg-warm-50 px-2.5 py-1 text-xs font-medium text-warm-700 hover:bg-warm-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
-			onclick={resetView}
-			disabled={!ready}
-		>
-			Reset view
-		</button>
+		<div class="flex shrink-0 flex-wrap items-center gap-1.5">
+			<button
+				type="button"
+				class="rounded-md border border-warm-200 bg-warm-50 px-2.5 py-1 text-xs font-medium text-warm-700 hover:bg-warm-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40 disabled:opacity-50"
+				onclick={resetView}
+				disabled={!ready}
+				title="Centre on Sydney"
+			>
+				Sydney
+			</button>
+			<button
+				type="button"
+				class="rounded-md border border-warm-200 bg-warm-50 px-2.5 py-1 text-xs font-medium text-warm-700 hover:bg-warm-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40 disabled:opacity-50"
+				onclick={fitAllMarkers}
+				disabled={!ready || mappedPlaceCount === 0}
+				title="Fit all mapped locations"
+			>
+				Fit all
+			</button>
+			{#if expanded}
+				<button
+					type="button"
+					class="inline-flex items-center gap-1 rounded-md border border-warm-300 bg-warm-800 px-2.5 py-1 text-xs font-medium text-white hover:bg-warm-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
+					onclick={closeExpand}
+					aria-label="Close expanded map"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+					Close
+				</button>
+			{:else}
+				<button
+					type="button"
+					class="inline-flex items-center gap-1 rounded-md border border-warm-200 bg-white px-2.5 py-1 text-xs font-medium text-warm-800 shadow-sm hover:bg-warm-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
+					onclick={openExpand}
+					disabled={!ready}
+					aria-label="Expand map to large view"
+					title="Expand map"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"
+						/>
+					</svg>
+					Expand
+				</button>
+			{/if}
+		</div>
 	</div>
-	<!-- Leaflet attaches listeners to this container; role=application marks it interactive -->
-	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+
 	<div
-		bind:this={mapEl}
-		class="nsw-incident-map min-h-[20rem] flex-1 w-full bg-warm-100 sm:min-h-[26rem]"
-		role="application"
-		aria-label="Interactive map of New South Wales. Zoom and pan to explore incident locations. Hover markers for incident counts."
-		tabindex="0"
-	></div>
+		class="relative min-h-[20rem] flex-1 sm:min-h-[26rem] {expanded
+			? 'map-chart-body--expanded'
+			: ''}"
+	>
+		<!-- Leaflet attaches listeners to this container; role=application marks it interactive -->
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+		<div
+			bind:this={mapEl}
+			class="nsw-incident-map absolute inset-0 h-full w-full bg-warm-100"
+			role="application"
+			aria-label="Interactive map centred on Sydney, New South Wales. Zoom and pan to explore incident locations. Hover markers for incident counts."
+			tabindex="0"
+		></div>
+
+		<!-- Legend overlay -->
+		<aside
+			class="pointer-events-none absolute bottom-3 right-3 z-[500] max-w-[15.5rem] rounded-md border border-warm-200/90 bg-white/95 px-2.5 py-2 shadow-md backdrop-blur-sm dark:border-warm-300 dark:bg-warm-100/95"
+			aria-label="Map legend"
+		>
+			<p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-warm-500">
+				Legend
+			</p>
+			<ul class="space-y-1.5 text-xs text-warm-700">
+				<li class="flex items-center gap-2">
+					<span class="incident-legend-pulse shrink-0" aria-hidden="true"></span>
+					<span class="min-w-0 leading-snug">
+						<span class="font-medium text-warm-800">Mapped location</span>
+						<span class="mt-0.5 block text-[11px] text-warm-500">
+							{#if geocoding}
+								Placing markers…
+							{:else}
+								{mappedIncidentCount}
+								incident{mappedIncidentCount === 1 ? '' : 's'}
+								· {mappedPlaceCount} place{mappedPlaceCount === 1 ? '' : 's'}
+								· label = street / suburb
+							{/if}
+						</span>
+					</span>
+				</li>
+				<li class="flex items-center gap-2">
+					<span
+						class="incident-legend-unknown shrink-0"
+						aria-hidden="true"
+						title="Location cannot be determined"
+					>
+						?
+					</span>
+					<span class="min-w-0 leading-snug">
+						<span class="font-medium text-warm-800">Location undetermined</span>
+						<span class="mt-0.5 block text-[11px] text-warm-500">
+							{#if geocoding}
+								Calculating…
+							{:else}
+								<span class="font-semibold tabular-nums text-warm-800"
+									>{undeterminedIncidentCount}</span
+								>
+								incident{undeterminedIncidentCount === 1 ? '' : 's'}
+								{#if summary.totalIncidents > 0}
+									<span class="text-warm-400">
+										({Math.round(
+											(undeterminedIncidentCount / summary.totalIncidents) * 100
+										)}%)
+									</span>
+								{/if}
+							{/if}
+						</span>
+					</span>
+				</li>
+			</ul>
+			{#if !geocoding && undeterminedIncidentCount > 0}
+				<p class="mt-1.5 border-t border-warm-100 pt-1.5 text-[10px] leading-snug text-warm-400">
+					{#if summary.unparseableIncidentCount > 0 && geocodeFailedIncidentCount > 0}
+						{summary.unparseableIncidentCount} no subject match · {geocodeFailedIncidentCount}
+						could not be geocoded
+					{:else if summary.unparseableIncidentCount > 0}
+						Subject missing or did not match the location template
+					{:else}
+						Parsed place could not be geocoded
+					{/if}
+				</p>
+			{/if}
+		</aside>
+	</div>
+
 	<div class="border-t border-warm-200 px-3 py-1.5 text-[11px] text-warm-400 sm:px-4">
-		Map data © OpenStreetMap contributors · Locations assumed NSW, Australia
+		Map © OpenStreetMap · CARTO · B&amp;W basemap · Default: Sydney, NSW
 	</div>
 </section>
 
+<!-- Placeholder keeps dashboard grid height while map is expanded -->
+{#if expanded}
+	<div
+		class="pointer-events-none h-full min-h-[20rem] rounded-lg border border-dashed border-warm-200 bg-warm-50/80 sm:min-h-[26rem]"
+		aria-hidden="true"
+	>
+		<div class="flex h-full min-h-[inherit] items-center justify-center p-4 text-center text-xs text-warm-400">
+			Map expanded
+		</div>
+	</div>
+{/if}
+
 <style>
+	.map-expand-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 1100;
+		background: rgba(28, 25, 23, 0.5);
+		backdrop-filter: blur(2px);
+	}
+
+	/*
+	 * Expanded map: fixed panel at 75% of the viewport (central page takeover).
+	 */
+	:global(.map-chart-shell--expanded) {
+		position: fixed !important;
+		top: 50% !important;
+		left: 50% !important;
+		z-index: 1110 !important;
+		width: 75vw !important;
+		height: 75vh !important;
+		max-width: 75% !important;
+		max-height: 75% !important;
+		transform: translate(-50%, -50%);
+		margin: 0 !important;
+		box-shadow:
+			0 25px 50px -12px rgba(0, 0, 0, 0.35),
+			0 0 0 1px rgba(0, 0, 0, 0.06);
+	}
+
+	.map-chart-body--expanded {
+		min-height: 0 !important;
+	}
+
 	/*
 	 * Map shell: ensure Leaflet can receive pointer events and sits under tooltips.
 	 */
@@ -326,9 +590,14 @@
 		font: inherit;
 		z-index: 0;
 		cursor: grab;
-		background: #f3f0eb;
+		background: #e8e8e8;
 		/* Let Leaflet own pan/zoom gestures (incl. touch) */
 		touch-action: none;
+	}
+
+	/* Force monochrome basemap (light tiles → pure B&W) */
+	:global(.nsw-incident-map .leaflet-tile-pane) {
+		filter: grayscale(1) contrast(1.12) brightness(1.04);
 	}
 
 	:global(.nsw-incident-map.leaflet-container:active) {
@@ -339,33 +608,99 @@
 		width: 30px;
 		height: 30px;
 		line-height: 30px;
-		color: #3d3832;
+		color: #1c1917;
+		background: #fff;
 	}
 
 	/*
 	 * Pulsing map markers — electrified.pplx.app style:
-	 * solid core + expanding translucent ring.
+	 * solid core + expanding translucent ring + permanent name label.
 	 */
 	:global(.leaflet-div-icon.incident-pulse-icon) {
 		background: transparent !important;
 		border: none !important;
-		display: flex;
-		align-items: center;
-		justify-content: center;
 		overflow: visible;
-		/* Larger hit target for hover */
 		cursor: pointer;
+	}
+
+	:global(.incident-marker) {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		gap: 6px;
+		pointer-events: auto;
 	}
 
 	:global(.incident-pulse-dot) {
 		display: block;
+		flex-shrink: 0;
 		width: var(--core, 10px);
 		height: var(--core, 10px);
+		border-radius: 9999px;
+		/* Strong accent so markers read clearly on B&W basemap */
+		background: #0f7cb3;
+		box-shadow: 0 0 0 0 #0f7cb3b3;
+		animation: incident-pulse 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+	}
+
+	:global(.incident-marker-label) {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		max-width: 9.5rem;
+		padding: 0.15rem 0.4rem 0.2rem;
+		border-radius: 0.25rem;
+		border: 1px solid rgba(0, 0, 0, 0.55);
+		background: rgba(255, 255, 255, 0.94);
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+		line-height: 1.15;
+		pointer-events: none;
+	}
+
+	:global(.incident-marker-name) {
+		display: block;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font: 600 11px/1.2 system-ui, -apple-system, sans-serif;
+		color: #0a0a0a;
+		letter-spacing: 0.01em;
+	}
+
+	:global(.incident-marker-suburb) {
+		display: block;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font: 500 10px/1.2 system-ui, -apple-system, sans-serif;
+		color: #44403c;
+	}
+
+	.incident-legend-pulse {
+		display: block;
+		width: 10px;
+		height: 10px;
 		border-radius: 9999px;
 		background: #0f7cb3;
 		box-shadow: 0 0 0 0 #0f7cb3b3;
 		animation: incident-pulse 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-		pointer-events: auto;
+	}
+
+	.incident-legend-unknown {
+		display: flex;
+		width: 16px;
+		height: 16px;
+		align-items: center;
+		justify-content: center;
+		border-radius: 9999px;
+		border: 1.5px dashed #a8a29e;
+		background: #f5f5f4;
+		color: #78716c;
+		font-size: 10px;
+		font-weight: 700;
+		line-height: 1;
 	}
 
 	:global {
@@ -381,7 +716,8 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		:global(.incident-pulse-dot) {
+		:global(.incident-pulse-dot),
+		.incident-legend-pulse {
 			animation: none;
 			box-shadow: 0 0 0 3px #0f7cb355;
 		}
@@ -393,7 +729,6 @@
 		border: none;
 		background: transparent;
 		box-shadow: none;
-		/* override leaflet default white box */
 	}
 
 	:global(.leaflet-tooltip.incident-map-tooltip::before) {
@@ -431,5 +766,9 @@
 
 	:global(.dark .nsw-incident-map.leaflet-container) {
 		background: #1c1917;
+	}
+
+	:global(.dark .nsw-incident-map .leaflet-tile-pane) {
+		filter: grayscale(1) contrast(1.05) brightness(0.92);
 	}
 </style>

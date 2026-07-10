@@ -93,3 +93,31 @@ export function aggregateLocationsFromSubjects(
 
 	return [...map.values()].sort((a, b) => b.count - a.count);
 }
+
+export type LocationParseSummary = {
+	/** Distinct street+suburb groups that parsed successfully. */
+	locations: LocationAggregate[];
+	/** Incidents with a parseable street + suburb in the subject. */
+	parseableIncidentCount: number;
+	/**
+	 * Incidents with no usable location in the subject
+	 * (missing subject or did not match the known template).
+	 */
+	unparseableIncidentCount: number;
+	totalIncidents: number;
+};
+
+/** Aggregate locations and count incidents that cannot be parsed to a place. */
+export function summarizeLocationsFromSubjects(
+	subjects: { emailSubject?: string; referenceNo?: string }[]
+): LocationParseSummary {
+	const locations = aggregateLocationsFromSubjects(subjects);
+	const parseableIncidentCount = locations.reduce((sum, loc) => sum + loc.count, 0);
+	const totalIncidents = subjects.length;
+	return {
+		locations,
+		parseableIncidentCount,
+		unparseableIncidentCount: Math.max(0, totalIncidents - parseableIncidentCount),
+		totalIncidents
+	};
+}
