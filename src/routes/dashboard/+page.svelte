@@ -1083,22 +1083,22 @@
 	{:else}
 		<div class="flex-1 overflow-auto">
 			<div class="w-full px-6 py-6">
-				<!-- Stats Cards -->
-				<div class="grid grid-cols-3 gap-4 mb-8">
-					<div class="rounded-lg border border-warm-200 bg-white p-6 shadow-sm">
-						<p class="text-sm font-medium text-warm-600 mb-2">Total Incidents</p>
-						<p class="text-3xl font-bold text-accent-600">{totalIncidents}</p>
-						<p class="mt-2 text-xs text-warm-500">All records in database</p>
+				<!-- Secondary stats (compact — less important than resolution callouts) -->
+				<div class="mb-4 grid grid-cols-3 gap-2">
+					<div class="rounded-md border border-warm-200 bg-white px-3 py-2.5 shadow-sm">
+						<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">Total Incidents</p>
+						<p class="mt-0.5 text-xl font-semibold tabular-nums text-accent-600">{totalIncidents}</p>
+						<p class="mt-0.5 text-[10px] leading-tight text-warm-400">All records</p>
 					</div>
-					<div class="rounded-lg border border-warm-200 bg-white p-6 shadow-sm">
-						<p class="text-sm font-medium text-warm-600 mb-2">This Month</p>
-						<p class="text-3xl font-bold text-warm-800">{incidentsThisMonth}</p>
-						<p class="mt-2 text-xs text-warm-500">Current calendar month</p>
+					<div class="rounded-md border border-warm-200 bg-white px-3 py-2.5 shadow-sm">
+						<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">This Month</p>
+						<p class="mt-0.5 text-xl font-semibold tabular-nums text-warm-800">{incidentsThisMonth}</p>
+						<p class="mt-0.5 text-[10px] leading-tight text-warm-400">Calendar month</p>
 					</div>
-					<div class="rounded-lg border border-warm-200 bg-white p-6 shadow-sm">
-						<p class="text-sm font-medium text-warm-600 mb-2">This Week</p>
-						<p class="text-3xl font-bold text-warm-700">{incidentsThisWeek}</p>
-						<p class="mt-2 text-xs text-warm-500">Last 7 days</p>
+					<div class="rounded-md border border-warm-200 bg-white px-3 py-2.5 shadow-sm">
+						<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">This Week</p>
+						<p class="mt-0.5 text-xl font-semibold tabular-nums text-warm-700">{incidentsThisWeek}</p>
+						<p class="mt-0.5 text-[10px] leading-tight text-warm-400">Last 7 days</p>
 					</div>
 				</div>
 
