@@ -13,6 +13,25 @@
 	let isNavOpen = $state(true);
 	let showUserMenu = $state(false);
 
+	/** Format Supabase `last_sign_in_at` for the nav (local en-AU date + time). */
+	function formatLastLoginAt(iso: string | undefined | null): string {
+		if (!iso?.trim()) return '';
+		const d = new Date(iso);
+		if (Number.isNaN(d.getTime())) return '';
+		return d.toLocaleString('en-AU', {
+			day: '2-digit',
+			month: 'short',
+			year: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit',
+			hour12: true
+		});
+	}
+
+	const lastLoginLabel = $derived(
+		formatLastLoginAt(data.session?.user?.last_sign_in_at ?? data.user?.last_sign_in_at)
+	);
+
 	function isConfigPath(path: string): boolean {
 		return path === '/team' || path.startsWith('/admin/dropdowns');
 	}
@@ -193,8 +212,21 @@
 		{#if data.session?.user}
 			<div class="border-t border-warm-200 p-3 space-y-2">
 				{#if isNavOpen}
-					<div class="px-3 py-2 text-xs text-warm-500 truncate" title={data.session.user.email}>
-						{data.session.user.email}
+					<div class="px-3 py-2">
+						<div class="truncate text-xs text-warm-500" title={data.session.user.email}>
+							{data.session.user.email}
+						</div>
+						{#if lastLoginLabel}
+							<p
+								class="mt-1 text-[11px] leading-snug text-warm-400 tabular-nums"
+								title={`Last signed in ${lastLoginLabel}`}
+							>
+								<span class="block text-[10px] font-medium uppercase tracking-wide text-warm-400/90">
+									Last login
+								</span>
+								<span class="text-warm-500">{lastLoginLabel}</span>
+							</p>
+						{/if}
 					</div>
 					<button
 						type="button"
