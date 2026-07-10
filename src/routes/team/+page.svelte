@@ -217,7 +217,7 @@
 
 <div class="flex-1 flex flex-col bg-warm-50 text-warm-900 overflow-hidden">
 	<header class="border-b border-warm-200 bg-white/80 px-6 py-5 backdrop-blur flex-shrink-0">
-		<div class="mx-auto max-w-[1600px]">
+		<div class="w-full">
 			<h1 class="text-2xl font-bold text-warm-800">Team Management</h1>
 			<p class="mt-1 text-sm text-warm-500">Manage team leaders and drivers</p>
 		</div>
@@ -242,7 +242,7 @@
 		</div>
 	{:else}
 		<div class="flex-1 overflow-auto">
-			<div class="mx-auto max-w-[1600px] px-6 py-6">
+			<div class="w-full px-6 py-6">
 				<!-- Tabs -->
 				<div class="flex gap-4 mb-6 border-b border-warm-200">
 					<button

@@ -708,13 +708,11 @@
 
 <div class="flex-1 flex flex-col bg-warm-50 text-warm-900 overflow-hidden">
 	<header class="border-b border-warm-200 bg-white/80 px-6 py-5 backdrop-blur flex-shrink-0">
-		<div class="mx-auto max-w-[1600px]">
-			<div class="flex min-w-0 items-start gap-3">
-				<CourierTruckIcon />
-				<div class="min-w-0">
-					<h1 class="text-2xl font-bold text-warm-800">Dashboard</h1>
-					<p class="mt-1 text-sm text-warm-500">Overview of incident tracking metrics</p>
-				</div>
+		<div class="flex w-full min-w-0 items-start gap-3">
+			<CourierTruckIcon />
+			<div class="min-w-0">
+				<h1 class="text-2xl font-bold text-warm-800">Dashboard</h1>
+				<p class="mt-1 text-sm text-warm-500">Overview of incident tracking metrics</p>
 			</div>
 		</div>
 	</header>
@@ -766,7 +764,7 @@
 		</div>
 	{:else}
 		<div class="flex-1 overflow-auto">
-			<div class="mx-auto max-w-[1600px] px-6 py-6">
+			<div class="w-full px-6 py-6">
 				<!-- Stats Cards -->
 				<div class="grid grid-cols-3 gap-4 mb-8">
 					<div class="rounded-lg border border-warm-200 bg-white p-6 shadow-sm">

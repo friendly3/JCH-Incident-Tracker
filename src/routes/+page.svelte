@@ -352,7 +352,7 @@
 <div class="flex-1 flex flex-col bg-warm-50 text-warm-900 overflow-hidden">
 	<div class="flex min-h-0 flex-1 flex-col overflow-hidden" inert={isModalOpen || undefined}>
 	<header class="border-b border-warm-200 bg-white/80 px-6 py-5 backdrop-blur flex-shrink-0">
-		<div class="mx-auto max-w-[1600px]">
+		<div class="w-full">
 			<div class="flex items-center justify-between">
 				<div class="flex min-w-0 items-start gap-3">
 					<CourierTruckIcon />

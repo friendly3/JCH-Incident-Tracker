@@ -61,7 +61,7 @@
 
 <div class="min-h-screen bg-warm-50 text-warm-900">
 	<header class="border-b border-warm-200 bg-white/80 px-6 py-4 backdrop-blur">
-		<div class="mx-auto flex max-w-[1400px] items-center justify-between">
+		<div class="flex w-full items-center justify-between">
 			<div>
 				<a href="/" class="text-sm text-accent-600 hover:text-accent-700">&larr; Back to tracker</a>
 				<h1 class="mt-1 text-2xl font-bold text-warm-800">Manage Incidents</h1>
@@ -77,7 +77,7 @@
 		</div>
 	</header>
 
-	<main class="mx-auto max-w-[1400px] px-6 py-6">
+	<main class="w-full px-6 py-6">
 		{#if mode === 'list'}
 			<input
 				type="text"
