@@ -713,7 +713,7 @@
 		{ value: '7', label: 'Last 7 days' }
 	];
 
-	let timeRange = $state<TimeRangeKey>('30');
+	let timeRange = $state<TimeRangeKey>('all');
 
 	const timeRangeLabel = $derived(
 		TIME_RANGE_OPTIONS.find((o) => o.value === timeRange)?.label ?? 'Last 30 days'
