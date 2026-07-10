@@ -121,6 +121,74 @@
 		};
 	}
 
+	/** Multi-series line chart options (incident type over time). */
+	function buildTypeOverTimeChartOptions(
+		colors: ReturnType<typeof getChartTheme>
+	): ChartOptions<'line'> {
+		return {
+			responsive: true,
+			maintainAspectRatio: false,
+			interaction: {
+				mode: 'index',
+				intersect: false
+			},
+			plugins: {
+				legend: {
+					display: true,
+					position: 'bottom',
+					labels: {
+						usePointStyle: true,
+						font: { size: 11 },
+						color: colors.legend,
+						boxWidth: 8,
+						padding: 12
+					}
+				},
+				tooltip: {
+					backgroundColor: colors.tooltipBg,
+					titleFont: { size: 14 },
+					bodyFont: { size: 12 },
+					padding: 12,
+					cornerRadius: 8,
+					displayColors: true,
+					callbacks: {
+						label: (context) => {
+							const name = context.dataset.label ?? 'Type';
+							const y = context.parsed.y ?? 0;
+							return `${name}: ${y} ${y === 1 ? 'incident' : 'incidents'}`;
+						}
+					}
+				},
+				datalabels: {
+					display: false
+				}
+			},
+			scales: {
+				y: {
+					beginAtZero: true,
+					stacked: false,
+					ticks: {
+						color: colors.ticks,
+						stepSize: 1
+					},
+					grid: {
+						color: colors.grid
+					}
+				},
+				x: {
+					ticks: {
+						color: colors.ticks,
+						maxRotation: 45,
+						minRotation: 0
+					},
+					grid: {
+						display: false
+					}
+				}
+			}
+		};
+	}
+
 	function applyChartTheme(chart: ChartJS<'line'>) {
 		const colors = getChartTheme(theme.isDark);
 		const dataset = chart.data.datasets[0];
@@ -129,6 +197,35 @@
 		dataset.backgroundColor = colors.fill;
 		dataset.pointBackgroundColor = colors.accent;
 		dataset.pointBorderColor = colors.pointBorder;
+		if (chart.options?.plugins?.legend?.labels) {
+			chart.options.plugins.legend.labels.color = colors.legend;
+		}
+		if (chart.options?.scales?.y?.ticks) {
+			chart.options.scales.y.ticks.color = colors.ticks;
+		}
+		if (chart.options?.scales?.y?.grid) {
+			chart.options.scales.y.grid.color = colors.grid;
+		}
+		if (chart.options?.scales?.x?.ticks) {
+			chart.options.scales.x.ticks.color = colors.ticks;
+		}
+		if (chart.options?.plugins?.tooltip) {
+			chart.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
+		}
+		chart.update('none');
+	}
+
+	/** Color each type series and refresh axis/legend theme tokens. */
+	function applyTypeOverTimeChartTheme(chart: ChartJS<'line'>) {
+		const colors = getChartTheme(theme.isDark);
+		const isDark = theme.isDark;
+		chart.data.datasets.forEach((dataset, index) => {
+			const stroke = getPieChartColor(index, isDark);
+			dataset.borderColor = stroke;
+			dataset.backgroundColor = withAlpha(stroke, 0.08);
+			dataset.pointBackgroundColor = stroke;
+			dataset.pointBorderColor = colors.pointBorder;
+		});
 		if (chart.options?.plugins?.legend?.labels) {
 			chart.options.plugins.legend.labels.color = colors.legend;
 		}
@@ -480,9 +577,11 @@
 	const incidents = $derived(incidentsFromPageData(incidentStore.list, data.incidents));
 
 	let canvasElement: HTMLCanvasElement | undefined = $state();
+	let typeOverTimeCanvas: HTMLCanvasElement | undefined = $state();
 	let teamLeaderCanvas: HTMLCanvasElement | undefined = $state();
 	let driverCanvas: HTMLCanvasElement | undefined = $state();
 	let chartInstance = $state<ChartJS<'line'> | undefined>();
+	let typeOverTimeChart = $state<ChartJS<'line'> | undefined>();
 	let teamLeaderChart = $state<ChartJS<'pie'> | undefined>();
 	let driverChart = $state<ChartJS<'pie'> | undefined>();
 	let resizeHandler: (() => void) | undefined;
@@ -537,6 +636,69 @@
 		]
 	}));
 
+	/**
+	 * Multi-series line data: for each incident type, counts per day on the same
+	 * last-30-date window as "Incidents Over Time".
+	 */
+	const typeOverTimeChartData = $derived.by(() => {
+		const dateKeys = incidentsByDate.map(([date]) => date);
+		const dateSet = new Set(dateKeys);
+
+		// Stable type keys → display labels (types seen on those dates)
+		const typeMeta = new Map<string, string>();
+		/** typeKey → date → count */
+		const counts = new Map<string, Map<string, number>>();
+
+		for (const incident of incidents) {
+			const date = incident.dateReceived;
+			if (!dateSet.has(date)) continue;
+			const { key, label } = normalizeAggregationKey(incident.type, 'Unspecified');
+			if (!typeMeta.has(key)) {
+				typeMeta.set(key, label);
+				counts.set(key, new Map(dateKeys.map((d) => [d, 0])));
+			}
+			const byDate = counts.get(key)!;
+			byDate.set(date, (byDate.get(date) ?? 0) + 1);
+		}
+
+		const sortedTypes = [...typeMeta.entries()].sort((a, b) =>
+			a[1].localeCompare(b[1], undefined, { sensitivity: 'base' })
+		);
+
+		return {
+			labels: dateKeys.map((date) => formatDate(date)),
+			/** Raw rows for sr-only table: [typeLabel, counts per date...] */
+			tableRows: sortedTypes.map(([key, label]) => ({
+				label,
+				counts: dateKeys.map((d) => counts.get(key)?.get(d) ?? 0)
+			})),
+			dateKeys,
+			datasets: sortedTypes.map(([key, label]) => ({
+				label,
+				data: dateKeys.map((d) => counts.get(key)?.get(d) ?? 0),
+				borderWidth: 2,
+				fill: false,
+				tension: 0.35,
+				pointRadius: 3,
+				pointBorderWidth: 2,
+				pointHoverRadius: 5
+			}))
+		};
+	});
+
+	const hasTypeOverTimeData = $derived(typeOverTimeChartData.datasets.length > 0);
+
+	const typeOverTimeAriaLabel = $derived.by(() => {
+		const { datasets, dateKeys } = typeOverTimeChartData;
+		if (datasets.length === 0 || dateKeys.length === 0) {
+			return 'Incidents by type over time: no incident data available';
+		}
+		const typeNames = datasets.map((d) => d.label).slice(0, 8).join(', ');
+		const more =
+			datasets.length > 8 ? `, plus ${datasets.length - 8} more types` : '';
+		return `Incidents by type over time for ${dateKeys.length} days. Types: ${typeNames}${more}.`;
+	});
+
 	const incidentsByTeamLeader = $derived.by(() => aggregateIncidentsBy('teamLeader'));
 	const incidentsByDriver = $derived.by(() => aggregateIncidentsBy('driver'));
 
@@ -555,6 +717,7 @@
 	onMount(() => {
 		resizeHandler = () => {
 			chartInstance?.resize();
+			typeOverTimeChart?.resize();
 			teamLeaderChart?.resize();
 			driverChart?.resize();
 		};
@@ -586,6 +749,30 @@
 		return () => {
 			instance.destroy();
 			chartInstance = undefined;
+		};
+	});
+
+	$effect(() => {
+		if (incidentStore.isLoading || incidentStore.error || data.loadError) return;
+		const canvas = typeOverTimeCanvas;
+		if (!canvas || !hasTypeOverTimeData) return;
+
+		const colors = untrack(() => getChartTheme(theme.isDark));
+		const initialData = untrack(() => ({
+			labels: typeOverTimeChartData.labels,
+			datasets: typeOverTimeChartData.datasets.map((ds) => ({ ...ds }))
+		}));
+		const instance = new Chart(canvas, {
+			type: 'line',
+			data: initialData,
+			options: buildTypeOverTimeChartOptions(colors)
+		});
+		applyTypeOverTimeChartTheme(instance);
+		typeOverTimeChart = instance;
+
+		return () => {
+			instance.destroy();
+			typeOverTimeChart = undefined;
 		};
 	});
 
@@ -642,6 +829,16 @@
 	});
 
 	$effect(() => {
+		const instance = typeOverTimeChart;
+		if (!instance) return;
+		const next = typeOverTimeChartData;
+		instance.data.labels = next.labels;
+		// Rebuild datasets so type set can grow/shrink without stale series
+		instance.data.datasets = next.datasets.map((ds) => ({ ...ds }));
+		applyTypeOverTimeChartTheme(instance);
+	});
+
+	$effect(() => {
 		const instance = teamLeaderChart;
 		const dataset = instance?.data.datasets[0];
 		if (!instance || !dataset) return;
@@ -673,6 +870,9 @@
 		theme.isDark;
 		if (chartInstance) {
 			applyChartTheme(chartInstance);
+		}
+		if (typeOverTimeChart) {
+			applyTypeOverTimeChartTheme(typeOverTimeChart);
 		}
 		if (teamLeaderChart) {
 			applyPieChartTheme(teamLeaderChart, incidentsByTeamLeader.length);
@@ -784,12 +984,63 @@
 					</div>
 				</div>
 
-				<!-- Chart -->
-				<div class="rounded-lg border border-warm-200 bg-white p-6 shadow-sm">
-					<h2 class="mb-4 text-lg font-semibold text-warm-800">Incidents Over Time (Last 30 Days)</h2>
-					<div class="w-full h-96" style="position: relative; min-height: 400px;">
-						<canvas bind:this={canvasElement} style="max-height: 100%;"></canvas>
-					</div>
+				<!-- Time-series charts: total volume + type breakdown -->
+				<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+					<section
+						class="rounded-lg border border-warm-200 bg-white p-6 shadow-sm"
+						aria-labelledby="over-time-chart-title"
+					>
+						<h2 class="mb-4 text-lg font-semibold text-warm-800" id="over-time-chart-title">
+							Incidents Over Time (Last 30 Days)
+						</h2>
+						<div class="h-96 w-full" style="position: relative; min-height: 400px;">
+							<canvas bind:this={canvasElement} style="max-height: 100%;"></canvas>
+						</div>
+					</section>
+
+					<section
+						class="rounded-lg border border-warm-200 bg-white p-6 shadow-sm"
+						aria-labelledby="type-over-time-chart-title"
+						aria-describedby="type-over-time-chart-summary"
+					>
+						<h2 class="mb-4 text-lg font-semibold text-warm-800" id="type-over-time-chart-title">
+							Incidents by Type Over Time
+						</h2>
+						<p id="type-over-time-chart-summary" class="sr-only">{typeOverTimeAriaLabel}</p>
+						<div class="h-96 w-full" style="position: relative; min-height: 400px;">
+							{#if !hasTypeOverTimeData}
+								<div class="flex h-full items-center justify-center">
+									<p class="text-sm text-warm-500">No incident type data available.</p>
+								</div>
+							{/if}
+							<canvas
+								bind:this={typeOverTimeCanvas}
+								class={!hasTypeOverTimeData ? 'hidden' : 'block h-full w-full'}
+								style="max-height: 100%;"
+								aria-hidden="true"
+							></canvas>
+							<table class="sr-only" aria-labelledby="type-over-time-chart-title">
+								<thead>
+									<tr>
+										<th scope="col">Incident type</th>
+										{#each typeOverTimeChartData.labels as label, i (typeOverTimeChartData.dateKeys[i] ?? label)}
+											<th scope="col">{label}</th>
+										{/each}
+									</tr>
+								</thead>
+								<tbody>
+									{#each typeOverTimeChartData.tableRows as row (row.label)}
+										<tr>
+											<th scope="row">{row.label}</th>
+											{#each row.counts as count, i (`${row.label}-${typeOverTimeChartData.dateKeys[i] ?? i}`)}
+												<td>{count}</td>
+											{/each}
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					</section>
 				</div>
 
 				<!-- Pie Charts -->
