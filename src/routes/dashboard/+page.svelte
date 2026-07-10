@@ -155,8 +155,10 @@
 			},
 			align: 'top' as const,
 			anchor: 'end' as const,
-			offset: multiSeries ? 2 : 4,
-			clamp: true,
+			// Small gap above the point; scale grace + layout padding prevent top clipping
+			offset: multiSeries ? 3 : 6,
+			// Do not clamp into the plot (clamping pushed peak labels off-canvas)
+			clamp: false,
 			clip: false,
 			formatter: (value: unknown) =>
 				typeof value === 'number' && Number.isFinite(value) ? String(value) : '',
@@ -176,8 +178,8 @@
 			responsive: true,
 			maintainAspectRatio: false,
 			layout: {
-				// Room for labels above points
-				padding: { top: 12, right: 8, left: 4, bottom: 0 }
+				// Extra top room so labels above peak points stay fully visible
+				padding: { top: 28, right: 10, left: 4, bottom: 4 }
 			},
 			plugins: {
 				// Single-series chart — legend is redundant
@@ -202,10 +204,14 @@
 			scales: {
 				y: {
 					beginAtZero: true,
+					// Headroom above max so labels sit inside the chart area
+					grace: '18%',
 					ticks: {
 						color: colors.ticks,
 						stepSize: 1,
-						font: { size: 12, weight: 500 }
+						font: { size: 12, weight: 500 },
+						// Avoid fractional ticks when grace expands the max
+						precision: 0
 					},
 					grid: {
 						color: colors.grid
@@ -232,7 +238,7 @@
 			responsive: true,
 			maintainAspectRatio: false,
 			layout: {
-				padding: { top: 14, right: 8, left: 4, bottom: 0 }
+				padding: { top: 28, right: 10, left: 4, bottom: 4 }
 			},
 			interaction: {
 				mode: 'index',
@@ -274,10 +280,12 @@
 				y: {
 					beginAtZero: true,
 					stacked: false,
+					grace: '18%',
 					ticks: {
 						color: colors.ticks,
 						stepSize: 1,
-						font: { size: 12, weight: 500 }
+						font: { size: 12, weight: 500 },
+						precision: 0
 					},
 					grid: {
 						color: colors.grid
@@ -1239,7 +1247,10 @@
 							</label>
 						</div>
 						<p class="mb-3 text-xs text-warm-500">{timeRangeLabel}</p>
-						<div class="h-96 w-full" style="position: relative; min-height: 400px;">
+						<div
+							class="h-96 w-full overflow-visible"
+							style="position: relative; min-height: 400px;"
+						>
 							{#if incidentsByDate.length === 0}
 								<div class="flex h-full items-center justify-center">
 									<p class="text-sm text-warm-500">No incidents in this period.</p>
@@ -1266,7 +1277,10 @@
 							<p class="text-xs text-warm-500">{timeRangeLabel}</p>
 						</div>
 						<p id="type-over-time-chart-summary" class="sr-only">{typeOverTimeAriaLabel}</p>
-						<div class="h-96 w-full" style="position: relative; min-height: 400px;">
+						<div
+							class="h-96 w-full overflow-visible"
+							style="position: relative; min-height: 400px;"
+						>
 							{#if !hasTypeOverTimeData}
 								<div class="flex h-full items-center justify-center">
 									<p class="text-sm text-warm-500">No incident type data available.</p>
