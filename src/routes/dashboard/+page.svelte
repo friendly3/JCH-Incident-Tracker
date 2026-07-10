@@ -809,10 +809,11 @@
 
 		// Match bar fills to action-status pill colours (by label, not series index)
 		const labels = (chart.data.labels ?? []).map((l) => String(l));
-		const fills = labels.map((label) => getActionStatusChartColor(label, isDark));
-		dataset.backgroundColor = fills;
-		dataset.borderColor = fills;
-		dataset.borderWidth = 1;
+		const solid = labels.map((label) => getActionStatusChartColor(label, isDark));
+		// 25% fill opacity; solid border keeps status colour readable
+		dataset.backgroundColor = solid.map((c) => withAlpha(c, 0.25));
+		dataset.borderColor = solid;
+		dataset.borderWidth = 1.5;
 		dataset.borderRadius = 4;
 		dataset.barPercentage = 0.75;
 		dataset.categoryPercentage = 0.8;
