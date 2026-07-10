@@ -141,13 +141,17 @@
 		return rgbToHex(r, g, b);
 	}
 
-	/** Empty team leader / driver (and similar) buckets use a neutral medium grey. */
+	/**
+	 * Empty / unknown category buckets (team leader, driver, type, etc.).
+	 * Includes "Unassigned", "Unspecified", and blank labels.
+	 */
 	function isUnassignedCategory(label: string | undefined | null): boolean {
-		const n = (label ?? '').trim().toUpperCase();
+		const n = (label ?? '').trim().toUpperCase().replace(/[_-]+/g, ' ');
+		if (!n) return true;
 		return n === 'UNASSIGNED' || n === 'UNSPECIFIED';
 	}
 
-	/** Medium gray for Unassigned (and Unspecified) on all dashboard charts. */
+	/** Medium gray for Unassigned / Unspecified on all dashboard charts. */
 	function getUnassignedChartColor(isDark = isDarkMode()): string {
 		// medium gray — slightly brighter on dark cards
 		return isDark ? '#9CA3AF' : '#6B7280';
@@ -369,6 +373,7 @@
 		const colors = getChartTheme(theme.isDark);
 		const isDark = theme.isDark;
 		chart.data.datasets.forEach((dataset, index) => {
+			// Unspecified / blank types always use medium gray (same as Unassigned)
 			const stroke = getChartCategoryColor(dataset.label, index, isDark);
 			dataset.borderColor = stroke;
 			dataset.backgroundColor = withAlpha(stroke, 0.06);
@@ -1130,10 +1135,12 @@
 	/**
 	 * Multi-series line data: for each incident type, counts per day on the same
 	 * relative time window as "Incidents Over Time".
+	 * Missing/blank types are bucketed as "Unspecified" (medium-gray series colour).
 	 */
 	const typeOverTimeChartData = $derived.by(() => {
 		const dateKeys = incidentsByDate.map(([date]) => date);
 		const dateSet = new Set(dateKeys);
+		const dark = theme.isDark;
 
 		// Stable type keys → display labels (types seen on those dates)
 		const typeMeta = new Map<string, string>();
@@ -1143,18 +1150,25 @@
 		for (const incident of incidents) {
 			const date = incident.dateReceived;
 			if (!dateSet.has(date)) continue;
+			// Canonical empty-type bucket for this chart
 			const { key, label } = normalizeAggregationKey(incident.type, 'Unspecified');
-			if (!typeMeta.has(key)) {
-				typeMeta.set(key, label);
-				counts.set(key, new Map(dateKeys.map((d) => [d, 0])));
+			const displayLabel = isUnassignedCategory(label) ? 'Unspecified' : label;
+			const typeKey = isUnassignedCategory(label) ? 'UNSPECIFIED' : key;
+			if (!typeMeta.has(typeKey)) {
+				typeMeta.set(typeKey, displayLabel);
+				counts.set(typeKey, new Map(dateKeys.map((d) => [d, 0])));
 			}
-			const byDate = counts.get(key)!;
+			const byDate = counts.get(typeKey)!;
 			byDate.set(date, (byDate.get(date) ?? 0) + 1);
 		}
 
-		const sortedTypes = [...typeMeta.entries()].sort((a, b) =>
-			a[1].localeCompare(b[1], undefined, { sensitivity: 'base' })
-		);
+		// Named types A–Z, then Unspecified last so it is easy to find in the legend
+		const sortedTypes = [...typeMeta.entries()].sort((a, b) => {
+			const aU = isUnassignedCategory(a[1]);
+			const bU = isUnassignedCategory(b[1]);
+			if (aU !== bU) return aU ? 1 : -1;
+			return a[1].localeCompare(b[1], undefined, { sensitivity: 'base' });
+		});
 
 		return {
 			labels: dateKeys.map((date) => formatDate(date)),
@@ -1164,16 +1178,22 @@
 				counts: dateKeys.map((d) => counts.get(key)?.get(d) ?? 0)
 			})),
 			dateKeys,
-			datasets: sortedTypes.map(([key, label]) => ({
-				label,
-				data: dateKeys.map((d) => counts.get(key)?.get(d) ?? 0),
-				borderWidth: 2,
-				fill: false,
-				tension: 0.35,
-				pointRadius: 3,
-				pointBorderWidth: 2,
-				pointHoverRadius: 5
-			}))
+			datasets: sortedTypes.map(([key, label], index) => {
+				const color = getChartCategoryColor(label, index, dark);
+				return {
+					label,
+					data: dateKeys.map((d) => counts.get(key)?.get(d) ?? 0),
+					borderColor: color,
+					backgroundColor: withAlpha(color, 0.06),
+					pointBackgroundColor: color,
+					borderWidth: 2,
+					fill: false,
+					tension: 0.35,
+					pointRadius: 3,
+					pointBorderWidth: 2,
+					pointHoverRadius: 5
+				};
+			})
 		};
 	});
 
