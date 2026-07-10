@@ -379,8 +379,9 @@
 			dataset.pointHoverRadius = 6;
 			dataset.pointBorderWidth = 2;
 		});
-		if (chart.options?.plugins?.legend?.labels) {
-			chart.options.plugins.legend.labels.color = colors.legend;
+		if (chart.options?.plugins?.legend) {
+			// Keep legend off-canvas so plot height matches the other two cards
+			chart.options.plugins.legend.display = false;
 		}
 		if (chart.options?.plugins?.datalabels) {
 			Object.assign(
