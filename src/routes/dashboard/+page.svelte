@@ -274,16 +274,9 @@
 				intersect: false
 			},
 			plugins: {
+				// Legend is rendered in HTML under the plot so all three cards share equal plot height
 				legend: {
-					display: true,
-					position: 'bottom',
-					labels: {
-						usePointStyle: true,
-						font: { size: 10, weight: 500 },
-						color: colors.legend,
-						boxWidth: 8,
-						padding: 6
-					}
+					display: false
 				},
 				tooltip: {
 					backgroundColor: colors.tooltipBg,
@@ -1699,30 +1692,32 @@
 					</section>
 				</div>
 
-				<!-- Three equal charts: fixed plot height (do not use flex-1 — it ignored height and grew). -->
-				<div class="grid grid-cols-1 gap-2 lg:grid-cols-3 lg:items-start">
+				<!-- Three equal cards: shared header/plot/footer heights so the row lines up. -->
+				<div class="dashboard-chart-row grid grid-cols-1 gap-2 lg:grid-cols-3 lg:items-stretch">
 					<section
-						class="min-w-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
+						class="dashboard-chart-card min-w-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="over-time-chart-title"
 					>
-						<div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-							<h2 class="text-sm font-semibold text-warm-800" id="over-time-chart-title">
-								Incidents Over Time
-							</h2>
-							<label class="flex items-center gap-2 text-sm text-warm-600">
-								<span class="sr-only">Time period for incidents over time</span>
-								<select
-									bind:value={timeRange}
-									class="rounded-lg border border-warm-200 bg-warm-50 px-2.5 py-1 text-sm text-warm-700 input-focus dark:bg-warm-200"
-									aria-controls="over-time-chart-canvas"
-								>
-									{#each TIME_RANGE_OPTIONS as opt (opt.value)}
-										<option value={opt.value}>{opt.label}</option>
-									{/each}
-								</select>
-							</label>
+						<div class="dashboard-chart-header">
+							<div class="flex flex-wrap items-center justify-between gap-2">
+								<h2 class="text-sm font-semibold text-warm-800" id="over-time-chart-title">
+									Incidents Over Time
+								</h2>
+								<label class="flex items-center gap-2 text-sm text-warm-600">
+									<span class="sr-only">Time period for incidents over time</span>
+									<select
+										bind:value={timeRange}
+										class="rounded-lg border border-warm-200 bg-warm-50 px-2.5 py-1 text-sm text-warm-700 input-focus dark:bg-warm-200"
+										aria-controls="over-time-chart-canvas"
+									>
+										{#each TIME_RANGE_OPTIONS as opt (opt.value)}
+											<option value={opt.value}>{opt.label}</option>
+										{/each}
+									</select>
+								</label>
+							</div>
+							<p class="dashboard-chart-meta text-xs text-warm-500">{timeRangeLabel}</p>
 						</div>
-						<p class="mb-1 text-xs text-warm-500">{timeRangeLabel}</p>
 						<div class="dashboard-chart-plot relative w-full">
 							{#if incidentsByDate.length === 0}
 								<div class="flex h-full items-center justify-center">
@@ -1735,18 +1730,21 @@
 								class={incidentsByDate.length === 0 ? 'hidden' : 'block h-full w-full'}
 							></canvas>
 						</div>
+						<div class="dashboard-chart-footer" aria-hidden="true"></div>
 					</section>
 
 					<section
-						class="min-w-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
+						class="dashboard-chart-card min-w-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="type-over-time-chart-title"
 						aria-describedby="type-over-time-chart-summary"
 					>
-						<div class="mb-1.5 flex flex-wrap items-baseline justify-between gap-2">
-							<h2 class="text-sm font-semibold text-warm-800" id="type-over-time-chart-title">
-								Incidents by Type Over Time
-							</h2>
-							<p class="text-xs text-warm-500">{timeRangeLabel}</p>
+						<div class="dashboard-chart-header">
+							<div class="flex flex-wrap items-baseline justify-between gap-2">
+								<h2 class="text-sm font-semibold text-warm-800" id="type-over-time-chart-title">
+									Incidents by Type Over Time
+								</h2>
+							</div>
+							<p class="dashboard-chart-meta text-xs text-warm-500">{timeRangeLabel}</p>
 						</div>
 						<p id="type-over-time-chart-summary" class="sr-only">{typeOverTimeAriaLabel}</p>
 						<div class="dashboard-chart-plot relative w-full">
@@ -1781,16 +1779,37 @@
 								</tbody>
 							</table>
 						</div>
+						<div class="dashboard-chart-footer">
+							{#if hasTypeOverTimeData}
+								<ul class="flex flex-wrap gap-x-2.5 gap-y-1" aria-label="Incident type legend">
+									{#each typeOverTimeChartData.datasets as ds (ds.label)}
+										<li class="flex items-center gap-1 text-[10px] leading-tight text-warm-600">
+											<span
+												class="inline-block h-2 w-2 shrink-0 rounded-full"
+												style="background: {typeof ds.borderColor === 'string'
+													? ds.borderColor
+													: '#666'}"
+												aria-hidden="true"
+											></span>
+											<span class="truncate">{ds.label}</span>
+										</li>
+									{/each}
+								</ul>
+							{/if}
+						</div>
 					</section>
 
 					<section
-						class="min-w-0 overflow-visible rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
+						class="dashboard-chart-card min-w-0 overflow-hidden rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="driver-chart-title"
 						aria-describedby="driver-chart-summary"
 					>
-						<h2 class="mb-1.5 text-sm font-semibold text-warm-800" id="driver-chart-title">
-							Incidents by Driver
-						</h2>
+						<div class="dashboard-chart-header">
+							<h2 class="text-sm font-semibold text-warm-800" id="driver-chart-title">
+								Incidents by Driver
+							</h2>
+							<p class="dashboard-chart-meta text-xs text-warm-500">By driver</p>
+						</div>
 						<p id="driver-chart-summary" class="sr-only">{driverChartAriaLabel}</p>
 						<div class="dashboard-chart-plot relative w-full">
 							{#if incidentsByDriver.length === 0}
@@ -1803,7 +1822,6 @@
 								class={incidentsByDriver.length === 0 ? 'hidden' : 'block h-full w-full'}
 								aria-hidden="true"
 							></canvas>
-							<!-- Accessible data table (visually hidden); card h2 is the only visible title -->
 							<table class="sr-only" aria-labelledby="driver-chart-title">
 								<thead>
 									<tr>
@@ -1821,6 +1839,7 @@
 								</tbody>
 							</table>
 						</div>
+						<div class="dashboard-chart-footer" aria-hidden="true"></div>
 					</section>
 				</div>
 
@@ -1835,21 +1854,57 @@
 
 <style>
 	/*
-	 * Fixed plot height — must not use flex-grow on these boxes (that ignored
-	 * earlier height: rem rules when the grid row stretched).
+	 * Equal-height chart cards:
+	 * - Grid stretches cards to the same total height
+	 * - Header / plot / footer use fixed slots so plot areas match
+	 * - Type legend lives in the footer (outside canvas) so it does not shrink the plot
 	 */
+	:global(.dashboard-chart-row) {
+		align-items: stretch;
+	}
+
+	:global(.dashboard-chart-card) {
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+		min-height: 100%;
+		box-sizing: border-box;
+	}
+
+	:global(.dashboard-chart-header) {
+		flex: 0 0 auto;
+		min-height: 3.25rem;
+		margin-bottom: 0.35rem;
+	}
+
+	:global(.dashboard-chart-meta) {
+		min-height: 1.1rem;
+		margin-top: 0.2rem;
+		line-height: 1.1rem;
+	}
+
+	/* 13.5rem + 30% = 17.55rem */
 	:global(.dashboard-chart-plot) {
-		/* 9rem + 50% */
-		height: 13.5rem;
-		min-height: 13.5rem;
-		max-height: 13.5rem;
+		flex: 0 0 17.55rem;
+		height: 17.55rem;
+		min-height: 17.55rem;
+		max-height: 17.55rem;
 		position: relative;
 		overflow: hidden;
+		width: 100%;
 	}
 
 	:global(.dashboard-chart-plot canvas) {
 		width: 100% !important;
 		height: 100% !important;
-		max-height: 13.5rem !important;
+		max-height: 17.55rem !important;
+	}
+
+	:global(.dashboard-chart-footer) {
+		flex: 0 0 2.5rem;
+		min-height: 2.5rem;
+		max-height: 2.5rem;
+		margin-top: 0.35rem;
+		overflow: hidden;
 	}
 </style>
