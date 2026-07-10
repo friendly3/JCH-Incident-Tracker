@@ -73,13 +73,13 @@
     <div class="mb-8">
       <div class="tabs tabs-boxed">
         <a class="tab {currentTab === 'types' ? 'active' : ''}" onclick={() => currentTab = 'types'}>Incident Types</a> 
-        <a class="tab {currentTab === 'actions' ? 'active' : ''}" onclick={() => currentTab = 'actions'}>Actions</a> 
+        <a class="tab {currentTab === 'actions' ? 'active' : ''}" onclick={() => currentTab = 'actions'}>Action Statuses</a> 
       </div>
     </div>
 
     {#if showAdd}
       <div class="mb-8 rounded-lg bg-white p-6 shadow-sm">
-        <h2 class="mb-4 text-xl font-semibold text-warm-800">Add New {currentTab === 'types' ? 'Type' : 'Action'}</h2>
+        <h2 class="mb-4 text-xl font-semibold text-warm-800">Add New {currentTab === 'types' ? 'Type' : 'Action Status'}</h2>
         <div class="flex gap-3">
           <input
             bind:value={newName}
@@ -257,7 +257,7 @@
             </tbody>
           </table>
         {:else}
-          <p class="p-8 text-center text-warm-500">No actions found.</p>
+          <p class="p-8 text-center text-warm-500">No action statuses found.</p>
         {/if}
       {/if}
     </div>
@@ -267,7 +267,7 @@
         class="rounded-lg bg-accent-600 px-8 py-3 text-lg font-medium text-white hover:bg-accent-500"
         onclick={() => showAdd = true}
       >
-        + Add New {currentTab === 'types' ? 'Type' : 'Action'}
+        + Add New {currentTab === 'types' ? 'Type' : 'Action Status'}
       </button>
     </div>
   </div>

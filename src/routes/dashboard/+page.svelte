@@ -1051,14 +1051,15 @@
 	);
 
 	/**
+	/**
 	 * Resolved = action status is "Resolved" AND a responded date is set.
 	 * Unresolved = anything that does not meet both conditions.
 	 */
 	function isIncidentResolved(incident: Incident): boolean {
-		const action = (incident.action ?? '').trim().toUpperCase();
-		const actionIsResolved = action === 'RESOLVED';
+		const actionStatus = (incident.action ?? '').trim().toUpperCase();
+		const actionStatusIsResolved = actionStatus === 'RESOLVED';
 		const hasRespondedDate = Boolean(normalizeDateOnly(incident.dateResponse));
-		return actionIsResolved && hasRespondedDate;
+		return actionStatusIsResolved && hasRespondedDate;
 	}
 
 	const resolvedIncidents = $derived(incidents.filter(isIncidentResolved).length);
@@ -1171,7 +1172,7 @@
 									{unresolvedIncidents}
 								</p>
 								<p class="mt-2 text-xs leading-snug text-amber-800/90 dark:text-amber-200/90">
-									Not fully closed — action is not <span class="font-semibold">Resolved</span>,
+									Not fully closed — action status is not <span class="font-semibold">Resolved</span>,
 									or responded date is missing
 									{#if totalIncidents > 0}
 										<span class="mt-1 block font-medium">{unresolvedPct}% of all incidents</span>
@@ -1205,7 +1206,7 @@
 									{resolvedIncidents}
 								</p>
 								<p class="mt-2 text-xs leading-snug text-emerald-800/90 dark:text-emerald-200/90">
-									Action is <span class="font-semibold">Resolved</span> and a responded date is set
+									Action status is <span class="font-semibold">Resolved</span> and a responded date is set
 									{#if totalIncidents > 0}
 										<span class="mt-1 block font-medium">{resolvedPct}% of all incidents</span>
 									{/if}

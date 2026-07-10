@@ -643,7 +643,7 @@
 			<section class="mb-8" aria-labelledby="section-classification-heading">
 				<h3 id="section-classification-heading" class="sn-section-title">Classification</h3>
 				<div class="sn-field-row">
-					<label for="action" class="sn-field-label">Action</label>
+					<label for="action" class="sn-field-label">Action Status</label>
 					<div class="sn-field-control">
 						<select
 							id="action"
@@ -653,7 +653,7 @@
 						>
 							<option value={FK_EMPTY}>— None —</option>
 							{#if form.actionId && !fkInList(form.actionId, incidentActions)}
-								<option value={form.actionId}>{incident?.action ?? 'Current action'}</option>
+								<option value={form.actionId}>{incident?.action ?? 'Current action status'}</option>
 							{/if}
 							{#each incidentActions as a}<option value={a.id} class="uppercase">{a.name}</option>{/each}
 						</select>
