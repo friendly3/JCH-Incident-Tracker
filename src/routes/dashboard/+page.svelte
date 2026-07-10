@@ -734,24 +734,26 @@
 					}
 				},
 				// Always-visible count + %; outside the ring when the slice is small.
-				// Multi-label: value is +2px larger; percentage keeps the base size.
+				// Multi-label stack: value ABOVE percentage (separate align, not same centre).
 				datalabels: {
 					display: (context) => {
 						const raw = context.dataset.data[context.dataIndex];
 						const value = typeof raw === 'number' ? raw : 0;
 						return value > 0;
 					},
-					// Large slices: centre of the ring segment. Small: outside the arc.
+					// Shared radial anchor; each label then stacks top/bottom
 					anchor: (context) => (isSmallDoughnutSlice(context) ? 'end' : 'center'),
-					align: (context) => (isSmallDoughnutSlice(context) ? 'end' : 'center'),
-					offset: (context) =>
-						isSmallDoughnutSlice(context) ? OUTSIDE_LABEL_OFFSET : 0,
 					textAlign: 'center',
-					// Allow outside labels past the arc; do not clamp them into the hole
 					clamp: false,
 					clip: false,
 					labels: {
+						// Count sits above the percentage
 						value: {
+							// 'top' = above the anchor point on screen
+							align: 'top',
+							// Small slices: push the pair outside the arc first
+							offset: (context) =>
+								isSmallDoughnutSlice(context) ? OUTSIDE_LABEL_OFFSET : 2,
 							formatter: (value) => {
 								const num = typeof value === 'number' ? value : 0;
 								return String(num);
@@ -795,7 +797,11 @@
 							},
 							textStrokeWidth: 3
 						},
+						// Percentage sits below the value
 						percentage: {
+							align: 'bottom',
+							offset: (context) =>
+								isSmallDoughnutSlice(context) ? OUTSIDE_LABEL_OFFSET : 2,
 							formatter: (value, context) => {
 								const num = typeof value === 'number' ? value : 0;
 								const total = sumNumericData(context.dataset.data as unknown[]);
