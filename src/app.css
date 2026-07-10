@@ -96,20 +96,23 @@ body {
 	}
 
 	/*
-	 * Date inputs: hide native calendar glyph (often left/inline in Chromium).
-	 * Field click + right custom calendar button open the picker via showPicker.
-	 * Use size/opacity/pointer-events fallbacks — display:none alone is ignored
-	 * on some WebKit/Chromium builds of the date control.
-	 *
-	 * Firefox: the date/time control’s calendar chrome is not exposed via a
-	 * stable pseudo-element (no ::-webkit-calendar-picker-indicator). Residual
-	 * native UI there is engine-limited; the custom right-side button still works.
+	 * Date inputs: the control is opacity:0 over a facade (IncidentForm) so
+	 * native chrome never paints. Only the custom right-side calendar button
+	 * is visible. Keep pseudo-element kills as defense-in-depth if opacity
+	 * fails or the input is shown without the facade.
 	 */
 	.native-datetime {
-		/* Button sits in pr-10 gutter; keep native control behavior intact */
-		position: relative;
-		color-scheme: light;
+		position: absolute;
+		inset: 0;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		opacity: 0;
 		cursor: pointer;
+		color-scheme: light;
+		/* Avoid native decorations if any engine still paints under opacity */
+		appearance: none;
+		-webkit-appearance: none;
 	}
 
 	.dark .native-datetime {
@@ -117,27 +120,26 @@ body {
 	}
 
 	.native-datetime::-webkit-calendar-picker-indicator {
-		appearance: none;
-		-webkit-appearance: none;
-		display: none;
-		opacity: 0;
-		width: 0;
-		height: 0;
-		margin: 0;
-		padding: 0;
-		pointer-events: none;
-		background: transparent;
-		color: transparent;
+		appearance: none !important;
+		-webkit-appearance: none !important;
+		display: none !important;
+		opacity: 0 !important;
+		width: 0 !important;
+		height: 0 !important;
+		margin: 0 !important;
+		padding: 0 !important;
+		pointer-events: none !important;
+		background: transparent !important;
+		color: transparent !important;
 	}
 
-	/* Some Chromium builds use a separate clear/spin UI — keep the field clickable */
 	.native-datetime::-webkit-clear-button,
 	.native-datetime::-webkit-inner-spin-button {
-		display: none;
-		opacity: 0;
-		width: 0;
-		height: 0;
-		pointer-events: none;
+		display: none !important;
+		opacity: 0 !important;
+		width: 0 !important;
+		height: 0 !important;
+		pointer-events: none !important;
 	}
 
 	/*

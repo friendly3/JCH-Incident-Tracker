@@ -245,9 +245,15 @@
 
 	const inputClass =
 		'w-full rounded-md border border-warm-200 bg-white px-3 py-2 text-sm text-warm-700 input-focus dark:bg-warm-200';
-	/** Native date control; trailing custom calendar icon opens the picker. */
+	/**
+	 * Invisible native date control overlaid on a facade so browser chrome
+	 * (left/inline calendar glyph) never paints. Only the custom right icon shows.
+	 */
 	const nativeDateClass =
-		'native-datetime form-field-surface input-focus relative w-full min-h-[2.375rem] rounded-md border border-warm-200 bg-white px-3 py-2 pr-10 text-sm text-warm-700 dark:bg-warm-200';
+		'native-datetime absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0';
+	/** Visible shell under the transparent date input (single calendar icon is the button). */
+	const dateFacadeClass =
+		'form-field-surface pointer-events-none flex min-h-[2.375rem] w-full items-center rounded-md border border-warm-200 bg-white px-3 py-2 pr-12 text-sm text-warm-700 dark:bg-warm-200';
 	/**
 	 * Native time control for typed HH:mm entry. No full-field webkit indicator —
 	 * the clock icon opens TimePickerPopover (reliable custom UI).
@@ -259,7 +265,8 @@
 		'absolute right-1 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md border border-warm-200 bg-white text-warm-600 shadow-sm hover:bg-warm-50 hover:text-warm-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:border-warm-300 dark:bg-warm-200 dark:text-warm-800 dark:hover:bg-warm-300';
 	const dateTimeControlClass = 'flex flex-col gap-2 sm:flex-row sm:items-stretch';
 	const timeFieldWrapClass = 'relative w-full sm:w-[9.5rem] sm:shrink-0';
-	const dateFieldWrapClass = 'relative min-w-0 flex-1';
+	/** focus-within ring when the transparent date input is keyboard-focused */
+	const dateFieldWrapClass = 'relative min-w-0 flex-1 rounded-md input-focus-within';
 
 	const timePickerDialogId = {
 		time: 'receivedAt-time-picker-dialog',
@@ -475,6 +482,9 @@
 						<span id="receivedAt-desc" class="sr-only">{receivedAtDesc}</span>
 						<div class={dateTimeControlClass} role="group" aria-labelledby="receivedAt-label">
 							<div class={dateFieldWrapClass} data-datetime-wrap>
+								<div class={dateFacadeClass} aria-hidden="true">
+									{form.dateReceived || 'yyyy-mm-dd'}
+								</div>
 								<input
 									id="receivedAt"
 									type="date"
@@ -629,6 +639,9 @@
 						<span id="respondedAt-desc" class="sr-only">{respondedAtDesc}</span>
 						<div class={dateTimeControlClass} role="group" aria-labelledby="respondedAt-label">
 							<div class={dateFieldWrapClass} data-datetime-wrap>
+								<div class={dateFacadeClass} aria-hidden="true">
+									{form.dateResponse || 'yyyy-mm-dd'}
+								</div>
 								<input
 									id="respondedAt"
 									type="date"
