@@ -553,16 +553,39 @@
 		return total;
 	}
 
+	/** Share of a doughnut slice (0–1). Small slices get outside labels. */
+	const SMALL_SLICE_SHARE = 0.08;
+
+	function getDoughnutSliceShare(context: {
+		dataset: { data: unknown[] };
+		dataIndex: number;
+	}): number {
+		const raw = context.dataset.data[context.dataIndex];
+		const value = typeof raw === 'number' ? raw : 0;
+		const total = sumNumericData(context.dataset.data as unknown[]);
+		return total > 0 ? value / total : 0;
+	}
+
+	function isSmallDoughnutSlice(context: {
+		dataset: { data: unknown[] };
+		dataIndex: number;
+	}): boolean {
+		const share = getDoughnutSliceShare(context);
+		return share > 0 && share < SMALL_SLICE_SHARE;
+	}
+
 	function buildPieChartOptions(
 		colors: ReturnType<typeof getChartTheme>,
 		sliceCount = 0
-	): ChartOptions<'pie'> {
+	): ChartOptions<'doughnut'> {
 		return {
 			responsive: true,
 			maintainAspectRatio: false,
+			// Donut hole
+			cutout: '55%',
 			layout: {
-				// Room for in-slice labels without crowding the legend
-				padding: 8
+				// Extra padding so outside labels on thin slices are not clipped
+				padding: 20
 			},
 			plugins: {
 				// HTML card heading is the only chart title — never draw a Chart.js title
@@ -599,18 +622,17 @@
 						}
 					}
 				},
-				// Always-visible count + % on every non-zero slice (no hover required)
+				// Always-visible count + %; outside the ring when the slice is small
 				datalabels: {
 					display: (context) => {
 						const raw = context.dataset.data[context.dataIndex];
 						const value = typeof raw === 'number' ? raw : 0;
-						// Skip empty slices only; all positive slices get labels
 						return value > 0;
 					},
-					// Prefer center of slice; plugin may auto-adjust when clamp is on
-					anchor: 'center',
-					align: 'center',
-					offset: 0,
+					// Large slices: centre of the ring segment. Small: outside the arc.
+					anchor: (context) => (isSmallDoughnutSlice(context) ? 'end' : 'center'),
+					align: (context) => (isSmallDoughnutSlice(context) ? 'end' : 'center'),
+					offset: (context) => (isSmallDoughnutSlice(context) ? 10 : 0),
 					formatter: (value, context) => {
 						const num = typeof value === 'number' ? value : 0;
 						const total = sumNumericData(context.dataset.data as unknown[]);
@@ -618,22 +640,28 @@
 						return `${num}\n(${percentage}%)`;
 					},
 					color: (context) => {
+						// Outside labels use legend/text colour; inside use contrast on fill
+						if (isSmallDoughnutSlice(context)) {
+							return colors.legend;
+						}
 						const bg = Array.isArray(context.dataset.backgroundColor)
 							? context.dataset.backgroundColor[context.dataIndex]
 							: context.dataset.backgroundColor;
 						return contrastOnHex(typeof bg === 'string' ? bg : '#0072B2', isDarkMode());
 					},
 					font: (context) => {
-						// Slightly smaller type when many slices share the ring
-						const sliceCount = context.dataset.data?.length ?? 0;
+						const n = context.dataset.data?.length ?? 0;
+						const small = isSmallDoughnutSlice(context);
 						return {
-							size: sliceCount > 8 ? 11 : 12,
+							size: small ? 10 : n > 8 ? 11 : 12,
 							weight: 'bold' as const
 						};
 					},
 					textAlign: 'center',
-					// Stronger halo so labels stay readable on saturated slices
 					textStrokeColor: (context) => {
+						if (isSmallDoughnutSlice(context)) {
+							return isDarkMode() ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.92)';
+						}
 						const bg = Array.isArray(context.dataset.backgroundColor)
 							? context.dataset.backgroundColor[context.dataIndex]
 							: context.dataset.backgroundColor;
@@ -641,14 +669,18 @@
 						return fg === '#f8f8f8' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.75)';
 					},
 					textStrokeWidth: 3,
-					clamp: true,
+					// Allow outside labels past the arc; do not clamp them into the hole
+					clamp: false,
 					clip: false
 				}
 			}
 		};
 	}
 
-	function applyPieChartTheme(chart: ChartJS<'pie'>, sliceCount = chart.data.labels?.length ?? 0) {
+	function applyPieChartTheme(
+		chart: ChartJS<'doughnut'>,
+		sliceCount = chart.data.labels?.length ?? 0
+	) {
 		const colors = getChartTheme(theme.isDark);
 		const sliceBorder = getPieSliceBorder(theme.isDark);
 		const dataset = chart.data.datasets[0];
@@ -670,9 +702,20 @@
 			chart.options.plugins.tooltip.titleColor = colors.tooltipTitle;
 			chart.options.plugins.tooltip.bodyColor = colors.tooltipTitle;
 		}
+		// Refresh datalabel colours that close over theme tokens
+		if (chart.options?.plugins?.datalabels) {
+			const rebuilt = buildPieChartOptions(colors, sliceCount).plugins?.datalabels;
+			if (rebuilt) {
+				Object.assign(chart.options.plugins.datalabels, rebuilt);
+			}
+		}
 		// Ensure Chart.js never draws a second title under the card heading
 		if (chart.options?.plugins) {
 			chart.options.plugins.title = { display: false };
+		}
+		// Keep donut hole consistent if options were partially replaced
+		if (chart.options) {
+			chart.options.cutout = '55%';
 		}
 
 		chart.update('none');
@@ -806,8 +849,8 @@
 	let chartInstance = $state<ChartJS<'line'> | undefined>();
 	let typeOverTimeChart = $state<ChartJS<'line'> | undefined>();
 	let actionStatusChart = $state<ChartJS<'bar'> | undefined>();
-	let teamLeaderChart = $state<ChartJS<'pie'> | undefined>();
-	let driverChart = $state<ChartJS<'pie'> | undefined>();
+	let teamLeaderChart = $state<ChartJS<'doughnut'> | undefined>();
+	let driverChart = $state<ChartJS<'doughnut'> | undefined>();
 	let resizeHandler: (() => void) | undefined;
 	let isRetrying = $state(false);
 	let retryError = $state<string | null>(null);
@@ -1106,7 +1149,7 @@
 		const initialData = untrack(() => teamLeaderChartData);
 		const sliceCount = untrack(() => incidentsByTeamLeader.length);
 		const instance = new Chart(canvas, {
-			type: 'pie',
+			type: 'doughnut',
 			data: initialData,
 			options: buildPieChartOptions(colors, sliceCount)
 		});
@@ -1128,7 +1171,7 @@
 		const initialData = untrack(() => driverChartData);
 		const sliceCount = untrack(() => incidentsByDriver.length);
 		const instance = new Chart(canvas, {
-			type: 'pie',
+			type: 'doughnut',
 			data: initialData,
 			options: buildPieChartOptions(colors, sliceCount)
 		});
@@ -1561,7 +1604,7 @@
 							Incidents by Team Leader
 						</h2>
 						<p id="team-leader-chart-summary" class="sr-only">{teamLeaderChartAriaLabel}</p>
-						<div class="{teamLeaderChartHeightClass} w-full" style="position: relative;">
+						<div class="{teamLeaderChartHeightClass} w-full overflow-visible" style="position: relative;">
 							{#if incidentsByTeamLeader.length === 0}
 								<div class="flex h-full items-center justify-center">
 									<p class="text-sm text-warm-500">No incident data available.</p>
@@ -1601,7 +1644,7 @@
 							Incidents by Driver
 						</h2>
 						<p id="driver-chart-summary" class="sr-only">{driverChartAriaLabel}</p>
-						<div class="{driverChartHeightClass} w-full" style="position: relative;">
+						<div class="{driverChartHeightClass} w-full overflow-visible" style="position: relative;">
 							{#if incidentsByDriver.length === 0}
 								<div class="flex h-full items-center justify-center">
 									<p class="text-sm text-warm-500">No incident data available.</p>
