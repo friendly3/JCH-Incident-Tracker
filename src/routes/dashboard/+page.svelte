@@ -1839,9 +1839,10 @@
 	 * earlier height: rem rules when the grid row stretched).
 	 */
 	:global(.dashboard-chart-plot) {
-		height: 9rem;
-		min-height: 9rem;
-		max-height: 9rem;
+		/* 9rem + 50% */
+		height: 13.5rem;
+		min-height: 13.5rem;
+		max-height: 13.5rem;
 		position: relative;
 		overflow: hidden;
 	}
@@ -1849,6 +1850,6 @@
 	:global(.dashboard-chart-plot canvas) {
 		width: 100% !important;
 		height: 100% !important;
-		max-height: 9rem !important;
+		max-height: 13.5rem !important;
 	}
 </style>
