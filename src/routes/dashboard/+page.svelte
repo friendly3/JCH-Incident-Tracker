@@ -141,6 +141,28 @@
 		return rgbToHex(r, g, b);
 	}
 
+	/** Empty team leader / driver (and similar) buckets use a neutral medium grey. */
+	function isUnassignedCategory(label: string | undefined | null): boolean {
+		const n = (label ?? '').trim().toUpperCase();
+		return n === 'UNASSIGNED' || n === 'UNSPECIFIED';
+	}
+
+	/** Medium gray for Unassigned (and Unspecified) on all dashboard charts. */
+	function getUnassignedChartColor(isDark = isDarkMode()): string {
+		// medium gray — slightly brighter on dark cards
+		return isDark ? '#9CA3AF' : '#6B7280';
+	}
+
+	/** Series colour by category label when special; otherwise palette by index. */
+	function getChartCategoryColor(
+		label: string | undefined | null,
+		index: number,
+		isDark = isDarkMode()
+	): string {
+		if (isUnassignedCategory(label)) return getUnassignedChartColor(isDark);
+		return getSeriesColor(index, isDark);
+	}
+
 	/** Always-visible counts on line points; hide zeros to reduce clutter. */
 	function buildLineDataLabels(
 		colors: ReturnType<typeof getChartTheme>,
@@ -347,7 +369,7 @@
 		const colors = getChartTheme(theme.isDark);
 		const isDark = theme.isDark;
 		chart.data.datasets.forEach((dataset, index) => {
-			const stroke = getSeriesColor(index, isDark);
+			const stroke = getChartCategoryColor(dataset.label, index, isDark);
 			dataset.borderColor = stroke;
 			dataset.backgroundColor = withAlpha(stroke, 0.06);
 			dataset.pointBackgroundColor = stroke;
@@ -830,7 +852,9 @@
 		if (!dataset) return;
 
 		dataset.backgroundColor =
-			chart.data.labels?.map((_, index) => getSeriesColor(index, theme.isDark)) ?? [];
+			chart.data.labels?.map((label, index) =>
+				getChartCategoryColor(String(label), index, theme.isDark)
+			) ?? [];
 		dataset.borderColor = chart.data.labels?.map(() => sliceBorder) ?? sliceBorder;
 		dataset.borderWidth = 3;
 
@@ -955,9 +979,14 @@
 		const dataset = chart.data.datasets[0];
 		if (!dataset) return;
 
-		// Match bar fills to action-status pill colours (by label, not series index)
+		// Match bar fills to action-status pill colours (by label, not series index).
+		// Unassigned / Unspecified use medium gray like other charts.
 		const labels = (chart.data.labels ?? []).map((l) => String(l));
-		const solid = labels.map((label) => getActionStatusChartColor(label, isDark));
+		const solid = labels.map((label) =>
+			isUnassignedCategory(label)
+				? getUnassignedChartColor(isDark)
+				: getActionStatusChartColor(label, isDark)
+		);
 		// 70% fill opacity; solid border keeps status colour readable
 		dataset.backgroundColor = solid.map((c) => withAlpha(c, 0.7));
 		dataset.borderColor = solid;
