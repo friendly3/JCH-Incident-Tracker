@@ -702,7 +702,8 @@
 						}
 					}
 				},
-				// Always-visible count + %; outside the ring when the slice is small
+				// Always-visible count + %; outside the ring when the slice is small.
+				// Multi-label: value is +2px larger; percentage keeps the base size.
 				datalabels: {
 					display: (context) => {
 						const raw = context.dataset.data[context.dataIndex];
@@ -714,45 +715,103 @@
 					align: (context) => (isSmallDoughnutSlice(context) ? 'end' : 'center'),
 					offset: (context) =>
 						isSmallDoughnutSlice(context) ? OUTSIDE_LABEL_OFFSET : 0,
-					formatter: (value, context) => {
-						const num = typeof value === 'number' ? value : 0;
-						const total = sumNumericData(context.dataset.data as unknown[]);
-						const percentage = total > 0 ? Math.round((num / total) * 100) : 0;
-						return `${num}\n(${percentage}%)`;
-					},
-					color: (context) => {
-						// Outside labels use legend/text colour; inside use contrast on fill
-						if (isSmallDoughnutSlice(context)) {
-							return colors.legend;
-						}
-						const bg = Array.isArray(context.dataset.backgroundColor)
-							? context.dataset.backgroundColor[context.dataIndex]
-							: context.dataset.backgroundColor;
-						return contrastOnHex(typeof bg === 'string' ? bg : '#0072B2', isDarkMode());
-					},
-					font: (context) => {
-						const n = context.dataset.data?.length ?? 0;
-						const small = isSmallDoughnutSlice(context);
-						return {
-							size: small ? 10 : n > 8 ? 11 : 12,
-							weight: 'bold' as const
-						};
-					},
 					textAlign: 'center',
-					textStrokeColor: (context) => {
-						if (isSmallDoughnutSlice(context)) {
-							return isDarkMode() ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.92)';
-						}
-						const bg = Array.isArray(context.dataset.backgroundColor)
-							? context.dataset.backgroundColor[context.dataIndex]
-							: context.dataset.backgroundColor;
-						const fg = contrastOnHex(typeof bg === 'string' ? bg : '#0072B2', isDarkMode());
-						return fg === '#f8f8f8' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.75)';
-					},
-					textStrokeWidth: 3,
 					// Allow outside labels past the arc; do not clamp them into the hole
 					clamp: false,
-					clip: false
+					clip: false,
+					labels: {
+						value: {
+							formatter: (value) => {
+								const num = typeof value === 'number' ? value : 0;
+								return String(num);
+							},
+							font: (context) => {
+								const n = context.dataset.data?.length ?? 0;
+								const small = isSmallDoughnutSlice(context);
+								// Base was 10 / 11 / 12 — value is two increments larger
+								const base = small ? 10 : n > 8 ? 11 : 12;
+								return {
+									size: base + 2,
+									weight: 'bold' as const
+								};
+							},
+							color: (context) => {
+								if (isSmallDoughnutSlice(context)) return colors.legend;
+								const bg = Array.isArray(context.dataset.backgroundColor)
+									? context.dataset.backgroundColor[context.dataIndex]
+									: context.dataset.backgroundColor;
+								return contrastOnHex(
+									typeof bg === 'string' ? bg : '#0072B2',
+									isDarkMode()
+								);
+							},
+							textStrokeColor: (context) => {
+								if (isSmallDoughnutSlice(context)) {
+									return isDarkMode()
+										? 'rgba(0,0,0,0.75)'
+										: 'rgba(255,255,255,0.92)';
+								}
+								const bg = Array.isArray(context.dataset.backgroundColor)
+									? context.dataset.backgroundColor[context.dataIndex]
+									: context.dataset.backgroundColor;
+								const fg = contrastOnHex(
+									typeof bg === 'string' ? bg : '#0072B2',
+									isDarkMode()
+								);
+								return fg === '#f8f8f8'
+									? 'rgba(0,0,0,0.55)'
+									: 'rgba(255,255,255,0.75)';
+							},
+							textStrokeWidth: 3
+						},
+						percentage: {
+							formatter: (value, context) => {
+								const num = typeof value === 'number' ? value : 0;
+								const total = sumNumericData(context.dataset.data as unknown[]);
+								const percentage =
+									total > 0 ? Math.round((num / total) * 100) : 0;
+								return `(${percentage}%)`;
+							},
+							font: (context) => {
+								const n = context.dataset.data?.length ?? 0;
+								const small = isSmallDoughnutSlice(context);
+								// Keep percentage at the original base size
+								const base = small ? 10 : n > 8 ? 11 : 12;
+								return {
+									size: base,
+									weight: 'bold' as const
+								};
+							},
+							color: (context) => {
+								if (isSmallDoughnutSlice(context)) return colors.legend;
+								const bg = Array.isArray(context.dataset.backgroundColor)
+									? context.dataset.backgroundColor[context.dataIndex]
+									: context.dataset.backgroundColor;
+								return contrastOnHex(
+									typeof bg === 'string' ? bg : '#0072B2',
+									isDarkMode()
+								);
+							},
+							textStrokeColor: (context) => {
+								if (isSmallDoughnutSlice(context)) {
+									return isDarkMode()
+										? 'rgba(0,0,0,0.75)'
+										: 'rgba(255,255,255,0.92)';
+								}
+								const bg = Array.isArray(context.dataset.backgroundColor)
+									? context.dataset.backgroundColor[context.dataIndex]
+									: context.dataset.backgroundColor;
+								const fg = contrastOnHex(
+									typeof bg === 'string' ? bg : '#0072B2',
+									isDarkMode()
+								);
+								return fg === '#f8f8f8'
+									? 'rgba(0,0,0,0.55)'
+									: 'rgba(255,255,255,0.75)';
+							},
+							textStrokeWidth: 3
+						}
+					}
 				}
 			}
 		};
