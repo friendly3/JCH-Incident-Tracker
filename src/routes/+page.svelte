@@ -309,14 +309,16 @@
 
 	function handleModalKeydownCapture(e: KeyboardEvent) {
 		if (e.key !== 'Escape') return;
-		const target = e.target;
-		// Nested custom time popover (portaled to body) owns Escape.
+		// Nested date/time pickers own Escape while open (portal mounted on body),
+		// regardless of focus target (field, icon, or panel). Host must not requestClose.
 		if (
-			target instanceof Element &&
-			(target.closest('[data-time-picker-portal]') || target.closest('[data-time-picker-panel]'))
+			typeof document !== 'undefined' &&
+			(document.querySelector('[data-time-picker-portal]') ||
+				document.querySelector('[data-date-picker-portal]'))
 		) {
 			return;
 		}
+		const target = e.target;
 		if (
 			target instanceof HTMLInputElement &&
 			(target.type === 'datetime-local' || target.type === 'date' || target.type === 'time')
@@ -332,7 +334,7 @@
 		if (mode !== 'list') {
 			e.preventDefault();
 			e.stopPropagation();
-			// requestClose also clears any open time popover state.
+			// requestClose also clears any open date/time popover state.
 			incidentFormRef?.requestClose();
 		}
 	}

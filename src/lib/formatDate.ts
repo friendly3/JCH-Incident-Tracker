@@ -13,21 +13,44 @@ const MONTH_ABBRS = [
 	'Dec'
 ] as const;
 
+/**
+ * True when `dateStr` is a real calendar day in `YYYY-MM-DD` form
+ * (rejects `2024-02-30`, `2024-13-01`, etc.).
+ */
+export function isValidDateOnly(dateStr: string | undefined | null): boolean {
+	if (!dateStr?.trim()) return false;
+	const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+	if (!match) return false;
+	const year = parseInt(match[1], 10);
+	const month = parseInt(match[2], 10);
+	const day = parseInt(match[3], 10);
+	if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+	const d = new Date(year, month - 1, day);
+	return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
+}
+
+/**
+ * Returns `YYYY-MM-DD` when the input starts with a valid calendar date; otherwise `''`.
+ * Stricter than a bare regex prefix — invalid calendar days normalize to empty.
+ */
+export function normalizeDateOnly(date: string | undefined | null): string {
+	if (!date?.trim()) return '';
+	const match = /^(\d{4}-\d{2}-\d{2})/.exec(date.trim());
+	if (!match) return '';
+	return isValidDateOnly(match[1]) ? match[1] : '';
+}
+
 function parseDate(dateStr: string): Date | null {
 	if (!dateStr) return null;
 
 	// Handle YYYY-MM-DD date-only strings safely (avoid UTC timezone shift)
-	const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+	const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
 	if (dateOnlyMatch) {
+		if (!isValidDateOnly(dateOnlyMatch[0])) return null;
 		const year = parseInt(dateOnlyMatch[1], 10);
 		const month = parseInt(dateOnlyMatch[2], 10);
 		const day = parseInt(dateOnlyMatch[3], 10);
-		if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-		const d = new Date(year, month - 1, day);
-		if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) {
-			return null;
-		}
-		return d;
+		return new Date(year, month - 1, day);
 	}
 
 	const d = new Date(dateStr);

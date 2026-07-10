@@ -1,7 +1,13 @@
 <script lang="ts">
 	import type { Incident, IncidentType, IncidentAction } from '$lib/data/incidents';
 	import type { Driver, TeamLeader } from '$lib/data/team';
-	import { formatDateTimeFields, normalizeTimeField } from '$lib/formatDate';
+	import {
+		formatDateTimeFields,
+		isValidDateOnly,
+		normalizeDateOnly,
+		normalizeTimeField
+	} from '$lib/formatDate';
+	import DatePickerPopover from '$lib/components/DatePickerPopover.svelte';
 	import TimePickerPopover from '$lib/components/TimePickerPopover.svelte';
 
 	interface Props {
@@ -35,7 +41,7 @@
 	const isEdit = $derived(!!incident);
 	let showConfirm = $state(false);
 	let submitError = $state<string | null>(null);
-	type SubmitErrorField = 'dateReceived' | 'type';
+	type SubmitErrorField = 'dateReceived' | 'dateResponse' | 'type';
 	let submitErrorField = $state<SubmitErrorField | null>(null);
 	const FK_EMPTY = '';
 
@@ -50,12 +56,6 @@
 
 	function fkInList(id: string | null, items: { id: string }[]): boolean {
 		return id != null && items.some((item) => item.id === id);
-	}
-
-	function normalizeDateOnly(date: string): string {
-		if (!date?.trim()) return '';
-		const match = /^(\d{4}-\d{2}-\d{2})/.exec(date.trim());
-		return match ? match[1] : date.trim();
 	}
 
 	function normalizeIncident(source: Incident): Incident {
@@ -121,10 +121,14 @@
 		emailSubject: string;
 	};
 
+	/**
+	 * Dirty-check snapshot: keep raw trimmed date text so partial/invalid free typing
+	 * (e.g. "abc", "2024-0") counts as unsaved. Strict normalizeDateOnly is for load/submit/apply only.
+	 */
 	function toSnapshot(value: Incident): FormSnapshot {
 		return {
 			source: value.source === 'import' ? 'import' : 'ui',
-			dateReceived: normalizeDateOnly(value.dateReceived),
+			dateReceived: value.dateReceived?.trim() ?? '',
 			time: normalizeTimeField(value.time),
 			sender: value.sender?.trim() ?? '',
 			teamLeaderId: value.teamLeaderId,
@@ -134,7 +138,7 @@
 			referenceText: value.referenceText?.trim() ?? '',
 			driverId: value.driverId,
 			response: value.response?.trim() ?? '',
-			dateResponse: normalizeDateOnly(value.dateResponse),
+			dateResponse: value.dateResponse?.trim() ?? '',
 			timeResponse: normalizeTimeField(value.timeResponse),
 			actionId: value.actionId,
 			emailSender: value.emailSender?.trim() ?? '',
@@ -171,9 +175,11 @@
 
 	const hasUnsavedChanges = $derived(computeHasUnsavedChanges());
 
-	/** Which custom time popover is open (null = closed). Declared early for requestClose/reset. */
+	/** Which custom time/date popover is open (null = closed). Declared early for requestClose/reset. */
 	type TimePickerField = 'time' | 'timeResponse';
+	type DatePickerField = 'dateReceived' | 'dateResponse';
 	let openTimePickerField = $state<TimePickerField | null>(null);
+	let openDatePickerField = $state<DatePickerField | null>(null);
 
 	/** Synchronous dirty check for parent dismiss handlers (backdrop/Escape). */
 	export function getHasUnsavedChanges(): boolean {
@@ -182,8 +188,9 @@
 
 	/** Report dirty state to parent for close/discard flow. */
 	export function requestClose(): void {
-		// Nested time popover must not stay logically open under discard/close.
+		// Nested pickers must not stay logically open under discard/close.
 		openTimePickerField = null;
+		openDatePickerField = null;
 		onCancel(computeHasUnsavedChanges());
 	}
 
@@ -198,6 +205,7 @@
 		submitError = null;
 		submitErrorField = null;
 		openTimePickerField = null;
+		openDatePickerField = null;
 		const source = incident;
 		const initial = source ? normalizeIncident(source) : emptyIncident();
 		form = initial;
@@ -209,9 +217,23 @@
 		submitErrorField = null;
 
 		const typeId = normalizeFkId(form.typeId);
+		const dateReceived = normalizeDateOnly(form.dateReceived);
+		const dateResponse = normalizeDateOnly(form.dateResponse);
+
 		if (!form.dateReceived?.trim()) {
 			submitError = 'Date Received is required.';
 			submitErrorField = 'dateReceived';
+			return;
+		}
+		if (!dateReceived) {
+			submitError = 'Date Received must be a valid date (yyyy-mm-dd).';
+			submitErrorField = 'dateReceived';
+			return;
+		}
+		// Optional responded date: empty is fine; non-empty must be a real calendar day.
+		if (form.dateResponse?.trim() && !dateResponse) {
+			submitError = 'Responded date must be a valid date (yyyy-mm-dd).';
+			submitErrorField = 'dateResponse';
 			return;
 		}
 		if (!typeId) {
@@ -220,9 +242,15 @@
 			return;
 		}
 
+		// Persist normalized values so free-typed prefixes become clean YYYY-MM-DD.
+		form.dateReceived = dateReceived;
+		form.dateResponse = dateResponse;
+
 		const payload: Incident = {
 			...form,
 			source: form.source === 'import' ? 'import' : 'ui',
+			dateReceived,
+			dateResponse,
 			typeId,
 			driverId: normalizeFkId(form.driverId),
 			teamLeaderId: normalizeFkId(form.teamLeaderId),
@@ -246,82 +274,90 @@
 	const inputClass =
 		'w-full rounded-md border border-warm-200 bg-white px-3 py-2 text-sm text-warm-700 input-focus dark:bg-warm-200';
 	/**
-	 * Invisible native date control overlaid on a facade so browser chrome
-	 * (left/inline calendar glyph) never paints. Only the custom right icon shows.
+	 * Text date field for typed YYYY-MM-DD entry. No native date picker chrome —
+	 * the calendar icon opens DatePickerPopover (warm custom UI). Field click keeps caret for typing.
 	 */
-	const nativeDateClass =
-		'native-datetime absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0';
-	/** Visible shell under the transparent date input (single calendar icon is the button). */
-	const dateFacadeClass =
-		'form-field-surface pointer-events-none flex min-h-[2.375rem] w-full items-center rounded-md border border-warm-200 bg-white px-3 py-2 pr-12 text-sm text-warm-700 dark:bg-warm-200';
+	const dateTextClass =
+		'form-field-surface input-focus relative w-full min-h-[2.375rem] rounded-md border border-warm-200 bg-white px-3 py-2 pr-10 text-sm text-warm-700 dark:bg-warm-200';
 	/**
 	 * Native time control for typed HH:mm entry. No full-field webkit indicator —
 	 * the clock icon opens TimePickerPopover (reliable custom UI).
 	 */
 	const nativeTimeClass =
 		'native-time form-field-surface input-focus relative w-full min-h-[2.375rem] rounded-md border border-warm-200 bg-white px-3 py-2 pr-10 text-sm text-warm-700 dark:bg-warm-200';
-	/** Clickable icon button that opens the native date picker or custom time popover. */
+	/** Clickable icon button that opens the custom date or time popover. */
 	const dateTimeIconBtnClass =
 		'absolute right-1 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md border border-warm-200 bg-white text-warm-600 shadow-sm hover:bg-warm-50 hover:text-warm-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:border-warm-300 dark:bg-warm-200 dark:text-warm-800 dark:hover:bg-warm-300';
 	const dateTimeControlClass = 'flex flex-col gap-2 sm:flex-row sm:items-stretch';
 	const timeFieldWrapClass = 'relative w-full sm:w-[9.5rem] sm:shrink-0';
-	/** focus-within ring when the transparent date input is keyboard-focused */
-	const dateFieldWrapClass = 'relative min-w-0 flex-1 rounded-md input-focus-within';
+	const dateFieldWrapClass = 'relative min-w-0 flex-1';
+
+	const datePickerDialogId = {
+		dateReceived: 'receivedAt-date-picker-dialog',
+		dateResponse: 'respondedAt-date-picker-dialog'
+	} as const;
 
 	const timePickerDialogId = {
 		time: 'receivedAt-time-picker-dialog',
 		timeResponse: 'respondedAt-time-picker-dialog'
 	} as const;
 
-	/** Anchor wraps for positioning TimePickerPopover under each time field. */
+	/** Anchor wraps for positioning date/time popovers under each field. */
+	let dateReceivedWrapEl = $state<HTMLDivElement | undefined>(undefined);
+	let dateResponseWrapEl = $state<HTMLDivElement | undefined>(undefined);
 	let timeReceivedWrapEl = $state<HTMLDivElement | undefined>(undefined);
 	let timeResponseWrapEl = $state<HTMLDivElement | undefined>(undefined);
 
-	/** Open the OS/browser date picker for a native date input. */
-	function openPickerFor(input: HTMLInputElement | null | undefined) {
-		if (!input || input.disabled) return;
-		try {
-			input.focus({ preventScroll: true });
-			if (typeof input.showPicker === 'function') {
-				input.showPicker();
-				return;
-			}
-		} catch {
-			// NotAllowedError / unsupported on this browser/platform.
-		}
-		// Last resort: synthetic click can open the picker on some engines.
-		try {
-			input.click();
-		} catch {
-			/* ignore */
-		}
+	function openDatePicker(field: DatePickerField, event?: Event) {
+		event?.preventDefault();
+		event?.stopPropagation();
+		openTimePickerField = null;
+		openDatePickerField = field;
 	}
 
-	function openNativePicker(event: Event) {
-		const input = event.currentTarget;
-		if (input instanceof HTMLInputElement) openPickerFor(input);
+	function toggleDatePicker(field: DatePickerField, event?: Event) {
+		event?.preventDefault();
+		event?.stopPropagation();
+		openTimePickerField = null;
+		openDatePickerField = openDatePickerField === field ? null : field;
 	}
 
-	/** Date calendar icon: open native date picker for sibling input. */
-	function openDatePickerFromButton(event: MouseEvent) {
-		event.preventDefault();
-		event.stopPropagation();
-		const btn = event.currentTarget;
-		if (!(btn instanceof HTMLElement)) return;
-		const wrap = btn.closest('[data-datetime-wrap]');
-		const input = wrap?.querySelector('input[type="date"]');
-		if (input instanceof HTMLInputElement) openPickerFor(input);
+	function closeDatePicker() {
+		openDatePickerField = null;
+	}
+
+	/** Apply chosen YYYY-MM-DD and close — single close ownership (parent of popover). */
+	function applyDatePicker(field: DatePickerField, date: string) {
+		const normalized = normalizeDateOnly(date);
+		if (!normalized) return;
+		if (field === 'dateReceived') form.dateReceived = normalized;
+		else form.dateResponse = normalized;
+		if (submitErrorField === field) {
+			submitError = null;
+			submitErrorField = null;
+		}
+		openDatePickerField = null;
+	}
+
+	/** Alt+ArrowDown opens the custom calendar without stealing caret on plain click. */
+	function onDateTextKeydown(field: DatePickerField, event: KeyboardEvent) {
+		if (event.key === 'ArrowDown' && event.altKey) {
+			event.preventDefault();
+			openDatePicker(field, event);
+		}
 	}
 
 	function openTimePicker(field: TimePickerField, event?: Event) {
 		event?.preventDefault();
 		event?.stopPropagation();
+		openDatePickerField = null;
 		openTimePickerField = field;
 	}
 
 	function toggleTimePicker(field: TimePickerField, event?: Event) {
 		event?.preventDefault();
 		event?.stopPropagation();
+		openDatePickerField = null;
 		openTimePickerField = openTimePickerField === field ? null : field;
 	}
 
@@ -337,11 +373,59 @@
 		openTimePickerField = null;
 	}
 
+	/**
+	 * Normalize free-typed date text on blur.
+	 * Empty → clear; valid calendar YYYY-MM-DD → normalize; invalid → keep text + field error.
+	 */
+	function onDateTextBlur(field: DatePickerField) {
+		// Do not validate while focus is moving into the open popover for this field.
+		if (openDatePickerField === field) return;
+
+		const raw = field === 'dateReceived' ? form.dateReceived : form.dateResponse;
+		const trimmed = raw?.trim() ?? '';
+		const label = field === 'dateReceived' ? 'Date Received' : 'Responded date';
+
+		if (!trimmed) {
+			if (field === 'dateReceived') form.dateReceived = '';
+			else form.dateResponse = '';
+			if (submitErrorField === field) {
+				submitError = null;
+				submitErrorField = null;
+			}
+			return;
+		}
+
+		const normalized = normalizeDateOnly(trimmed);
+		if (normalized) {
+			if (field === 'dateReceived') form.dateReceived = normalized;
+			else form.dateResponse = normalized;
+			if (submitErrorField === field) {
+				submitError = null;
+				submitErrorField = null;
+			}
+			return;
+		}
+
+		// Leave invalid text for the user to fix; flag the field immediately.
+		if (field === 'dateReceived') form.dateReceived = trimmed;
+		else form.dateResponse = trimmed;
+		submitError = `${label} must be a valid date (yyyy-mm-dd).`;
+		submitErrorField = field;
+	}
+
 	const receivedAtDesc = $derived(
-		formatDateTimeFields(form.dateReceived, form.time) || 'Date and time not set'
+		isValidDateOnly(form.dateReceived)
+			? formatDateTimeFields(form.dateReceived, form.time) || 'Date and time not set'
+			: form.dateReceived?.trim()
+				? 'Invalid date'
+				: 'Date and time not set'
 	);
 	const respondedAtDesc = $derived(
-		formatDateTimeFields(form.dateResponse, form.timeResponse) || 'Date and time not set'
+		isValidDateOnly(form.dateResponse)
+			? formatDateTimeFields(form.dateResponse, form.timeResponse) || 'Date and time not set'
+			: form.dateResponse?.trim()
+				? 'Invalid date'
+				: 'Date and time not set'
 	);
 	const emailFieldsEditable = $derived((form.source ?? 'ui') === 'ui');
 	const readonlyEmailClass = `${inputClass} bg-warm-100 text-warm-400 cursor-default select-all dark:bg-warm-300`;
@@ -353,15 +437,24 @@
 			? 'receivedAt-desc incident-submit-error'
 			: 'receivedAt-desc'
 	);
+	const respondedAtDescribedBy = $derived(
+		submitErrorField === 'dateResponse'
+			? 'respondedAt-desc incident-submit-error'
+			: 'respondedAt-desc'
+	);
 </script>
 
-{#snippet dateTimeCalendarButton()}
+{#snippet dateTimeCalendarButton(field: DatePickerField, label: string)}
 	<button
 		type="button"
-		tabindex="-1"
 		class={dateTimeIconBtnClass}
-		aria-label="Open date picker"
-		onclick={openDatePickerFromButton}
+		aria-label={label}
+		aria-haspopup="dialog"
+		aria-expanded={openDatePickerField === field}
+		aria-controls={datePickerDialogId[field]}
+		data-date-picker-trigger
+		data-date-field={field}
+		onclick={(e) => toggleDatePicker(field, e)}
 	>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
@@ -481,23 +574,39 @@
 					<div class="sn-field-control">
 						<span id="receivedAt-desc" class="sr-only">{receivedAtDesc}</span>
 						<div class={dateTimeControlClass} role="group" aria-labelledby="receivedAt-label">
-							<div class={dateFieldWrapClass} data-datetime-wrap>
-								<div class={dateFacadeClass} aria-hidden="true">
-									{form.dateReceived || 'yyyy-mm-dd'}
-								</div>
+							<div
+								class={dateFieldWrapClass}
+								data-datetime-wrap
+								bind:this={dateReceivedWrapEl}
+							>
 								<input
 									id="receivedAt"
-									type="date"
+									type="text"
+									placeholder="yyyy-mm-dd"
+									autocomplete="off"
+									spellcheck="false"
 									bind:value={form.dateReceived}
 									aria-labelledby="receivedAt-label receivedAt-date-hint"
 									aria-describedby={receivedAtDescribedBy}
 									aria-required="true"
 									aria-invalid={submitErrorField === 'dateReceived' ? 'true' : undefined}
-									class={nativeDateClass}
-									onclick={openNativePicker}
-									onpointerdown={openNativePicker}
+									class={dateTextClass}
+									onkeydown={(e) => onDateTextKeydown('dateReceived', e)}
+									onblur={() => onDateTextBlur('dateReceived')}
 								/>
-								{@render dateTimeCalendarButton()}
+								{@render dateTimeCalendarButton(
+									'dateReceived',
+									'Open date picker for date received'
+								)}
+								<DatePickerPopover
+									open={openDatePickerField === 'dateReceived'}
+									value={form.dateReceived}
+									title="Date received"
+									idPrefix="receivedAt-date-picker"
+									anchorEl={dateReceivedWrapEl}
+									onApply={(d) => applyDatePicker('dateReceived', d)}
+									onClose={closeDatePicker}
+								/>
 							</div>
 							<span id="receivedAt-date-hint" class="sr-only">Date</span>
 							<div
@@ -638,21 +747,38 @@
 					<div class="sn-field-control">
 						<span id="respondedAt-desc" class="sr-only">{respondedAtDesc}</span>
 						<div class={dateTimeControlClass} role="group" aria-labelledby="respondedAt-label">
-							<div class={dateFieldWrapClass} data-datetime-wrap>
-								<div class={dateFacadeClass} aria-hidden="true">
-									{form.dateResponse || 'yyyy-mm-dd'}
-								</div>
+							<div
+								class={dateFieldWrapClass}
+								data-datetime-wrap
+								bind:this={dateResponseWrapEl}
+							>
 								<input
 									id="respondedAt"
-									type="date"
+									type="text"
+									placeholder="yyyy-mm-dd"
+									autocomplete="off"
+									spellcheck="false"
 									bind:value={form.dateResponse}
 									aria-labelledby="respondedAt-label respondedAt-date-hint"
-									aria-describedby="respondedAt-desc"
-									class={nativeDateClass}
-									onclick={openNativePicker}
-									onpointerdown={openNativePicker}
+									aria-describedby={respondedAtDescribedBy}
+									aria-invalid={submitErrorField === 'dateResponse' ? 'true' : undefined}
+									class={dateTextClass}
+									onkeydown={(e) => onDateTextKeydown('dateResponse', e)}
+									onblur={() => onDateTextBlur('dateResponse')}
 								/>
-								{@render dateTimeCalendarButton()}
+								{@render dateTimeCalendarButton(
+									'dateResponse',
+									'Open date picker for responded'
+								)}
+								<DatePickerPopover
+									open={openDatePickerField === 'dateResponse'}
+									value={form.dateResponse}
+									title="Date responded"
+									idPrefix="respondedAt-date-picker"
+									anchorEl={dateResponseWrapEl}
+									onApply={(d) => applyDatePicker('dateResponse', d)}
+									onClose={closeDatePicker}
+								/>
 							</div>
 							<span id="respondedAt-date-hint" class="sr-only">Date</span>
 							<div
