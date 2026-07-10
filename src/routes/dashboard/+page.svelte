@@ -140,10 +140,45 @@
 		return rgbToHex(r, g, b);
 	}
 
+	/** Always-visible counts on line points; hide zeros to reduce clutter. */
+	function buildLineDataLabels(
+		colors: ReturnType<typeof getChartTheme>,
+		opts?: { fontSize?: number; multiSeries?: boolean }
+	) {
+		const fontSize = opts?.fontSize ?? 11;
+		const multiSeries = opts?.multiSeries ?? false;
+		return {
+			// Only label positive points (0 is noise on sparse series)
+			display: (context: { dataset: { data: unknown[] }; dataIndex: number }) => {
+				const raw = context.dataset.data[context.dataIndex];
+				return typeof raw === 'number' && raw > 0;
+			},
+			align: 'top' as const,
+			anchor: 'end' as const,
+			offset: multiSeries ? 2 : 4,
+			clamp: true,
+			clip: false,
+			formatter: (value: unknown) =>
+				typeof value === 'number' && Number.isFinite(value) ? String(value) : '',
+			color: colors.legend,
+			font: {
+				size: fontSize,
+				weight: 'bold' as const
+			},
+			// Halo so labels stay readable on lines/grid
+			textStrokeColor: isDarkMode() ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.9)',
+			textStrokeWidth: 3
+		};
+	}
+
 	function buildChartOptions(colors: ReturnType<typeof getChartTheme>): ChartOptions<'line'> {
 		return {
 			responsive: true,
 			maintainAspectRatio: false,
+			layout: {
+				// Room for labels above points
+				padding: { top: 12, right: 8, left: 4, bottom: 0 }
+			},
 			plugins: {
 				// Single-series chart — legend is redundant
 				legend: {
@@ -162,10 +197,7 @@
 						label: (context) => `${context.parsed.y} incidents`
 					}
 				},
-				// Global datalabels plugin is for pie charts only
-				datalabels: {
-					display: false
-				}
+				datalabels: buildLineDataLabels(colors, { fontSize: 12 })
 			},
 			scales: {
 				y: {
@@ -199,6 +231,9 @@
 		return {
 			responsive: true,
 			maintainAspectRatio: false,
+			layout: {
+				padding: { top: 14, right: 8, left: 4, bottom: 0 }
+			},
 			interaction: {
 				mode: 'index',
 				intersect: false
@@ -232,9 +267,8 @@
 						}
 					}
 				},
-				datalabels: {
-					display: false
-				}
+				// Slightly smaller labels when many series share the canvas
+				datalabels: buildLineDataLabels(colors, { fontSize: 10, multiSeries: true })
 			},
 			scales: {
 				y: {
@@ -279,6 +313,9 @@
 		if (chart.options?.plugins?.legend?.labels) {
 			chart.options.plugins.legend.labels.color = colors.legend;
 		}
+		if (chart.options?.plugins?.datalabels) {
+			Object.assign(chart.options.plugins.datalabels, buildLineDataLabels(colors, { fontSize: 12 }));
+		}
 		if (chart.options?.scales?.y?.ticks) {
 			chart.options.scales.y.ticks.color = colors.ticks;
 		}
@@ -313,6 +350,12 @@
 		});
 		if (chart.options?.plugins?.legend?.labels) {
 			chart.options.plugins.legend.labels.color = colors.legend;
+		}
+		if (chart.options?.plugins?.datalabels) {
+			Object.assign(
+				chart.options.plugins.datalabels,
+				buildLineDataLabels(colors, { fontSize: 10, multiSeries: true })
+			);
 		}
 		if (chart.options?.scales?.y?.ticks) {
 			chart.options.scales.y.ticks.color = colors.ticks;
