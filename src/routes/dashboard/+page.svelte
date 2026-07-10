@@ -956,7 +956,10 @@
 		chart.update('none');
 	}
 
-	/** Horizontal bar options for Incidents by Driver (same layout as action status). */
+	/**
+	 * Horizontal stacked bar: drivers on Y, segments = incident type.
+	 * Legend is HTML (footer) so plot height stays equal with siblings.
+	 */
 	function buildDriverBarOptions(
 		colors: ReturnType<typeof getChartTheme>
 	): ChartOptions<'bar'> {
@@ -965,7 +968,7 @@
 			maintainAspectRatio: false,
 			indexAxis: 'y',
 			layout: {
-				padding: { top: 2, right: 28, left: 2, bottom: 2 }
+				padding: { top: 2, right: 20, left: 2, bottom: 2 }
 			},
 			plugins: {
 				legend: { display: false },
@@ -980,34 +983,51 @@
 					cornerRadius: 8,
 					displayColors: true,
 					callbacks: {
+						// Title = driver; each line = type + count
+						title: (items) => {
+							const first = items[0];
+							return first?.label ? String(first.label) : '';
+						},
 						label: (context) => {
 							const value = context.parsed.x ?? 0;
-							return `${value} ${value === 1 ? 'incident' : 'incidents'}`;
+							if (value <= 0) return '';
+							const typeName = context.dataset.label ?? 'Type';
+							return `${typeName}: ${value}`;
+						},
+						footer: (items) => {
+							const total = items.reduce((sum, item) => {
+								const v = item.parsed.x ?? 0;
+								return sum + (typeof v === 'number' ? v : 0);
+							}, 0);
+							return total > 0 ? `Total: ${total}` : '';
 						}
 					}
 				},
 				datalabels: {
-					anchor: 'end',
-					align: 'right',
-					offset: 3,
-					clamp: false,
-					clip: false,
+					// Segment counts (hide zeros / tiny segments)
+					anchor: 'center',
+					align: 'center',
+					clamp: true,
+					clip: true,
 					display: (context) => {
 						const raw = context.dataset.data[context.dataIndex];
-						return typeof raw === 'number' && raw > 0;
+						return typeof raw === 'number' && raw >= 1;
 					},
 					formatter: (value: unknown) =>
-						typeof value === 'number' && Number.isFinite(value) ? String(value) : '',
-					color: colors.legend,
-					font: { size: 10, weight: 'bold' },
-					textStrokeColor: isDarkMode() ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.9)',
+						typeof value === 'number' && Number.isFinite(value) && value > 0
+							? String(value)
+							: '',
+					color: '#ffffff',
+					font: { size: 9, weight: 'bold' },
+					textStrokeColor: 'rgba(0,0,0,0.45)',
 					textStrokeWidth: 2
 				}
 			},
 			scales: {
 				x: {
+					stacked: true,
 					beginAtZero: true,
-					grace: '10%',
+					grace: '8%',
 					ticks: {
 						color: colors.ticks,
 						stepSize: 1,
@@ -1017,6 +1037,7 @@
 					grid: { color: colors.grid }
 				},
 				y: {
+					stacked: true,
 					ticks: {
 						color: colors.ticks,
 						font: { size: 10, weight: 600 },
@@ -1031,28 +1052,32 @@
 	function applyDriverBarTheme(chart: ChartJS<'bar'>) {
 		const colors = getChartTheme(theme.isDark);
 		const isDark = theme.isDark;
-		const dataset = chart.data.datasets[0];
-		if (!dataset) return;
 
-		const labels = (chart.data.labels ?? []).map((l) => String(l));
-		const solid = labels.map((label, index) => getChartCategoryColor(label, index, isDark));
-		dataset.backgroundColor = solid.map((c) => withAlpha(c, 0.75));
-		dataset.borderColor = solid;
-		dataset.borderWidth = 1.5;
-		dataset.borderRadius = 3;
-		dataset.barPercentage = 0.8;
-		dataset.categoryPercentage = 0.85;
+		chart.data.datasets.forEach((dataset, index) => {
+			const typeLabel = String(dataset.label ?? '');
+			const solid = getChartCategoryColor(typeLabel, index, isDark);
+			dataset.backgroundColor = withAlpha(solid, 0.82);
+			dataset.borderColor = solid;
+			dataset.borderWidth = 1;
+			dataset.borderRadius = 2;
+			dataset.barPercentage = 0.8;
+			dataset.categoryPercentage = 0.85;
+			// Ensure stacking key is stable across updates
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			(dataset as any).stack = 'types';
+		});
 
 		if (chart.options?.plugins?.datalabels) {
-			chart.options.plugins.datalabels.color = colors.legend;
-			chart.options.plugins.datalabels.textStrokeColor = isDark
-				? 'rgba(0,0,0,0.75)'
-				: 'rgba(255,255,255,0.9)';
+			chart.options.plugins.datalabels.color = '#ffffff';
+			chart.options.plugins.datalabels.textStrokeColor = 'rgba(0,0,0,0.45)';
 		}
 		if (chart.options?.plugins?.tooltip) {
 			chart.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
 			chart.options.plugins.tooltip.titleColor = colors.tooltipTitle;
 			chart.options.plugins.tooltip.bodyColor = colors.tooltipTitle;
+		}
+		if (chart.options?.plugins?.legend) {
+			chart.options.plugins.legend.display = false;
 		}
 		if (chart.options?.scales?.x?.ticks) {
 			chart.options.scales.x.ticks.color = colors.ticks;
@@ -1062,6 +1087,13 @@
 		}
 		if (chart.options?.scales?.y?.ticks) {
 			chart.options.scales.y.ticks.color = colors.ticks;
+		}
+		// Keep stacks on after theme refresh
+		if (chart.options?.scales?.x) {
+			chart.options.scales.x.stacked = true;
+		}
+		if (chart.options?.scales?.y) {
+			chart.options.scales.y.stacked = true;
 		}
 		chart.update('none');
 	}
@@ -1251,8 +1283,6 @@
 		return `Incidents by type over time (${timeRangeLabel}) for ${dateKeys.length} days. Types: ${typeNames}${more}.`;
 	});
 
-	const incidentsByDriver = $derived.by(() => aggregateIncidentsBy('driver'));
-
 	/** Counts by action status (New, Resolved, LIT, …) — sorted high → low. */
 	const incidentsByActionStatus = $derived.by(() => {
 		const grouped = new Map<string, { label: string; count: number }>();
@@ -1285,20 +1315,77 @@
 		buildChartAriaLabel('Incidents by Action Status', incidentsByActionStatus)
 	);
 
-	const driverBarData = $derived.by(() => ({
-		labels: incidentsByDriver.map(([label]) => label),
-		datasets: [
-			{
-				label: 'Incidents',
-				data: incidentsByDriver.map(([, count]) => count),
-				borderWidth: 1.5
+	/**
+	 * Stacked horizontal bars: one row per driver, segments = incident type.
+	 * Drivers ordered by total count (desc); types ordered by global volume.
+	 */
+	const driverStackedBarData = $derived.by(() => {
+		const dark = theme.isDark;
+		type DriverRow = { label: string; types: Map<string, number>; total: number };
+		const byDriver = new Map<string, DriverRow>();
+		const typeMeta = new Map<string, string>();
+		const typeTotals = new Map<string, number>();
+
+		for (const incident of incidents) {
+			const d = normalizeAggregationKey(incident.driver, 'Unassigned');
+			const t = normalizeAggregationKey(incident.type, 'Unspecified');
+			typeMeta.set(t.key, t.label);
+			typeTotals.set(t.key, (typeTotals.get(t.key) ?? 0) + 1);
+
+			let row = byDriver.get(d.key);
+			if (!row) {
+				row = { label: d.label, types: new Map(), total: 0 };
+				byDriver.set(d.key, row);
 			}
-		]
-	}));
+			row.types.set(t.key, (row.types.get(t.key) ?? 0) + 1);
+			row.total += 1;
+		}
 
-	const hasDriverData = $derived(incidentsByDriver.length > 0);
+		const drivers = [...byDriver.values()].sort((a, b) => b.total - a.total);
+		const typeKeys = [...typeMeta.keys()].sort(
+			(a, b) => (typeTotals.get(b) ?? 0) - (typeTotals.get(a) ?? 0)
+		);
 
-	const driverChartAriaLabel = $derived(buildChartAriaLabel('Incidents by Driver', incidentsByDriver));
+		const labels = drivers.map((d) => d.label);
+		const datasets = typeKeys.map((typeKey, index) => {
+			const typeLabel = typeMeta.get(typeKey) ?? typeKey;
+			const solid = getChartCategoryColor(typeLabel, index, dark);
+			return {
+				label: typeLabel,
+				data: drivers.map((d) => d.types.get(typeKey) ?? 0),
+				backgroundColor: withAlpha(solid, 0.82),
+				borderColor: solid,
+				borderWidth: 1,
+				borderRadius: 2,
+				stack: 'types',
+				barPercentage: 0.8,
+				categoryPercentage: 0.85
+			};
+		});
+
+		return {
+			labels,
+			datasets,
+			/** For accessible table / HTML legend */
+			typeLabels: typeKeys.map((k) => typeMeta.get(k) ?? k),
+			driverRows: drivers.map((d) => ({
+				label: d.label,
+				total: d.total,
+				byType: typeKeys.map((k) => d.types.get(k) ?? 0)
+			}))
+		};
+	});
+
+	const hasDriverData = $derived(driverStackedBarData.labels.length > 0);
+
+	const driverChartAriaLabel = $derived.by(() => {
+		const { labels, datasets } = driverStackedBarData;
+		if (labels.length === 0) return 'Incidents by Driver: no incident data available';
+		const typeNames = datasets.map((d) => d.label).slice(0, 6).join(', ');
+		const more =
+			datasets.length > 6 ? `, plus ${datasets.length - 6} more types` : '';
+		return `Incidents by driver, stacked by type. ${labels.length} drivers. Types: ${typeNames}${more}.`;
+	});
 
 	onMount(() => {
 		resizeHandler = () => {
@@ -1389,7 +1476,10 @@
 		if (!canvas || !hasDriverData) return;
 
 		const colors = untrack(() => getChartTheme(theme.isDark));
-		const initialData = untrack(() => driverBarData);
+		const initialData = untrack(() => ({
+			labels: driverStackedBarData.labels,
+			datasets: driverStackedBarData.datasets.map((ds) => ({ ...ds }))
+		}));
 		const instance = new Chart(canvas, {
 			type: 'bar',
 			data: initialData,
@@ -1433,10 +1523,11 @@
 
 	$effect(() => {
 		const instance = driverChart;
-		const dataset = instance?.data.datasets[0];
-		if (!instance || !dataset) return;
-		instance.data.labels = driverBarData.labels;
-		dataset.data = driverBarData.datasets[0].data;
+		if (!instance) return;
+		const next = driverStackedBarData;
+		instance.data.labels = next.labels;
+		// Rebuild stacked type series when type set changes
+		instance.data.datasets = next.datasets.map((ds) => ({ ...ds }));
 		applyDriverBarTheme(instance);
 	});
 
@@ -1814,38 +1905,63 @@
 							<h2 class="text-sm font-semibold text-warm-800" id="driver-chart-title">
 								Incidents by Driver
 							</h2>
-							<p class="dashboard-chart-meta text-xs text-warm-500">By driver</p>
+							<p class="dashboard-chart-meta text-xs text-warm-500">
+								Stacked by incident type
+							</p>
 						</div>
 						<p id="driver-chart-summary" class="sr-only">{driverChartAriaLabel}</p>
 						<div class="dashboard-chart-plot relative w-full">
-							{#if incidentsByDriver.length === 0}
+							{#if !hasDriverData}
 								<div class="flex h-full items-center justify-center">
 									<p class="text-sm text-warm-500">No incident data available.</p>
 								</div>
 							{/if}
 							<canvas
 								bind:this={driverCanvas}
-								class={incidentsByDriver.length === 0 ? 'hidden' : 'block h-full w-full'}
+								class={!hasDriverData ? 'hidden' : 'block h-full w-full'}
 								aria-hidden="true"
 							></canvas>
 							<table class="sr-only" aria-labelledby="driver-chart-title">
 								<thead>
 									<tr>
 										<th scope="col">Driver</th>
-										<th scope="col">Incidents</th>
+										{#each driverStackedBarData.typeLabels as typeLabel (typeLabel)}
+											<th scope="col">{typeLabel}</th>
+										{/each}
+										<th scope="col">Total</th>
 									</tr>
 								</thead>
 								<tbody>
-									{#each incidentsByDriver as [label, count] (label)}
+									{#each driverStackedBarData.driverRows as row (row.label)}
 										<tr>
-											<td>{label}</td>
-											<td>{count}</td>
+											<th scope="row">{row.label}</th>
+											{#each row.byType as count, i (`${row.label}-${driverStackedBarData.typeLabels[i] ?? i}`)}
+												<td>{count}</td>
+											{/each}
+											<td>{row.total}</td>
 										</tr>
 									{/each}
 								</tbody>
 							</table>
 						</div>
-						<div class="dashboard-chart-footer" aria-hidden="true"></div>
+						<div class="dashboard-chart-footer">
+							{#if hasDriverData}
+								<ul class="flex flex-wrap gap-x-2.5 gap-y-1" aria-label="Incident type legend">
+									{#each driverStackedBarData.datasets as ds (ds.label)}
+										<li class="flex items-center gap-1 text-[10px] leading-tight text-warm-600">
+											<span
+												class="inline-block h-2 w-2 shrink-0 rounded-full"
+												style="background: {typeof ds.borderColor === 'string'
+													? ds.borderColor
+													: '#666'}"
+												aria-hidden="true"
+											></span>
+											<span class="truncate">{ds.label}</span>
+										</li>
+									{/each}
+								</ul>
+							{/if}
+						</div>
 					</section>
 				</div>
 
