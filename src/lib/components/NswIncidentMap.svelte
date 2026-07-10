@@ -645,7 +645,7 @@
 	</div>
 
 	<div
-		class="relative min-h-[20rem] flex-1 sm:min-h-[26rem] {expanded
+		class="relative min-h-[25rem] flex-1 sm:min-h-[32.5rem] {expanded
 			? 'map-chart-body--expanded'
 			: ''}"
 	>
@@ -737,7 +737,7 @@
 <!-- Placeholder keeps dashboard grid height while map is expanded -->
 {#if expanded}
 	<div
-		class="pointer-events-none h-full min-h-[20rem] rounded-lg border border-dashed border-warm-200 bg-warm-50/80 sm:min-h-[26rem]"
+		class="pointer-events-none h-full min-h-[25rem] rounded-lg border border-dashed border-warm-200 bg-warm-50/80 sm:min-h-[32.5rem]"
 		aria-hidden="true"
 	>
 		<div class="flex h-full min-h-[inherit] items-center justify-center p-4 text-center text-xs text-warm-400">

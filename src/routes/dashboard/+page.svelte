@@ -1720,8 +1720,8 @@
 					</section>
 				</div>
 
-				<!-- NSW map full width -->
-				<div class="mt-2 min-h-0 min-w-0">
+				<!-- NSW map: full row, taller panel -->
+				<div class="mt-2 w-full min-w-0 col-span-full">
 					<NswIncidentMap {incidents} />
 				</div>
 			</div>
