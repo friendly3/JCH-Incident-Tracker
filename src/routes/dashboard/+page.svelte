@@ -968,7 +968,8 @@
 			maintainAspectRatio: false,
 			indexAxis: 'y',
 			layout: {
-				padding: { top: 2, right: 20, left: 2, bottom: 2 }
+				// Extra right pad so external total labels are not clipped
+				padding: { top: 2, right: 32, left: 2, bottom: 2 }
 			},
 			plugins: {
 				legend: { display: false },
@@ -1003,31 +1004,83 @@
 						}
 					}
 				},
+				// Dual labels via chartjs-plugin-datalabels v2 `labels` map:
+				// - segment: type count inside each stack slice
+				// - total: driver total outside the right end of the full bar
 				datalabels: {
-					// Segment counts (hide zeros / tiny segments)
-					anchor: 'center',
-					align: 'center',
-					clamp: true,
-					clip: true,
-					display: (context) => {
-						const raw = context.dataset.data[context.dataIndex];
-						return typeof raw === 'number' && raw >= 1;
-					},
-					formatter: (value: unknown) =>
-						typeof value === 'number' && Number.isFinite(value) && value > 0
-							? String(value)
-							: '',
-					color: '#ffffff',
-					font: { size: 9, weight: 'bold' },
-					textStrokeColor: 'rgba(0,0,0,0.45)',
-					textStrokeWidth: 2
+					labels: {
+						segment: {
+							anchor: 'center',
+							align: 'center',
+							clamp: true,
+							clip: true,
+							display: (context: { dataset: { data: unknown[] }; dataIndex: number }) => {
+								const raw = context.dataset.data[context.dataIndex];
+								return typeof raw === 'number' && raw >= 1;
+							},
+							formatter: (value: unknown) =>
+								typeof value === 'number' && Number.isFinite(value) && value > 0
+									? String(value)
+									: '',
+							color: '#ffffff',
+							font: { size: 9, weight: 'bold' as const },
+							textStrokeColor: 'rgba(0,0,0,0.45)',
+							textStrokeWidth: 2
+						},
+						total: {
+							// Only the topmost stack dataset draws the end total (once per bar)
+							display: (context: {
+								datasetIndex: number;
+								chart: { data: { datasets: unknown[] } };
+								dataset: { data: unknown[] };
+								dataIndex: number;
+							}) => {
+								const last = context.chart.data.datasets.length - 1;
+								if (context.datasetIndex !== last) return false;
+								// Sum stack for this driver; hide if zero
+								let sum = 0;
+								for (const ds of context.chart.data.datasets as { data: unknown[] }[]) {
+									const v = ds.data[context.dataIndex];
+									if (typeof v === 'number' && Number.isFinite(v)) sum += v;
+								}
+								return sum > 0;
+							},
+							formatter: (
+								_value: unknown,
+								context: {
+									dataIndex: number;
+									chart: { data: { datasets: { data: unknown[] }[] } };
+								}
+							) => {
+								let sum = 0;
+								for (const ds of context.chart.data.datasets) {
+									const v = ds.data[context.dataIndex];
+									if (typeof v === 'number' && Number.isFinite(v)) sum += v;
+								}
+								return sum > 0 ? String(sum) : '';
+							},
+							// Horizontal bar: end of bar = right side of stack
+							anchor: 'end',
+							align: 'end',
+							offset: 6,
+							clamp: false,
+							clip: false,
+							color: colors.legend,
+							font: { size: 11, weight: 'bold' as const },
+							textStrokeColor: isDarkMode()
+								? 'rgba(0,0,0,0.75)'
+								: 'rgba(255,255,255,0.9)',
+							textStrokeWidth: 3
+						}
+					}
 				}
 			},
 			scales: {
 				x: {
 					stacked: true,
 					beginAtZero: true,
-					grace: '8%',
+					// Room for external total labels past the bar end
+					grace: '18%',
 					ticks: {
 						color: colors.ticks,
 						stepSize: 1,
@@ -1067,9 +1120,14 @@
 			(dataset as any).stack = 'types';
 		});
 
-		if (chart.options?.plugins?.datalabels) {
-			chart.options.plugins.datalabels.color = '#ffffff';
-			chart.options.plugins.datalabels.textStrokeColor = 'rgba(0,0,0,0.45)';
+		// Refresh total label chrome for theme
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const dl = chart.options?.plugins?.datalabels as any;
+		if (dl?.labels?.total) {
+			dl.labels.total.color = colors.legend;
+			dl.labels.total.textStrokeColor = isDark
+				? 'rgba(0,0,0,0.75)'
+				: 'rgba(255,255,255,0.9)';
 		}
 		if (chart.options?.plugins?.tooltip) {
 			chart.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
