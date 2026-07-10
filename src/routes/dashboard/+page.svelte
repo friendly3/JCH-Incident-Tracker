@@ -678,16 +678,134 @@
 		chart.update('none');
 	}
 
+	/** Horizontal bar: incidents per action status. */
+	function buildActionStatusBarOptions(
+		colors: ReturnType<typeof getChartTheme>
+	): ChartOptions<'bar'> {
+		return {
+			responsive: true,
+			maintainAspectRatio: false,
+			indexAxis: 'y',
+			layout: {
+				padding: { top: 4, right: 36, left: 4, bottom: 4 }
+			},
+			plugins: {
+				legend: {
+					display: false
+				},
+				title: {
+					display: false
+				},
+				tooltip: {
+					backgroundColor: colors.tooltipBg,
+					titleColor: colors.tooltipTitle,
+					bodyColor: colors.tooltipTitle,
+					titleFont: { size: 13, weight: 'bold' },
+					bodyFont: { size: 12 },
+					padding: 10,
+					cornerRadius: 8,
+					displayColors: true,
+					callbacks: {
+						label: (context) => {
+							const value = context.parsed.x ?? 0;
+							return `${value} ${value === 1 ? 'incident' : 'incidents'}`;
+						}
+					}
+				},
+				datalabels: {
+					anchor: 'end',
+					align: 'right',
+					offset: 4,
+					clamp: false,
+					clip: false,
+					display: (context) => {
+						const raw = context.dataset.data[context.dataIndex];
+						return typeof raw === 'number' && raw > 0;
+					},
+					formatter: (value: unknown) =>
+						typeof value === 'number' && Number.isFinite(value) ? String(value) : '',
+					color: colors.legend,
+					font: { size: 12, weight: 'bold' },
+					textStrokeColor: isDarkMode() ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.9)',
+					textStrokeWidth: 3
+				}
+			},
+			scales: {
+				x: {
+					beginAtZero: true,
+					grace: '12%',
+					ticks: {
+						color: colors.ticks,
+						stepSize: 1,
+						precision: 0,
+						font: { size: 11, weight: 500 }
+					},
+					grid: {
+						color: colors.grid
+					}
+				},
+				y: {
+					ticks: {
+						color: colors.ticks,
+						font: { size: 12, weight: 600 }
+					},
+					grid: {
+						display: false
+					}
+				}
+			}
+		};
+	}
+
+	function applyActionStatusBarTheme(chart: ChartJS<'bar'>) {
+		const colors = getChartTheme(theme.isDark);
+		const isDark = theme.isDark;
+		const dataset = chart.data.datasets[0];
+		if (!dataset) return;
+
+		const n = chart.data.labels?.length ?? 0;
+		dataset.backgroundColor = Array.from({ length: n }, (_, i) => getSeriesColor(i, isDark));
+		dataset.borderColor = Array.from({ length: n }, (_, i) => getSeriesColor(i, isDark));
+		dataset.borderWidth = 1;
+		dataset.borderRadius = 4;
+		dataset.barPercentage = 0.75;
+		dataset.categoryPercentage = 0.8;
+
+		if (chart.options?.plugins?.datalabels) {
+			chart.options.plugins.datalabels.color = colors.legend;
+			chart.options.plugins.datalabels.textStrokeColor = isDark
+				? 'rgba(0,0,0,0.75)'
+				: 'rgba(255,255,255,0.9)';
+		}
+		if (chart.options?.plugins?.tooltip) {
+			chart.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
+			chart.options.plugins.tooltip.titleColor = colors.tooltipTitle;
+			chart.options.plugins.tooltip.bodyColor = colors.tooltipTitle;
+		}
+		if (chart.options?.scales?.x?.ticks) {
+			chart.options.scales.x.ticks.color = colors.ticks;
+		}
+		if (chart.options?.scales?.x?.grid) {
+			chart.options.scales.x.grid.color = colors.grid;
+		}
+		if (chart.options?.scales?.y?.ticks) {
+			chart.options.scales.y.ticks.color = colors.ticks;
+		}
+		chart.update('none');
+	}
+
 	let { data } = $props();
 
 	const incidents = $derived(incidentsFromPageData(incidentStore.list, data.incidents));
 
 	let canvasElement: HTMLCanvasElement | undefined = $state();
 	let typeOverTimeCanvas: HTMLCanvasElement | undefined = $state();
+	let actionStatusCanvas: HTMLCanvasElement | undefined = $state();
 	let teamLeaderCanvas: HTMLCanvasElement | undefined = $state();
 	let driverCanvas: HTMLCanvasElement | undefined = $state();
 	let chartInstance = $state<ChartJS<'line'> | undefined>();
 	let typeOverTimeChart = $state<ChartJS<'line'> | undefined>();
+	let actionStatusChart = $state<ChartJS<'bar'> | undefined>();
 	let teamLeaderChart = $state<ChartJS<'pie'> | undefined>();
 	let driverChart = $state<ChartJS<'pie'> | undefined>();
 	let resizeHandler: (() => void) | undefined;
@@ -851,6 +969,38 @@
 	const incidentsByTeamLeader = $derived.by(() => aggregateIncidentsBy('teamLeader'));
 	const incidentsByDriver = $derived.by(() => aggregateIncidentsBy('driver'));
 
+	/** Counts by action status (New, Resolved, LIT, …) — sorted high → low. */
+	const incidentsByActionStatus = $derived.by(() => {
+		const grouped = new Map<string, { label: string; count: number }>();
+		for (const incident of incidents) {
+			const { key, label } = normalizeAggregationKey(incident.action, 'Unspecified');
+			const existing = grouped.get(key);
+			grouped.set(key, {
+				label: existing?.label ?? label,
+				count: (existing?.count ?? 0) + 1
+			});
+		}
+		return Array.from(grouped.values())
+			.map(({ label, count }) => [label, count] as [string, number])
+			.sort(([, a], [, b]) => b - a);
+	});
+
+	const actionStatusBarData = $derived.by(() => ({
+		labels: incidentsByActionStatus.map(([label]) => label),
+		datasets: [
+			{
+				label: 'Incidents',
+				data: incidentsByActionStatus.map(([, count]) => count),
+				borderWidth: 1
+			}
+		]
+	}));
+
+	const hasActionStatusData = $derived(incidentsByActionStatus.length > 0);
+	const actionStatusAriaLabel = $derived(
+		buildChartAriaLabel('Incidents by Action Status', incidentsByActionStatus)
+	);
+
 	const teamLeaderChartData = $derived.by(() => buildPieChartData(incidentsByTeamLeader));
 	const driverChartData = $derived.by(() => buildPieChartData(incidentsByDriver));
 
@@ -867,6 +1017,7 @@
 		resizeHandler = () => {
 			chartInstance?.resize();
 			typeOverTimeChart?.resize();
+			actionStatusChart?.resize();
 			teamLeaderChart?.resize();
 			driverChart?.resize();
 		};
@@ -922,6 +1073,27 @@
 		return () => {
 			instance.destroy();
 			typeOverTimeChart = undefined;
+		};
+	});
+
+	$effect(() => {
+		if (incidentStore.isLoading || incidentStore.error || data.loadError) return;
+		const canvas = actionStatusCanvas;
+		if (!canvas || !hasActionStatusData) return;
+
+		const colors = untrack(() => getChartTheme(theme.isDark));
+		const initialData = untrack(() => actionStatusBarData);
+		const instance = new Chart(canvas, {
+			type: 'bar',
+			data: initialData,
+			options: buildActionStatusBarOptions(colors)
+		});
+		applyActionStatusBarTheme(instance);
+		actionStatusChart = instance;
+
+		return () => {
+			instance.destroy();
+			actionStatusChart = undefined;
 		};
 	});
 
@@ -988,6 +1160,15 @@
 	});
 
 	$effect(() => {
+		const instance = actionStatusChart;
+		const dataset = instance?.data.datasets[0];
+		if (!instance || !dataset) return;
+		instance.data.labels = actionStatusBarData.labels;
+		dataset.data = actionStatusBarData.datasets[0].data;
+		applyActionStatusBarTheme(instance);
+	});
+
+	$effect(() => {
 		const instance = teamLeaderChart;
 		const dataset = instance?.data.datasets[0];
 		if (!instance || !dataset) return;
@@ -1023,6 +1204,9 @@
 		if (typeOverTimeChart) {
 			applyTypeOverTimeChartTheme(typeOverTimeChart);
 		}
+		if (actionStatusChart) {
+			applyActionStatusBarTheme(actionStatusChart);
+		}
 		if (teamLeaderChart) {
 			applyPieChartTheme(teamLeaderChart, incidentsByTeamLeader.length);
 		}
@@ -1050,7 +1234,6 @@
 		}).length
 	);
 
-	/**
 	/**
 	 * Resolved = action status is "Resolved" AND a responded date is set.
 	 * Unresolved = anything that does not meet both conditions.
@@ -1154,10 +1337,14 @@
 					</div>
 				</div>
 
-				<!-- Resolution callouts: action status + responded date -->
-				<div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2" role="group" aria-label="Incident resolution status">
+				<!-- Resolution callouts + action status bar -->
+				<div
+					class="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-12"
+					role="group"
+					aria-label="Incident resolution and action status summary"
+				>
 					<section
-						class="rounded-lg border-2 border-amber-300 bg-amber-50 p-5 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30"
+						class="rounded-lg border-2 border-amber-300 bg-amber-50 p-5 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-3"
 						aria-labelledby="unresolved-callout-title"
 					>
 						<div class="flex items-start justify-between gap-3">
@@ -1191,7 +1378,7 @@
 					</section>
 
 					<section
-						class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-5 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30"
+						class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-5 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-3"
 						aria-labelledby="resolved-callout-title"
 					>
 						<div class="flex items-start justify-between gap-3">
@@ -1220,6 +1407,52 @@
 									<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
 								</svg>
 							</span>
+						</div>
+					</section>
+
+					<section
+						class="rounded-lg border border-warm-200 bg-white p-4 shadow-sm dark:bg-warm-100 lg:col-span-6"
+						aria-labelledby="action-status-bar-title"
+						aria-describedby="action-status-bar-summary"
+					>
+						<h2
+							id="action-status-bar-title"
+							class="mb-2 text-sm font-semibold uppercase tracking-wide text-warm-700"
+						>
+							Incidents by Action Status
+						</h2>
+						<p id="action-status-bar-summary" class="sr-only">{actionStatusAriaLabel}</p>
+						<div
+							class="w-full overflow-visible"
+							style="position: relative; height: {Math.max(140, incidentsByActionStatus.length * 36 + 48)}px; min-height: 140px;"
+						>
+							{#if !hasActionStatusData}
+								<div class="flex h-full items-center justify-center">
+									<p class="text-sm text-warm-500">No action status data available.</p>
+								</div>
+							{/if}
+							<canvas
+								bind:this={actionStatusCanvas}
+								class={!hasActionStatusData ? 'hidden' : 'block h-full w-full'}
+								style="max-height: 100%;"
+								aria-hidden="true"
+							></canvas>
+							<table class="sr-only" aria-labelledby="action-status-bar-title">
+								<thead>
+									<tr>
+										<th scope="col">Action status</th>
+										<th scope="col">Incidents</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each incidentsByActionStatus as [label, count] (label)}
+										<tr>
+											<td>{label}</td>
+											<td>{count}</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
 						</div>
 					</section>
 				</div>
