@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { invalidateAll } from '$app/navigation';
 	import { incidentStore } from '$lib/data/store.svelte';
-	import { formatDate } from '$lib/formatDate';
+	import { formatDate, normalizeDateOnly } from '$lib/formatDate';
+	import type { Incident } from '$lib/data/incidents';
 	import {
 		incidentsFromPageData,
 		syncIncidentStoreFromPageData
@@ -997,6 +998,26 @@
 			return date >= weekAgo;
 		}).length
 	);
+
+	/**
+	 * Resolved = action status is "Resolved" AND a responded date is set.
+	 * Unresolved = anything that does not meet both conditions.
+	 */
+	function isIncidentResolved(incident: Incident): boolean {
+		const action = (incident.action ?? '').trim().toUpperCase();
+		const actionIsResolved = action === 'RESOLVED';
+		const hasRespondedDate = Boolean(normalizeDateOnly(incident.dateResponse));
+		return actionIsResolved && hasRespondedDate;
+	}
+
+	const resolvedIncidents = $derived(incidents.filter(isIncidentResolved).length);
+	const unresolvedIncidents = $derived(incidents.length - resolvedIncidents);
+	const resolvedPct = $derived(
+		totalIncidents > 0 ? Math.round((resolvedIncidents / totalIncidents) * 100) : 0
+	);
+	const unresolvedPct = $derived(
+		totalIncidents > 0 ? Math.round((unresolvedIncidents / totalIncidents) * 100) : 0
+	);
 </script>
 
 <svelte:head>
@@ -1079,6 +1100,76 @@
 						<p class="text-3xl font-bold text-warm-700">{incidentsThisWeek}</p>
 						<p class="mt-2 text-xs text-warm-500">Last 7 days</p>
 					</div>
+				</div>
+
+				<!-- Resolution callouts: action status + responded date -->
+				<div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2" role="group" aria-label="Incident resolution status">
+					<section
+						class="rounded-lg border-2 border-amber-300 bg-amber-50 p-5 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30"
+						aria-labelledby="unresolved-callout-title"
+					>
+						<div class="flex items-start justify-between gap-3">
+							<div>
+								<p
+									id="unresolved-callout-title"
+									class="text-sm font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
+								>
+									Unresolved
+								</p>
+								<p class="mt-2 text-4xl font-bold tabular-nums text-amber-900 dark:text-amber-100">
+									{unresolvedIncidents}
+								</p>
+								<p class="mt-2 text-xs leading-snug text-amber-800/90 dark:text-amber-200/90">
+									Not fully closed — action is not <span class="font-semibold">Resolved</span>,
+									or responded date is missing
+									{#if totalIncidents > 0}
+										<span class="mt-1 block font-medium">{unresolvedPct}% of all incidents</span>
+									{/if}
+								</p>
+							</div>
+							<span
+								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100"
+								aria-hidden="true"
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+								</svg>
+							</span>
+						</div>
+					</section>
+
+					<section
+						class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-5 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30"
+						aria-labelledby="resolved-callout-title"
+					>
+						<div class="flex items-start justify-between gap-3">
+							<div>
+								<p
+									id="resolved-callout-title"
+									class="text-sm font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200"
+								>
+									Resolved
+								</p>
+								<p class="mt-2 text-4xl font-bold tabular-nums text-emerald-900 dark:text-emerald-100">
+									{resolvedIncidents}
+								</p>
+								<p class="mt-2 text-xs leading-snug text-emerald-800/90 dark:text-emerald-200/90">
+									Action is <span class="font-semibold">Resolved</span> and a responded date is set
+									{#if totalIncidents > 0}
+										<span class="mt-1 block font-medium">{resolvedPct}% of all incidents</span>
+									{/if}
+								</p>
+							</div>
+							<span
+								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100"
+								aria-hidden="true"
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+								</svg>
+							</span>
+						</div>
+					</section>
 				</div>
 
 				<!-- Time-series charts: total volume + type breakdown -->
