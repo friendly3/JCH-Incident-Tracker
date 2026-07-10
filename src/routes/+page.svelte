@@ -47,7 +47,10 @@
 	let filterDriver = $state('');
 	let filterTeamLeader = $state('');
 	let filterAction = $state('');
-	let sortBy = $state<'date-desc' | 'date-asc'>('date-desc');
+	/** Date received hierarchy: Year → Month → Day (filter, not sort). */
+	let filterDateYear = $state('');
+	let filterDateMonth = $state(''); // '01'..'12'
+	let filterDateDay = $state(''); // '01'..'31'
 
 	// Admin/CRUD state (moved from admin page)
 	let mode = $state<'list' | 'add' | 'edit'>('list');
@@ -62,24 +65,110 @@
 
 	const isModalOpen = $derived(mode !== 'list' && !isFormExpanded);
 
+	const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})/;
+
+	/** Unique years / months / days present in data for cascading selects. */
+	const dateHierarchy = $derived.by(() => {
+		const years = new Set<string>();
+		const monthsByYear = new Map<string, Set<string>>();
+		const daysByYearMonth = new Map<string, Set<string>>();
+
+		for (const i of incidents) {
+			const m = DATE_ONLY_RE.exec(i.dateReceived?.trim() ?? '');
+			if (!m) continue;
+			const [, y, mo, d] = m;
+			years.add(y);
+			let months = monthsByYear.get(y);
+			if (!months) {
+				months = new Set();
+				monthsByYear.set(y, months);
+			}
+			months.add(mo);
+			const ym = `${y}-${mo}`;
+			let days = daysByYearMonth.get(ym);
+			if (!days) {
+				days = new Set();
+				daysByYearMonth.set(ym, days);
+			}
+			days.add(d);
+		}
+
+		const yearOptions = [...years].sort((a, b) => b.localeCompare(a));
+		const monthOptions = filterDateYear
+			? [...(monthsByYear.get(filterDateYear) ?? [])].sort((a, b) => b.localeCompare(a))
+			: [];
+		const dayOptions =
+			filterDateYear && filterDateMonth
+				? [
+						...(daysByYearMonth.get(`${filterDateYear}-${filterDateMonth}`) ?? [])
+					].sort((a, b) => b.localeCompare(a))
+				: [];
+
+		return { yearOptions, monthOptions, dayOptions };
+	});
+
+	function monthLabel(mm: string): string {
+		const n = parseInt(mm, 10);
+		if (n < 1 || n > 12) return mm;
+		return new Date(2000, n - 1, 1).toLocaleDateString('en-AU', { month: 'long' });
+	}
+
+	function onDateYearChange(event: Event) {
+		const el = event.currentTarget;
+		if (!(el instanceof HTMLSelectElement)) return;
+		filterDateYear = el.value;
+		// Cascade: clear more-specific levels when parent changes
+		filterDateMonth = '';
+		filterDateDay = '';
+	}
+
+	function onDateMonthChange(event: Event) {
+		const el = event.currentTarget;
+		if (!(el instanceof HTMLSelectElement)) return;
+		filterDateMonth = el.value;
+		filterDateDay = '';
+	}
+
+	function onDateDayChange(event: Event) {
+		const el = event.currentTarget;
+		if (!(el instanceof HTMLSelectElement)) return;
+		filterDateDay = el.value;
+	}
+
 	const filtered = $derived.by(() => {
 		let result = incidents.filter((i) => {
 			const q = search.toLowerCase();
-			if (q && !i.referenceNo.toLowerCase().includes(q) && !i.referenceText.toLowerCase().includes(q) && !(i.driver ?? '').toLowerCase().includes(q) && !(i.type ?? '').toLowerCase().includes(q) && !i.response.toLowerCase().includes(q)) return false;
+			if (
+				q &&
+				!i.referenceNo.toLowerCase().includes(q) &&
+				!i.referenceText.toLowerCase().includes(q) &&
+				!(i.driver ?? '').toLowerCase().includes(q) &&
+				!(i.type ?? '').toLowerCase().includes(q) &&
+				!i.response.toLowerCase().includes(q)
+			)
+				return false;
 			if (filterType && i.type !== filterType) return false;
 			if (filterDriver && i.driver !== filterDriver) return false;
 			if (filterTeamLeader && i.teamLeader !== filterTeamLeader) return false;
 			if (filterAction && i.action !== filterAction) return false;
+
+			// Date received hierarchy (filter, not sort)
+			if (filterDateYear || filterDateMonth || filterDateDay) {
+				const m = DATE_ONLY_RE.exec(i.dateReceived?.trim() ?? '');
+				if (!m) return false;
+				const [, y, mo, d] = m;
+				if (filterDateYear && y !== filterDateYear) return false;
+				if (filterDateMonth && mo !== filterDateMonth) return false;
+				if (filterDateDay && d !== filterDateDay) return false;
+			}
+
 			return true;
 		});
 
-		result.sort((a, b) => {
-			switch (sortBy) {
-				case 'date-desc': return `${b.dateReceived}T${b.time}`.localeCompare(`${a.dateReceived}T${a.time}`);
-				case 'date-asc': return `${a.dateReceived}T${a.time}`.localeCompare(`${b.dateReceived}T${b.time}`);
-				default: return 0;
-			}
-		});
+		// Always newest-first within filtered set (list groups handle month order)
+		result.sort((a, b) =>
+			`${b.dateReceived}T${b.time}`.localeCompare(`${a.dateReceived}T${a.time}`)
+		);
 
 		return result;
 	});
@@ -90,12 +179,22 @@
 		filterDriver = '';
 		filterTeamLeader = '';
 		filterAction = '';
-		sortBy = 'date-desc';
+		filterDateYear = '';
+		filterDateMonth = '';
+		filterDateDay = '';
 	}
 
 	const hasFilters = $derived(
-		Boolean(search || filterType || filterDriver || filterTeamLeader || filterAction) ||
-			sortBy !== 'date-desc'
+		Boolean(
+			search ||
+				filterType ||
+				filterDriver ||
+				filterTeamLeader ||
+				filterAction ||
+				filterDateYear ||
+				filterDateMonth ||
+				filterDateDay
+		)
 	);
 
 	type MonthGroup = {
@@ -120,7 +219,8 @@
 		const sortedKeys = [...groups.keys()].sort((a, b) => {
 			if (a === 'unknown') return 1;
 			if (b === 'unknown') return -1;
-			return sortBy === 'date-desc' ? b.localeCompare(a) : a.localeCompare(b);
+			// Newest month groups first
+			return b.localeCompare(a);
 		});
 
 		return sortedKeys.map((key) => ({
@@ -466,16 +566,49 @@
 					<option value="" class="normal-case">All Actions</option>
 					{#each data.incidentActions ?? [] as a}<option value={a.name} class="uppercase">{a.name}</option>{/each}
 				</select>
-				<button
-					type="button"
-					onclick={() => {
-						sortBy = sortBy === 'date-desc' ? 'date-asc' : 'date-desc';
-					}}
-					class="flex items-center gap-1 rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-700 hover:bg-warm-100 input-focus"
+				<!-- Date Received hierarchy: Year → Month → Day (filters results) -->
+				<div
+					class="flex flex-wrap items-center gap-2 rounded-lg border border-warm-200 bg-warm-50 px-2 py-1.5"
+					role="group"
+					aria-label="Date received filter"
 				>
-					<span>Date Received</span>
-					<span class="text-xs">{sortBy === 'date-desc' ? '↓' : '↑'}</span>
-				</button>
+					<span class="pl-1 text-xs font-medium uppercase tracking-wide text-warm-500">Date received</span>
+					<select
+						value={filterDateYear}
+						onchange={onDateYearChange}
+						class="rounded-md border border-warm-200 bg-white px-2 py-1.5 text-sm text-warm-700 input-focus dark:bg-warm-200"
+						aria-label="Filter by year"
+					>
+						<option value="">All years</option>
+						{#each dateHierarchy.yearOptions as y (y)}
+							<option value={y}>{y}</option>
+						{/each}
+					</select>
+					<select
+						value={filterDateMonth}
+						onchange={onDateMonthChange}
+						disabled={!filterDateYear}
+						class="rounded-md border border-warm-200 bg-white px-2 py-1.5 text-sm text-warm-700 input-focus disabled:cursor-not-allowed disabled:opacity-40 dark:bg-warm-200"
+						aria-label="Filter by month"
+					>
+						<option value="">All months</option>
+						{#each dateHierarchy.monthOptions as mo (mo)}
+							<option value={mo}>{monthLabel(mo)}</option>
+						{/each}
+					</select>
+					<select
+						value={filterDateDay}
+						onchange={onDateDayChange}
+						disabled={!filterDateYear || !filterDateMonth}
+						class="rounded-md border border-warm-200 bg-white px-2 py-1.5 text-sm text-warm-700 input-focus disabled:cursor-not-allowed disabled:opacity-40 dark:bg-warm-200"
+						aria-label="Filter by day"
+					>
+						<option value="">All days</option>
+						{#each dateHierarchy.dayOptions as d (d)}
+							<option value={d}>{d}</option>
+						{/each}
+					</select>
+				</div>
 				<button
 					type="button"
 					onclick={clearFilters}
@@ -514,19 +647,7 @@
 					<tr>
 						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap w-[11rem]">Ref No.</th>
 						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap w-[8.5rem]">
-							<button onclick={() => { sortBy = sortBy === 'date-desc' ? 'date-asc' : 'date-desc'; }}
-								class="inline-flex items-center gap-1 hover:text-warm-800 transition-colors">
-								Date Received
-								{#if sortBy === 'date-desc'}
-									<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-accent-600" viewBox="0 0 20 20" fill="currentColor">
-										<path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-									</svg>
-								{:else}
-									<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-accent-600" viewBox="0 0 20 20" fill="currentColor">
-										<path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" />
-									</svg>
-								{/if}
-							</button>
+							Date Received
 						</th>
 						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Action</th>
 						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Type</th>
