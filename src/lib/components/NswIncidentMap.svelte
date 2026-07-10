@@ -48,17 +48,19 @@
 	let labelLayoutBound = false;
 	let labelLayoutTimer: ReturnType<typeof setTimeout> | null = null;
 
-	/** Fixed icon box centred on the pulse; labels park around it. */
-	const MARKER_ICON_W = 200;
-	const MARKER_ICON_H = 80;
+	/** Fixed icon box centred on the pulse; room for fanned-out labels. */
+	const MARKER_ICON_W = 260;
+	const MARKER_ICON_H = 140;
 	const MARKER_ANCHOR_X = MARKER_ICON_W / 2;
 	const MARKER_ANCHOR_Y = MARKER_ICON_H / 2;
-	const LABEL_BOX_W = 118;
-	const LABEL_BOX_H = 34;
-	const LABEL_GAP = 10;
-	const LABEL_PAD = 3;
+	const LABEL_BOX_W = 112;
+	const LABEL_BOX_H = 32;
+	const LABEL_GAP = 8;
+	const LABEL_PAD = 2;
+	/** Extra px to fan labels out when all four sides are occupied. */
+	const LABEL_OFFSET_STEPS = [0, 14, 28, 42, 56];
 
-	type LabelSide = 'right' | 'left' | 'above' | 'below' | 'hidden';
+	type LabelSide = 'right' | 'left' | 'above' | 'below';
 
 	type MapMarkerEntry = {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -71,6 +73,8 @@
 		suburbLine: string;
 		placeLabel: string;
 		side: LabelSide;
+		/** Extra distance from the pulse along the chosen side (px). */
+		sideOffset: number;
 	};
 
 	type LabelBox = { left: number; right: number; top: number; bottom: number };
@@ -173,11 +177,12 @@
 	function labelBoxFor(
 		cx: number,
 		cy: number,
-		side: Exclude<LabelSide, 'hidden'>
+		side: LabelSide,
+		extra = 0
 	): LabelBox {
 		const w = LABEL_BOX_W;
 		const h = LABEL_BOX_H;
-		const g = LABEL_GAP;
+		const g = LABEL_GAP + extra;
 		switch (side) {
 			case 'right':
 				return {
@@ -220,14 +225,8 @@
 	}
 
 	function buildMarkerIcon(entry: MapMarkerEntry, L: { divIcon: (opts: object) => unknown }) {
-		const sideClass =
-			entry.side === 'hidden'
-				? 'incident-marker--dot-only'
-				: `incident-marker--${entry.side}`;
-		const labelHtml =
-			entry.side === 'hidden'
-				? ''
-				: `<span class="incident-marker-label">
+		const sideClass = `incident-marker--${entry.side}`;
+		const labelHtml = `<span class="incident-marker-label" style="--label-offset:${entry.sideOffset}px">
 						<span class="incident-marker-name">${escapeHtml(entry.nameLine)}</span>
 						<span class="incident-marker-suburb">${escapeHtml(entry.suburbLine)}</span>
 					</span>`;
@@ -246,43 +245,39 @@
 	}
 
 	/**
-	 * Place name labels around pulses without stacking.
-	 * Higher-count places keep labels first; others flip side or hide until zoomed in.
+	 * Place a name label on every pulse. Prefer free sides; fan out with extra
+	 * offset when crowded. Never drop a label entirely.
 	 */
 	function resolveLabelLayout() {
 		if (!map || !Lref || placedMarkers.length === 0) return;
-
-		const zoom = map.getZoom() as number;
-		// At low zoom, show fewer labels (more dots-only) to avoid a soup of text
-		const maxLabels =
-			zoom >= 14 ? placedMarkers.length : zoom >= 12 ? 14 : zoom >= 11 ? 10 : zoom >= 9 ? 6 : 4;
 
 		// Priority: more incidents first, then name for stability
 		const ordered = [...placedMarkers].sort(
 			(a, b) => b.count - a.count || a.nameLine.localeCompare(b.nameLine)
 		);
 
-		const accepted: { box: LabelBox; side: LabelSide }[] = [];
-		const sides: Exclude<LabelSide, 'hidden'>[] = ['right', 'left', 'above', 'below'];
-		let labelsShown = 0;
+		const accepted: LabelBox[] = [];
+		const sides: LabelSide[] = ['right', 'left', 'above', 'below'];
 
 		for (const entry of ordered) {
 			const pt = map.latLngToContainerPoint([entry.lat, entry.lng]);
 			const cx = pt.x as number;
 			const cy = pt.y as number;
-			let chosen: LabelSide = 'hidden';
 
-			if (labelsShown < maxLabels) {
+			let chosenSide: LabelSide = 'right';
+			let chosenOffset = 0;
+			let chosenBox = labelBoxFor(cx, cy, 'right', 0);
+			let found = false;
+
+			outer: for (const extra of LABEL_OFFSET_STEPS) {
 				for (const side of sides) {
-					const box = labelBoxFor(cx, cy, side);
-					const hits = accepted.some(
-						(a) => a.side !== 'hidden' && boxesOverlap(a.box, box)
-					);
-					// Also avoid covering other pulses (small exclusion around each pin)
+					const box = labelBoxFor(cx, cy, side, extra);
+					const hitsLabel = accepted.some((a) => boxesOverlap(a, box));
+					// Soft avoid other pulses (small radius — don't block all placements)
 					const hitsPulse = ordered.some((other) => {
 						if (other === entry) return false;
 						const op = map.latLngToContainerPoint([other.lat, other.lng]);
-						const pr = Math.max(10, other.corePx);
+						const pr = Math.max(6, other.corePx * 0.6);
 						const pulseBox: LabelBox = {
 							left: op.x - pr,
 							right: op.x + pr,
@@ -291,24 +286,28 @@
 						};
 						return boxesOverlap(box, pulseBox);
 					});
-					if (!hits && !hitsPulse) {
-						chosen = side;
-						accepted.push({ box, side });
-						labelsShown += 1;
-						break;
+					if (!hitsLabel && !hitsPulse) {
+						chosenSide = side;
+						chosenOffset = extra;
+						chosenBox = box;
+						found = true;
+						break outer;
 					}
 				}
 			}
 
-			if (chosen === 'hidden') {
-				accepted.push({
-					box: { left: cx, right: cx, top: cy, bottom: cy },
-					side: 'hidden'
-				});
+			// Last resort: still show a label (right + max offset) even if slightly overlapping
+			if (!found) {
+				chosenSide = 'right';
+				chosenOffset = LABEL_OFFSET_STEPS[LABEL_OFFSET_STEPS.length - 1] ?? 56;
+				chosenBox = labelBoxFor(cx, cy, chosenSide, chosenOffset);
 			}
 
-			if (entry.side !== chosen) {
-				entry.side = chosen;
+			accepted.push(chosenBox);
+
+			if (entry.side !== chosenSide || entry.sideOffset !== chosenOffset) {
+				entry.side = chosenSide;
+				entry.sideOffset = chosenOffset;
 				entry.marker.setIcon(buildMarkerIcon(entry, Lref));
 			}
 		}
@@ -443,7 +442,8 @@
 				nameLine,
 				suburbLine,
 				placeLabel,
-				side: 'right'
+				side: 'right',
+				sideOffset: 0
 			};
 
 			const marker = L.marker([point.lat, point.lng], {
@@ -679,7 +679,7 @@
 								{mappedIncidentCount}
 								incident{mappedIncidentCount === 1 ? '' : 's'}
 								· {mappedPlaceCount} place{mappedPlaceCount === 1 ? '' : 's'}
-								· labels deconflicted (zoom in for more)
+								· every place labelled
 							{/if}
 						</span>
 					</span>
@@ -821,9 +821,10 @@
 	/* Fixed box; pulse centred; label docks on free side to avoid overlaps */
 	:global(.incident-marker) {
 		position: relative;
-		width: 200px;
-		height: 80px;
+		width: 260px;
+		height: 140px;
 		pointer-events: none;
+		overflow: visible;
 	}
 
 	:global(.incident-pulse-dot) {
@@ -861,13 +862,13 @@
 	}
 
 	:global(.incident-marker--right .incident-marker-label) {
-		left: calc(50% + 10px);
+		left: calc(50% + 8px + var(--label-offset, 0px));
 		top: 50%;
 		transform: translateY(-50%);
 	}
 
 	:global(.incident-marker--left .incident-marker-label) {
-		right: calc(50% + 10px);
+		right: calc(50% + 8px + var(--label-offset, 0px));
 		top: 50%;
 		transform: translateY(-50%);
 		align-items: flex-end;
@@ -876,7 +877,7 @@
 
 	:global(.incident-marker--above .incident-marker-label) {
 		left: 50%;
-		bottom: calc(50% + 10px);
+		bottom: calc(50% + 8px + var(--label-offset, 0px));
 		transform: translateX(-50%);
 		align-items: center;
 		text-align: center;
@@ -884,14 +885,10 @@
 
 	:global(.incident-marker--below .incident-marker-label) {
 		left: 50%;
-		top: calc(50% + 10px);
+		top: calc(50% + 8px + var(--label-offset, 0px));
 		transform: translateX(-50%);
 		align-items: center;
 		text-align: center;
-	}
-
-	:global(.incident-marker--dot-only .incident-marker-label) {
-		display: none;
 	}
 
 	:global(.incident-marker-name) {
