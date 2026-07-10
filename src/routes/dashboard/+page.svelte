@@ -10,7 +10,7 @@
 	} from '$lib/syncIncidentStore';
 	import CourierTruckIcon from '$lib/components/CourierTruckIcon.svelte';
 	import { theme } from '$lib/theme.svelte';
-	import type { Chart as ChartJS, ChartOptions } from 'chart.js';
+	import type { Chart as ChartJS, ChartOptions, Plugin } from 'chart.js';
 	import { Chart, registerables } from 'chart.js';
 	import ChartDataLabels from 'chartjs-plugin-datalabels';
 	import { onMount, untrack } from 'svelte';
@@ -582,10 +582,9 @@
 	 * Faint gray polylines from small slice midpoints to their outside data labels.
 	 * Registered per doughnut instance via `plugins: [doughnutOutsideLabelLeaders]`.
 	 */
-	const doughnutOutsideLabelLeaders = {
+	const doughnutOutsideLabelLeaders: Plugin<'doughnut'> = {
 		id: 'doughnutOutsideLabelLeaders',
-		afterDatasetsDraw(chart: ChartJS) {
-			if (chart.config.type !== 'doughnut') return;
+		afterDatasetsDraw(chart) {
 			const dataset = chart.data.datasets[0];
 			const meta = chart.getDatasetMeta(0);
 			if (!dataset || !meta?.data?.length) return;
