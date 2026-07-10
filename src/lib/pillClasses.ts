@@ -38,3 +38,34 @@ export function getActionPillClass(action: string): string {
 			return 'bg-warm-100 text-warm-700 border-warm-200';
 	}
 }
+
+/**
+ * Solid hex fills for charts, aligned with {@link getActionPillClass} families
+ * (green / yellow / blue / purple / orange / red / warm grey).
+ * Dark-mode variants are brighter for dark cards.
+ */
+export function getActionStatusChartColor(action: string, isDark = false): string {
+	switch (action.toUpperCase()) {
+		case 'RESOLVED':
+			// green-600 / green-400
+			return isDark ? '#4ade80' : '#16a34a';
+		case 'LIT':
+			// yellow-600 / yellow-400
+			return isDark ? '#facc15' : '#ca8a04';
+		case 'ACK':
+			// blue-600 / blue-400
+			return isDark ? '#60a5fa' : '#2563eb';
+		case 'LPO':
+			// purple-600 / purple-400
+			return isDark ? '#c084fc' : '#9333ea';
+		case 'AP STAFF':
+			// orange-600 / orange-400
+			return isDark ? '#fb923c' : '#ea580c';
+		case 'NEW':
+			// red-600 / red-400
+			return isDark ? '#f87171' : '#dc2626';
+		default:
+			// warm-600 / warm-500
+			return isDark ? '#9a9c9e' : '#6a6c6e';
+	}
+}

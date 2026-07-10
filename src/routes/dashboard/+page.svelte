@@ -3,6 +3,7 @@
 	import { incidentStore } from '$lib/data/store.svelte';
 	import { formatDate, normalizeDateOnly } from '$lib/formatDate';
 	import type { Incident } from '$lib/data/incidents';
+	import { getActionStatusChartColor } from '$lib/pillClasses';
 	import {
 		incidentsFromPageData,
 		syncIncidentStoreFromPageData
@@ -806,9 +807,11 @@
 		const dataset = chart.data.datasets[0];
 		if (!dataset) return;
 
-		const n = chart.data.labels?.length ?? 0;
-		dataset.backgroundColor = Array.from({ length: n }, (_, i) => getSeriesColor(i, isDark));
-		dataset.borderColor = Array.from({ length: n }, (_, i) => getSeriesColor(i, isDark));
+		// Match bar fills to action-status pill colours (by label, not series index)
+		const labels = (chart.data.labels ?? []).map((l) => String(l));
+		const fills = labels.map((label) => getActionStatusChartColor(label, isDark));
+		dataset.backgroundColor = fills;
+		dataset.borderColor = fills;
 		dataset.borderWidth = 1;
 		dataset.borderRadius = 4;
 		dataset.barPercentage = 0.75;
