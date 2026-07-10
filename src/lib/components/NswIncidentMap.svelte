@@ -42,6 +42,38 @@
 	let resizeObserver: ResizeObserver | null = null;
 	let plotGeneration = 0;
 	let previousBodyOverflow = '';
+	/** Placed markers — used to re-layout name labels so they don’t stack. */
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	let placedMarkers: MapMarkerEntry[] = [];
+	let labelLayoutBound = false;
+	let labelLayoutTimer: ReturnType<typeof setTimeout> | null = null;
+
+	/** Fixed icon box centred on the pulse; labels park around it. */
+	const MARKER_ICON_W = 200;
+	const MARKER_ICON_H = 80;
+	const MARKER_ANCHOR_X = MARKER_ICON_W / 2;
+	const MARKER_ANCHOR_Y = MARKER_ICON_H / 2;
+	const LABEL_BOX_W = 118;
+	const LABEL_BOX_H = 34;
+	const LABEL_GAP = 10;
+	const LABEL_PAD = 3;
+
+	type LabelSide = 'right' | 'left' | 'above' | 'below' | 'hidden';
+
+	type MapMarkerEntry = {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		marker: any;
+		lat: number;
+		lng: number;
+		count: number;
+		corePx: number;
+		nameLine: string;
+		suburbLine: string;
+		placeLabel: string;
+		side: LabelSide;
+	};
+
+	type LabelBox = { left: number; right: number; top: number; bottom: number };
 
 	const summary = $derived(summarizeLocationsFromSubjects(incidents));
 	const locations = $derived(summary.locations);
@@ -116,12 +148,170 @@
 		if (typeof ResizeObserver !== 'undefined' && mapEl) {
 			resizeObserver = new ResizeObserver(() => {
 				map?.invalidateSize({ animate: false });
+				scheduleLabelLayout();
 			});
 			resizeObserver.observe(mapEl);
 		}
 
+		if (!labelLayoutBound) {
+			map.on('zoomend moveend', scheduleLabelLayout);
+			labelLayoutBound = true;
+		}
+
 		ready = true;
 		await plotLocations(L, locations);
+	}
+
+	function scheduleLabelLayout() {
+		if (labelLayoutTimer) clearTimeout(labelLayoutTimer);
+		labelLayoutTimer = setTimeout(() => {
+			labelLayoutTimer = null;
+			resolveLabelLayout();
+		}, 60);
+	}
+
+	function labelBoxFor(
+		cx: number,
+		cy: number,
+		side: Exclude<LabelSide, 'hidden'>
+	): LabelBox {
+		const w = LABEL_BOX_W;
+		const h = LABEL_BOX_H;
+		const g = LABEL_GAP;
+		switch (side) {
+			case 'right':
+				return {
+					left: cx + g,
+					right: cx + g + w,
+					top: cy - h / 2,
+					bottom: cy + h / 2
+				};
+			case 'left':
+				return {
+					left: cx - g - w,
+					right: cx - g,
+					top: cy - h / 2,
+					bottom: cy + h / 2
+				};
+			case 'above':
+				return {
+					left: cx - w / 2,
+					right: cx + w / 2,
+					top: cy - g - h,
+					bottom: cy - g
+				};
+			case 'below':
+				return {
+					left: cx - w / 2,
+					right: cx + w / 2,
+					top: cy + g,
+					bottom: cy + g + h
+				};
+		}
+	}
+
+	function boxesOverlap(a: LabelBox, b: LabelBox): boolean {
+		return !(
+			a.right + LABEL_PAD < b.left ||
+			a.left - LABEL_PAD > b.right ||
+			a.bottom + LABEL_PAD < b.top ||
+			a.top - LABEL_PAD > b.bottom
+		);
+	}
+
+	function buildMarkerIcon(entry: MapMarkerEntry, L: { divIcon: (opts: object) => unknown }) {
+		const sideClass =
+			entry.side === 'hidden'
+				? 'incident-marker--dot-only'
+				: `incident-marker--${entry.side}`;
+		const labelHtml =
+			entry.side === 'hidden'
+				? ''
+				: `<span class="incident-marker-label">
+						<span class="incident-marker-name">${escapeHtml(entry.nameLine)}</span>
+						<span class="incident-marker-suburb">${escapeHtml(entry.suburbLine)}</span>
+					</span>`;
+
+		return L.divIcon({
+			className: 'incident-pulse-icon',
+			html: `<div class="incident-marker ${sideClass}" style="--core:${entry.corePx}px">
+				<span class="incident-pulse-dot" aria-hidden="true"></span>
+				${labelHtml}
+			</div>`,
+			iconSize: [MARKER_ICON_W, MARKER_ICON_H],
+			iconAnchor: [MARKER_ANCHOR_X, MARKER_ANCHOR_Y],
+			popupAnchor: [0, -entry.corePx / 2 - 4],
+			tooltipAnchor: [0, -entry.corePx / 2 - 4]
+		});
+	}
+
+	/**
+	 * Place name labels around pulses without stacking.
+	 * Higher-count places keep labels first; others flip side or hide until zoomed in.
+	 */
+	function resolveLabelLayout() {
+		if (!map || !Lref || placedMarkers.length === 0) return;
+
+		const zoom = map.getZoom() as number;
+		// At low zoom, show fewer labels (more dots-only) to avoid a soup of text
+		const maxLabels =
+			zoom >= 14 ? placedMarkers.length : zoom >= 12 ? 14 : zoom >= 11 ? 10 : zoom >= 9 ? 6 : 4;
+
+		// Priority: more incidents first, then name for stability
+		const ordered = [...placedMarkers].sort(
+			(a, b) => b.count - a.count || a.nameLine.localeCompare(b.nameLine)
+		);
+
+		const accepted: { box: LabelBox; side: LabelSide }[] = [];
+		const sides: Exclude<LabelSide, 'hidden'>[] = ['right', 'left', 'above', 'below'];
+		let labelsShown = 0;
+
+		for (const entry of ordered) {
+			const pt = map.latLngToContainerPoint([entry.lat, entry.lng]);
+			const cx = pt.x as number;
+			const cy = pt.y as number;
+			let chosen: LabelSide = 'hidden';
+
+			if (labelsShown < maxLabels) {
+				for (const side of sides) {
+					const box = labelBoxFor(cx, cy, side);
+					const hits = accepted.some(
+						(a) => a.side !== 'hidden' && boxesOverlap(a.box, box)
+					);
+					// Also avoid covering other pulses (small exclusion around each pin)
+					const hitsPulse = ordered.some((other) => {
+						if (other === entry) return false;
+						const op = map.latLngToContainerPoint([other.lat, other.lng]);
+						const pr = Math.max(10, other.corePx);
+						const pulseBox: LabelBox = {
+							left: op.x - pr,
+							right: op.x + pr,
+							top: op.y - pr,
+							bottom: op.y + pr
+						};
+						return boxesOverlap(box, pulseBox);
+					});
+					if (!hits && !hitsPulse) {
+						chosen = side;
+						accepted.push({ box, side });
+						labelsShown += 1;
+						break;
+					}
+				}
+			}
+
+			if (chosen === 'hidden') {
+				accepted.push({
+					box: { left: cx, right: cx, top: cy, bottom: cy },
+					side: 'hidden'
+				});
+			}
+
+			if (entry.side !== chosen) {
+				entry.side = chosen;
+				entry.marker.setIcon(buildMarkerIcon(entry, Lref));
+			}
+		}
 	}
 
 	function resetView() {
@@ -146,8 +336,15 @@
 		// Allow layout to settle then refresh Leaflet size
 		requestAnimationFrame(() => {
 			map?.invalidateSize({ animate: false });
-			setTimeout(() => map?.invalidateSize({ animate: false }), 80);
-			setTimeout(() => map?.invalidateSize({ animate: false }), 250);
+			scheduleLabelLayout();
+			setTimeout(() => {
+				map?.invalidateSize({ animate: false });
+				resolveLabelLayout();
+			}, 80);
+			setTimeout(() => {
+				map?.invalidateSize({ animate: false });
+				resolveLabelLayout();
+			}, 250);
 		});
 
 		if (typeof document !== 'undefined') {
@@ -183,6 +380,7 @@
 		if (!map || !markersLayer) return;
 		const gen = ++plotGeneration;
 		markersLayer.clearLayers();
+		placedMarkers = [];
 		mappedPlaceCount = 0;
 		failedPlaceCount = 0;
 		mappedIncidentCount = 0;
@@ -230,42 +428,31 @@
 
 			const countLabel =
 				loc.count === 1 ? '1 incident' : `${loc.count} incidents`;
-			// Visible on-map label: street + suburb
 			const placeLabel = loc.street
 				? `${loc.street}, ${loc.suburb}`
 				: loc.suburb;
 			const nameLine = loc.street || loc.suburb;
 			const suburbLine = loc.street ? loc.suburb : 'NSW';
 
-			// Wide icon: pulse at left/top, permanent name label to the right
-			const labelW = 148;
-			const labelH = 36;
-			const iconW = Math.ceil(corePx / 2 + 10 + labelW);
-			const iconH = Math.max(Math.ceil(corePx + 20), labelH);
-			const anchorX = Math.ceil(corePx / 2 + 6);
-			const anchorY = Math.ceil(iconH / 2);
-
-			const icon = L.divIcon({
-				className: 'incident-pulse-icon',
-				html: `<div class="incident-marker" style="--core:${corePx}px">
-					<span class="incident-pulse-dot" aria-hidden="true"></span>
-					<span class="incident-marker-label">
-						<span class="incident-marker-name">${escapeHtml(nameLine)}</span>
-						<span class="incident-marker-suburb">${escapeHtml(suburbLine)}</span>
-					</span>
-				</div>`,
-				iconSize: [iconW, iconH],
-				iconAnchor: [anchorX, anchorY],
-				popupAnchor: [0, -anchorY + 4],
-				tooltipAnchor: [0, -anchorY + 4]
-			});
+			const entry: MapMarkerEntry = {
+				marker: null,
+				lat: point.lat,
+				lng: point.lng,
+				count: loc.count,
+				corePx,
+				nameLine,
+				suburbLine,
+				placeLabel,
+				side: 'right'
+			};
 
 			const marker = L.marker([point.lat, point.lng], {
-				icon,
+				icon: buildMarkerIcon(entry, L),
 				keyboard: true,
 				riseOnHover: true,
 				title: placeLabel
 			});
+			entry.marker = marker;
 
 			// Hover: total incidents for this location
 			marker.bindTooltip(
@@ -295,6 +482,7 @@
 			);
 
 			markersLayer.addLayer(marker);
+			placedMarkers.push(entry);
 
 			// Nominatim: ~1 req/s when uncached — geocodeNswLocation caches aggressively
 			await sleep(80);
@@ -311,6 +499,9 @@
 
 		geocoding = false;
 		map.invalidateSize({ animate: false });
+		// Defer so container points match final view
+		requestAnimationFrame(() => resolveLabelLayout());
+		setTimeout(() => resolveLabelLayout(), 120);
 	}
 
 	function sleep(ms: number) {
@@ -350,16 +541,20 @@
 
 	onDestroy(() => {
 		cancelled = true;
+		if (labelLayoutTimer) clearTimeout(labelLayoutTimer);
 		if (typeof document !== 'undefined') {
 			document.body.style.overflow = previousBodyOverflow;
 		}
 		resizeObserver?.disconnect();
 		resizeObserver = null;
 		if (map) {
+			map.off('zoomend moveend', scheduleLabelLayout);
 			map.remove();
 			map = null;
 			markersLayer = null;
 		}
+		placedMarkers = [];
+		labelLayoutBound = false;
 		Lref = null;
 	});
 </script>
@@ -484,7 +679,7 @@
 								{mappedIncidentCount}
 								incident{mappedIncidentCount === 1 ? '' : 's'}
 								· {mappedPlaceCount} place{mappedPlaceCount === 1 ? '' : 's'}
-								· label = street / suburb
+								· labels deconflicted (zoom in for more)
 							{/if}
 						</span>
 					</span>
@@ -522,10 +717,10 @@
 			{#if !geocoding && undeterminedIncidentCount > 0}
 				<p class="mt-1.5 border-t border-warm-100 pt-1.5 text-[10px] leading-snug text-warm-400">
 					{#if summary.unparseableIncidentCount > 0 && geocodeFailedIncidentCount > 0}
-						{summary.unparseableIncidentCount} no subject match · {geocodeFailedIncidentCount}
-						could not be geocoded
+						{summary.unparseableIncidentCount} need a location in incident details ·
+						{geocodeFailedIncidentCount} could not be geocoded
 					{:else if summary.unparseableIncidentCount > 0}
-						Subject missing or did not match the location template
+						Open the incident and set street/suburb under Map location (NSW)
 					{:else}
 						Parsed place could not be geocoded
 					{/if}
@@ -623,38 +818,80 @@
 		cursor: pointer;
 	}
 
+	/* Fixed box; pulse centred; label docks on free side to avoid overlaps */
 	:global(.incident-marker) {
-		display: flex;
-		flex-direction: row;
-		align-items: center;
-		gap: 6px;
-		pointer-events: auto;
+		position: relative;
+		width: 200px;
+		height: 80px;
+		pointer-events: none;
 	}
 
 	:global(.incident-pulse-dot) {
+		position: absolute;
+		left: 50%;
+		top: 50%;
 		display: block;
-		flex-shrink: 0;
 		width: var(--core, 10px);
 		height: var(--core, 10px);
 		border-radius: 9999px;
+		transform: translate(-50%, -50%);
 		/* Strong accent so markers read clearly on B&W basemap */
 		background: #0f7cb3;
 		box-shadow: 0 0 0 0 #0f7cb3b3;
 		animation: incident-pulse 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+		pointer-events: auto;
+		cursor: pointer;
 	}
 
 	:global(.incident-marker-label) {
+		position: absolute;
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
-		max-width: 9.5rem;
-		padding: 0.15rem 0.4rem 0.2rem;
+		width: 7.25rem;
+		max-width: 7.25rem;
+		padding: 0.15rem 0.35rem 0.2rem;
 		border-radius: 0.25rem;
 		border: 1px solid rgba(0, 0, 0, 0.55);
-		background: rgba(255, 255, 255, 0.94);
+		background: rgba(255, 255, 255, 0.96);
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 		line-height: 1.15;
 		pointer-events: none;
+		z-index: 2;
+	}
+
+	:global(.incident-marker--right .incident-marker-label) {
+		left: calc(50% + 10px);
+		top: 50%;
+		transform: translateY(-50%);
+	}
+
+	:global(.incident-marker--left .incident-marker-label) {
+		right: calc(50% + 10px);
+		top: 50%;
+		transform: translateY(-50%);
+		align-items: flex-end;
+		text-align: right;
+	}
+
+	:global(.incident-marker--above .incident-marker-label) {
+		left: 50%;
+		bottom: calc(50% + 10px);
+		transform: translateX(-50%);
+		align-items: center;
+		text-align: center;
+	}
+
+	:global(.incident-marker--below .incident-marker-label) {
+		left: 50%;
+		top: calc(50% + 10px);
+		transform: translateX(-50%);
+		align-items: center;
+		text-align: center;
+	}
+
+	:global(.incident-marker--dot-only .incident-marker-label) {
+		display: none;
 	}
 
 	:global(.incident-marker-name) {
@@ -676,6 +913,11 @@
 		white-space: nowrap;
 		font: 500 10px/1.2 system-ui, -apple-system, sans-serif;
 		color: #44403c;
+	}
+
+	:global(.incident-marker--left .incident-marker-name),
+	:global(.incident-marker--left .incident-marker-suburb) {
+		width: 100%;
 	}
 
 	.incident-legend-pulse {

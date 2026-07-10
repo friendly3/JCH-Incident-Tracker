@@ -16,6 +16,12 @@ export interface Incident {
     source: IncidentSource;
     emailSender?: string;
     emailSubject?: string;
+    /**
+     * User-identified delivery location for the NSW map.
+     * When suburb is set (street optional), this overrides email-subject parsing.
+     */
+    locationStreet?: string;
+    locationSuburb?: string;
     dateReceived: string;
     time: string;
     sender: string;

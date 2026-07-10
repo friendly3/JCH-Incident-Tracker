@@ -9,6 +9,7 @@ export type SupabaseIncident = Database['public']['Tables']['incidents']['Row']
 
 export const INCIDENT_SENDER_MIGRATION = 'add_incident_sender_marked_source.sql'
 export const INCIDENT_NORMALIZATION_MIGRATION = 'normalise_incidents_lookup_tables.sql'
+export const INCIDENT_LOCATION_MIGRATION = 'add_incident_location_fields.sql'
 /** @deprecated Use INCIDENT_SENDER_MIGRATION or INCIDENT_NORMALIZATION_MIGRATION */
 export const INCIDENT_SCHEMA_MIGRATION = INCIDENT_SENDER_MIGRATION
 
@@ -28,6 +29,7 @@ const NORMALIZATION_SCHEMA_MARKERS = [
 ] as const
 
 const SENDER_SCHEMA_MARKERS = ['sender', 'marked', 'source'] as const
+const LOCATION_SCHEMA_MARKERS = ['location_street', 'location_suburb'] as const
 
 function escapeRegExp(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -65,7 +67,11 @@ function getIncidentSchemaErrorMessage(error: { message?: string; code?: string 
 		return `Database migration required. Please apply ${INCIDENT_SENDER_MIGRATION}.`
 	}
 
-	return `Database schema mismatch. Please apply pending migrations: ${INCIDENT_NORMALIZATION_MIGRATION} and ${INCIDENT_SENDER_MIGRATION}.`
+	if (messageMentionsAny(msg, LOCATION_SCHEMA_MARKERS)) {
+		return `Database migration required. Please apply ${INCIDENT_LOCATION_MIGRATION}.`
+	}
+
+	return `Database schema mismatch. Please apply pending migrations: ${INCIDENT_NORMALIZATION_MIGRATION}, ${INCIDENT_SENDER_MIGRATION}, and ${INCIDENT_LOCATION_MIGRATION}.`
 }
 
 // Convert Supabase row to our app's Facility type
@@ -113,6 +119,8 @@ export function toIncidentInsert(incident: Incident, userId?: string): any {
 		time_response: incident.timeResponse || null,
 		email_sender: incident.emailSender?.trim() || null,
 		email_subject: incident.emailSubject?.trim() || null,
+		location_street: incident.locationStreet?.trim() ?? '',
+		location_suburb: incident.locationSuburb?.trim() ?? '',
 		sender: incident.sender?.trim() ?? '',
 		marked: incident.marked?.trim() ?? '',
 		source: 'ui',
@@ -145,6 +153,12 @@ export function toIncidentUpdate(updates: Partial<Incident>, existingSource: Inc
 	}
 	if (allowEmailUpdate && updates.emailSubject !== undefined) {
 		payload.email_subject = updates.emailSubject?.trim() || null;
+	}
+	if (updates.locationStreet !== undefined) {
+		payload.location_street = updates.locationStreet?.trim() ?? '';
+	}
+	if (updates.locationSuburb !== undefined) {
+		payload.location_suburb = updates.locationSuburb?.trim() ?? '';
 	}
 	if (updates.sender !== undefined) payload.sender = updates.sender?.trim() ?? '';
 	if (updates.marked !== undefined) payload.marked = updates.marked?.trim() ?? '';
@@ -289,6 +303,8 @@ export function createDb(supabase: SupabaseClient) {
 				source: normalizeIncidentSource(row.source),
 				emailSender: row.email_sender || '',
 				emailSubject: row.email_subject || '',
+				locationStreet: row.location_street || '',
+				locationSuburb: row.location_suburb || '',
 				dateReceived: row.date_received,
 				time: row.time || '',
 				sender: row.sender?.trim() ?? '',

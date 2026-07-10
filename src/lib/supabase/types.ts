@@ -111,6 +111,8 @@ export interface Database {
           status: string
           email_sender?: string | null
           email_subject?: string | null
+          location_street?: string
+          location_suburb?: string
           sender?: string
           marked?: string
           source?: string
@@ -134,6 +136,8 @@ export interface Database {
           status?: string
           email_sender?: string | null
           email_subject?: string | null
+          location_street?: string
+          location_suburb?: string
           sender?: string
           marked?: string
           source?: string
@@ -155,6 +159,8 @@ export interface Database {
           status?: string
           email_sender?: string | null
           email_subject?: string | null
+          location_street?: string
+          location_suburb?: string
           sender?: string
           marked?: string
           date_response?: string | null

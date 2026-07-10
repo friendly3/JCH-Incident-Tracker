@@ -4,6 +4,8 @@
  * Example:
  *   "SOD Disputed Delivery: 72956318 N22226 Menai CHENGZ2 - Blaxland Dr"
  *   → suburb Menai, street Blaxland Dr, facility N22226, driver CHENGZ2
+ *
+ * Manual locationStreet / locationSuburb on an incident always win over the subject.
  */
 
 export type ParsedEmailLocation = {
@@ -15,6 +17,15 @@ export type ParsedEmailLocation = {
 	/** Query string for geocoders (always NSW, Australia). */
 	query: string;
 	raw: string;
+	/** How the location was obtained. */
+	source: 'manual' | 'subject';
+};
+
+export type IncidentLocationFields = {
+	emailSubject?: string;
+	referenceNo?: string;
+	locationStreet?: string;
+	locationSuburb?: string;
 };
 
 /**
@@ -50,8 +61,38 @@ export function parseEmailSubjectLocation(
 		driver,
 		street,
 		query: `${street}, ${suburb} NSW, Australia`,
-		raw: s
+		raw: s,
+		source: 'subject'
 	};
+}
+
+/**
+ * Resolve an incident’s map location: manual street/suburb first, else email subject.
+ * Suburb alone is enough (street optional) for suburb-centre geocoding.
+ */
+export function resolveIncidentLocation(
+	row: IncidentLocationFields
+): ParsedEmailLocation | null {
+	const street = (row.locationStreet ?? '').trim().replace(/\s+/g, ' ');
+	const suburb = (row.locationSuburb ?? '').trim().replace(/\s+/g, ' ');
+
+	if (suburb) {
+		const query = street
+			? `${street}, ${suburb} NSW, Australia`
+			: `${suburb} NSW, Australia`;
+		return {
+			articleNo: '',
+			facilityCode: '',
+			suburb,
+			driver: '',
+			street,
+			query,
+			raw: street ? `${street}, ${suburb}` : suburb,
+			source: 'manual'
+		};
+	}
+
+	return parseEmailSubjectLocation(row.emailSubject);
 }
 
 export type LocationAggregate = {
@@ -62,22 +103,26 @@ export type LocationAggregate = {
 	count: number;
 	/** Sample subjects / refs for popup */
 	samples: string[];
+	/** At least one incident in this group used a manual location. */
+	hasManual: boolean;
 };
 
-/** Aggregate incidents by parsed street+suburb key. */
+/** Aggregate incidents by resolved street+suburb key (manual overrides subject). */
 export function aggregateLocationsFromSubjects(
-	subjects: { emailSubject?: string; referenceNo?: string }[]
+	rows: IncidentLocationFields[]
 ): LocationAggregate[] {
 	const map = new Map<string, LocationAggregate>();
 
-	for (const row of subjects) {
-		const parsed = parseEmailSubjectLocation(row.emailSubject);
+	for (const row of rows) {
+		const parsed = resolveIncidentLocation(row);
 		if (!parsed) continue;
 		const key = `${parsed.suburb.toLowerCase()}|${parsed.street.toLowerCase()}`;
 		const existing = map.get(key);
-		const sample = row.referenceNo?.trim() || parsed.articleNo || parsed.raw;
+		const sample =
+			row.referenceNo?.trim() || parsed.articleNo || parsed.raw;
 		if (existing) {
 			existing.count += 1;
+			if (parsed.source === 'manual') existing.hasManual = true;
 			if (existing.samples.length < 5) existing.samples.push(sample);
 		} else {
 			map.set(key, {
@@ -86,7 +131,8 @@ export function aggregateLocationsFromSubjects(
 				street: parsed.street,
 				query: parsed.query,
 				count: 1,
-				samples: [sample]
+				samples: [sample],
+				hasManual: parsed.source === 'manual'
 			});
 		}
 	}
@@ -95,25 +141,25 @@ export function aggregateLocationsFromSubjects(
 }
 
 export type LocationParseSummary = {
-	/** Distinct street+suburb groups that parsed successfully. */
+	/** Distinct street+suburb groups that resolved successfully. */
 	locations: LocationAggregate[];
-	/** Incidents with a parseable street + suburb in the subject. */
+	/** Incidents with a usable location (manual or subject). */
 	parseableIncidentCount: number;
 	/**
-	 * Incidents with no usable location in the subject
-	 * (missing subject or did not match the known template).
+	 * Incidents with no usable location
+	 * (no manual suburb and subject missing / not matching template).
 	 */
 	unparseableIncidentCount: number;
 	totalIncidents: number;
 };
 
-/** Aggregate locations and count incidents that cannot be parsed to a place. */
+/** Aggregate locations and count incidents that cannot be placed on the map. */
 export function summarizeLocationsFromSubjects(
-	subjects: { emailSubject?: string; referenceNo?: string }[]
+	rows: IncidentLocationFields[]
 ): LocationParseSummary {
-	const locations = aggregateLocationsFromSubjects(subjects);
+	const locations = aggregateLocationsFromSubjects(rows);
 	const parseableIncidentCount = locations.reduce((sum, loc) => sum + loc.count, 0);
-	const totalIncidents = subjects.length;
+	const totalIncidents = rows.length;
 	return {
 		locations,
 		parseableIncidentCount,

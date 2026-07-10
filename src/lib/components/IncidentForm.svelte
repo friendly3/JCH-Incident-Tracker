@@ -9,6 +9,7 @@
 	} from '$lib/formatDate';
 	import DatePickerPopover from '$lib/components/DatePickerPopover.svelte';
 	import TimePickerPopover from '$lib/components/TimePickerPopover.svelte';
+	import { parseEmailSubjectLocation } from '$lib/parseEmailSubjectLocation';
 
 	interface Props {
 		incident?: Incident;
@@ -41,7 +42,7 @@
 	const isEdit = $derived(!!incident);
 	let showConfirm = $state(false);
 	let submitError = $state<string | null>(null);
-	type SubmitErrorField = 'dateReceived' | 'dateResponse' | 'type';
+	type SubmitErrorField = 'dateReceived' | 'dateResponse' | 'type' | 'location';
 	let submitErrorField = $state<SubmitErrorField | null>(null);
 	const FK_EMPTY = '';
 
@@ -68,6 +69,8 @@
 			timeResponse: normalizeTimeField(source.timeResponse),
 			emailSender: source.emailSender?.trim() ?? '',
 			emailSubject: source.emailSubject?.trim() ?? '',
+			locationStreet: source.locationStreet?.trim() ?? '',
+			locationSuburb: source.locationSuburb?.trim() ?? '',
 			sender: source.sender?.trim() ?? '',
 			marked: source.marked?.trim() ?? '',
 			response: source.response?.trim() ?? '',
@@ -86,6 +89,8 @@
 			source: 'ui',
 			emailSender: '',
 			emailSubject: '',
+			locationStreet: '',
+			locationSuburb: '',
 			dateReceived: '',
 			time: '',
 			sender: '',
@@ -119,6 +124,8 @@
 		actionId: string | null;
 		emailSender: string;
 		emailSubject: string;
+		locationStreet: string;
+		locationSuburb: string;
 	};
 
 	/**
@@ -142,7 +149,9 @@
 			timeResponse: normalizeTimeField(value.timeResponse),
 			actionId: value.actionId,
 			emailSender: value.emailSender?.trim() ?? '',
-			emailSubject: value.emailSubject?.trim() ?? ''
+			emailSubject: value.emailSubject?.trim() ?? '',
+			locationStreet: value.locationStreet?.trim() ?? '',
+			locationSuburb: value.locationSuburb?.trim() ?? ''
 		};
 	}
 
@@ -151,6 +160,8 @@
 		source: 'ui',
 		emailSender: '',
 		emailSubject: '',
+		locationStreet: '',
+		locationSuburb: '',
 		dateReceived: '',
 		time: '',
 		sender: '',
@@ -242,15 +253,28 @@
 			return;
 		}
 
+		const locationStreet = form.locationStreet?.trim() ?? '';
+		const locationSuburb = form.locationSuburb?.trim() ?? '';
+		// Street without suburb is not enough to place on the map
+		if (locationStreet && !locationSuburb) {
+			submitError = 'Suburb is required when a street is set (for the NSW map).';
+			submitErrorField = 'location';
+			return;
+		}
+
 		// Persist normalized values so free-typed prefixes become clean YYYY-MM-DD.
 		form.dateReceived = dateReceived;
 		form.dateResponse = dateResponse;
+		form.locationStreet = locationStreet;
+		form.locationSuburb = locationSuburb;
 
 		const payload: Incident = {
 			...form,
 			source: form.source === 'import' ? 'import' : 'ui',
 			dateReceived,
 			dateResponse,
+			locationStreet,
+			locationSuburb,
 			typeId,
 			driverId: normalizeFkId(form.driverId),
 			teamLeaderId: normalizeFkId(form.teamLeaderId),
@@ -432,6 +456,45 @@
 	const footerBtnFocus =
 		'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500';
 
+	/** Subject-parsed location (hint only — manual fields override for the map). */
+	const subjectParsedLocation = $derived(parseEmailSubjectLocation(form.emailSubject));
+	const hasManualLocation = $derived(
+		!!(form.locationSuburb?.trim() || form.locationStreet?.trim())
+	);
+	const locationStatusText = $derived.by(() => {
+		const suburb = form.locationSuburb?.trim();
+		const street = form.locationStreet?.trim();
+		if (suburb) {
+			return street
+				? `Map will use: ${street}, ${suburb}, NSW`
+				: `Map will use suburb centre: ${suburb}, NSW`;
+		}
+		if (subjectParsedLocation) {
+			return `Map will use subject: ${subjectParsedLocation.street}, ${subjectParsedLocation.suburb}, NSW`;
+		}
+		return 'No map location yet — enter suburb (and optional street) below, or use a matching email subject.';
+	});
+
+	function applySubjectLocation() {
+		const parsed = parseEmailSubjectLocation(form.emailSubject);
+		if (!parsed) return;
+		form.locationStreet = parsed.street;
+		form.locationSuburb = parsed.suburb;
+		if (submitErrorField === 'location') {
+			submitError = null;
+			submitErrorField = null;
+		}
+	}
+
+	function clearManualLocation() {
+		form.locationStreet = '';
+		form.locationSuburb = '';
+		if (submitErrorField === 'location') {
+			submitError = null;
+			submitErrorField = null;
+		}
+	}
+
 	const receivedAtDescribedBy = $derived(
 		submitErrorField === 'dateReceived'
 			? 'receivedAt-desc incident-submit-error'
@@ -561,6 +624,81 @@
 						/>
 					</div>
 				</div>
+
+				<div class="mb-2 mt-6" role="group" aria-labelledby="section-location-heading">
+					<h3 id="section-location-heading" class="sn-section-title">Map location (NSW)</h3>
+					<p class="mb-3 text-xs leading-snug text-warm-500" id="location-status">
+						{locationStatusText}
+					</p>
+					{#if subjectParsedLocation && !hasManualLocation}
+						<p class="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-700/50 dark:bg-sky-950/40 dark:text-sky-100">
+							Detected from email subject:
+							<strong>
+								{subjectParsedLocation.street}, {subjectParsedLocation.suburb}
+							</strong>
+							— save as-is for the map, or edit the fields below to correct it.
+						</p>
+					{:else if !subjectParsedLocation && !hasManualLocation}
+						<p class="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-100">
+							Location undetermined from the email subject. Enter a suburb (street optional)
+							so this incident appears on the dashboard map.
+						</p>
+					{/if}
+					<div class="sn-field-row">
+						<label for="locationStreet" class="sn-field-label">Street</label>
+						<div class="sn-field-control">
+							<input
+								id="locationStreet"
+								type="text"
+								bind:value={form.locationStreet}
+								placeholder="e.g. Blaxland Dr"
+								autocomplete="street-address"
+								aria-describedby="location-status"
+								aria-invalid={submitErrorField === 'location' ? 'true' : undefined}
+								class={inputClass}
+							/>
+						</div>
+					</div>
+					<div class="sn-field-row">
+						<label for="locationSuburb" class="sn-field-label">Suburb</label>
+						<div class="sn-field-control">
+							<input
+								id="locationSuburb"
+								type="text"
+								bind:value={form.locationSuburb}
+								placeholder="e.g. Menai"
+								autocomplete="address-level2"
+								aria-describedby="location-status"
+								aria-invalid={submitErrorField === 'location' ? 'true' : undefined}
+								class={inputClass}
+							/>
+						</div>
+					</div>
+					<div class="sn-field-row">
+						<span class="sn-field-label sr-only">Location actions</span>
+						<div class="sn-field-control flex flex-wrap gap-2">
+							{#if subjectParsedLocation}
+								<button
+									type="button"
+									class="rounded-md border border-warm-200 bg-white px-2.5 py-1.5 text-xs font-medium text-warm-700 hover:bg-warm-50 {footerBtnFocus}"
+									onclick={applySubjectLocation}
+								>
+									Use subject location
+								</button>
+							{/if}
+							{#if hasManualLocation}
+								<button
+									type="button"
+									class="rounded-md border border-warm-200 bg-white px-2.5 py-1.5 text-xs font-medium text-warm-700 hover:bg-warm-50 {footerBtnFocus}"
+									onclick={clearManualLocation}
+								>
+									Clear map location
+								</button>
+							{/if}
+						</div>
+					</div>
+				</div>
+
 				<div class="sn-field-row">
 					<label for="referenceText" class="sn-field-label">Reference Text</label>
 					<div class="sn-field-control">

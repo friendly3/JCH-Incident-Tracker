@@ -534,13 +534,6 @@
 		return sliceCount > 6 ? 'right' : 'bottom';
 	}
 
-	function getPieChartHeightClass(sliceCount: number): string {
-		// Tall enough that layout padding + outside labels (value+%) fit inside the canvas
-		if (sliceCount > 10) return 'h-[34rem]';
-		if (sliceCount > 6) return 'h-[30rem]';
-		return 'h-[26rem]';
-	}
-
 	function buildPieChartData(
 		entries: [string, number][]
 	): { labels: string[]; datasets: { data: number[]; backgroundColor: string[]; borderColor: string[]; borderWidth: number }[] } {
@@ -1191,8 +1184,6 @@
 
 	const driverChartAriaLabel = $derived(buildChartAriaLabel('Incidents by Driver', incidentsByDriver));
 
-	const driverChartHeightClass = $derived(getPieChartHeightClass(incidentsByDriver.length));
-
 	onMount(() => {
 		resizeHandler = () => {
 			chartInstance?.resize();
@@ -1333,11 +1324,6 @@
 		instance.data.labels = driverChartData.labels;
 		dataset.data = driverChartData.datasets[0].data;
 		applyPieChartTheme(instance, incidentsByDriver.length);
-	});
-
-	$effect(() => {
-		driverChartHeightClass;
-		driverChart?.resize();
 	});
 
 	$effect(() => {
@@ -1598,10 +1584,10 @@
 					</section>
 				</div>
 
-				<!-- Time-series charts: total volume + type breakdown -->
-				<div class="grid grid-cols-1 gap-2 lg:grid-cols-2">
+				<!-- Three equal charts: volume, type over time, driver -->
+				<div class="grid grid-cols-1 gap-2 lg:grid-cols-3 lg:items-stretch">
 					<section
-						class="rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
+						class="flex min-w-0 flex-col rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="over-time-chart-title"
 					>
 						<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -1623,8 +1609,8 @@
 						</div>
 						<p class="mb-1.5 text-xs text-warm-500">{timeRangeLabel}</p>
 						<div
-							class="h-80 w-full overflow-visible sm:h-96"
-							style="position: relative; min-height: 320px;"
+							class="min-h-0 w-full flex-1 overflow-visible"
+							style="position: relative; height: 22rem; min-height: 22rem;"
 						>
 							{#if incidentsByDate.length === 0}
 								<div class="flex h-full items-center justify-center">
@@ -1641,7 +1627,7 @@
 					</section>
 
 					<section
-						class="rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
+						class="flex min-w-0 flex-col rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="type-over-time-chart-title"
 						aria-describedby="type-over-time-chart-summary"
 					>
@@ -1653,8 +1639,8 @@
 						</div>
 						<p id="type-over-time-chart-summary" class="sr-only">{typeOverTimeAriaLabel}</p>
 						<div
-							class="h-80 w-full overflow-visible sm:h-96"
-							style="position: relative; min-height: 320px;"
+							class="min-h-0 w-full flex-1 overflow-visible"
+							style="position: relative; height: 22rem; min-height: 22rem;"
 						>
 							{#if !hasTypeOverTimeData}
 								<div class="flex h-full items-center justify-center">
@@ -1689,15 +1675,9 @@
 							</table>
 						</div>
 					</section>
-				</div>
 
-				<!-- Map + driver chart -->
-				<div class="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2 lg:items-stretch">
-					<div class="min-h-0 min-w-0">
-						<NswIncidentMap {incidents} />
-					</div>
 					<section
-						class="overflow-visible rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
+						class="flex min-w-0 flex-col overflow-visible rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="driver-chart-title"
 						aria-describedby="driver-chart-summary"
 					>
@@ -1706,8 +1686,8 @@
 						</h2>
 						<p id="driver-chart-summary" class="sr-only">{driverChartAriaLabel}</p>
 						<div
-							class="{driverChartHeightClass} w-full overflow-visible"
-							style="position: relative;"
+							class="min-h-0 w-full flex-1 overflow-visible"
+							style="position: relative; height: 22rem; min-height: 22rem;"
 						>
 							{#if incidentsByDriver.length === 0}
 								<div class="flex h-full items-center justify-center">
@@ -1738,6 +1718,11 @@
 							</table>
 						</div>
 					</section>
+				</div>
+
+				<!-- NSW map full width -->
+				<div class="mt-2 min-h-0 min-w-0">
+					<NswIncidentMap {incidents} />
 				</div>
 			</div>
 		</div>
