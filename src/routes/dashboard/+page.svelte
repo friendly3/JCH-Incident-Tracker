@@ -506,10 +506,10 @@
 	}
 
 	function getPieChartHeightClass(sliceCount: number): string {
-		// Taller canvases leave room for outside labels + leader lines
-		if (sliceCount > 10) return 'h-[30rem]';
-		if (sliceCount > 6) return 'h-[26rem]';
-		return 'h-80';
+		// Tall enough that layout padding + outside labels (value+%) fit inside the canvas
+		if (sliceCount > 10) return 'h-[34rem]';
+		if (sliceCount > 6) return 'h-[30rem]';
+		return 'h-[26rem]';
 	}
 
 	function buildPieChartData(
@@ -558,7 +558,9 @@
 	/** Share of a doughnut slice (0–1). Small slices get outside labels + leader lines. */
 	const SMALL_SLICE_SHARE = 0.08;
 	/** Distance from outer arc to outside label (must match leader geometry). */
-	const OUTSIDE_LABEL_OFFSET = 16;
+	const OUTSIDE_LABEL_OFFSET = 14;
+	/** Canvas layout padding so outside labels/leaders are never clipped by the bitmap edge. */
+	const DOUGHNUT_LAYOUT_PADDING = { top: 52, right: 48, bottom: 44, left: 48 } as const;
 
 	function getDoughnutSliceShare(context: {
 		dataset: { data: unknown[] };
@@ -661,11 +663,11 @@
 		return {
 			responsive: true,
 			maintainAspectRatio: false,
-			// Donut hole
-			cutout: '52%',
+			// Donut hole — slightly smaller ring so more canvas is free for labels
+			cutout: '50%',
 			layout: {
-				// Generous padding so outside labels + leaders are not clipped (esp. top)
-				padding: { top: 36, right: 36, bottom: 28, left: 36 }
+				// Labels draw on the canvas; padding shrinks the ring so peaks are not clipped
+				padding: { ...DOUGHNUT_LAYOUT_PADDING }
 			},
 			plugins: {
 				// HTML card heading is the only chart title — never draw a Chart.js title
@@ -674,12 +676,13 @@
 				},
 				legend: {
 					display: true,
-					position: getPieLegendPosition(sliceCount),
+					// Prefer right legend so top/bottom keep space for outside labels
+					position: sliceCount > 4 ? 'right' : getPieLegendPosition(sliceCount),
 					labels: {
 						usePointStyle: true,
 						font: { size: 13, weight: 500 },
 						color: colors.legend,
-						padding: 16,
+						padding: 14,
 						boxWidth: 12
 					}
 				},
@@ -832,7 +835,9 @@
 		dataset.borderWidth = 3;
 
 		if (chart.options?.plugins?.legend) {
-			chart.options.plugins.legend.position = getPieLegendPosition(sliceCount);
+			// Prefer right when many slices so top padding stays free for outside labels
+			chart.options.plugins.legend.position =
+				sliceCount > 4 ? 'right' : getPieLegendPosition(sliceCount);
 			if (chart.options.plugins.legend.labels) {
 				chart.options.plugins.legend.labels.color = colors.legend;
 			}
@@ -853,9 +858,13 @@
 		if (chart.options?.plugins) {
 			chart.options.plugins.title = { display: false };
 		}
-		// Keep donut hole consistent if options were partially replaced
+		// Keep donut hole + padding consistent (padding is what prevents label clipping)
 		if (chart.options) {
-			chart.options.cutout = '55%';
+			chart.options.cutout = '50%';
+			chart.options.layout = {
+				...(chart.options.layout ?? {}),
+				padding: { ...DOUGHNUT_LAYOUT_PADDING }
+			};
 		}
 
 		chart.update('none');
@@ -1741,7 +1750,7 @@
 				<!-- Pie Charts -->
 				<div class="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
 					<section
-						class="rounded-lg border border-warm-200 bg-white p-6 shadow-sm"
+						class="overflow-visible rounded-lg border border-warm-200 bg-white p-6 shadow-sm"
 						aria-labelledby="team-leader-chart-title"
 						aria-describedby="team-leader-chart-summary"
 					>
@@ -1750,7 +1759,7 @@
 						</h2>
 						<p id="team-leader-chart-summary" class="sr-only">{teamLeaderChartAriaLabel}</p>
 						<div
-							class="{teamLeaderChartHeightClass} w-full overflow-visible pt-2"
+							class="{teamLeaderChartHeightClass} w-full overflow-visible"
 							style="position: relative;"
 						>
 							{#if incidentsByTeamLeader.length === 0}
@@ -1783,7 +1792,7 @@
 						</div>
 					</section>
 					<section
-						class="rounded-lg border border-warm-200 bg-white p-6 shadow-sm"
+						class="overflow-visible rounded-lg border border-warm-200 bg-white p-6 shadow-sm"
 						aria-labelledby="driver-chart-title"
 						aria-describedby="driver-chart-summary"
 					>
@@ -1792,7 +1801,7 @@
 						</h2>
 						<p id="driver-chart-summary" class="sr-only">{driverChartAriaLabel}</p>
 						<div
-							class="{driverChartHeightClass} w-full overflow-visible pt-2"
+							class="{driverChartHeightClass} w-full overflow-visible"
 							style="position: relative;"
 						>
 							{#if incidentsByDriver.length === 0}
