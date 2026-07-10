@@ -44,19 +44,24 @@
 	 * Chart chrome (axes / tooltips) — high-contrast neutrals independent of the
 	 * teal UI accent so plots stay readable on white and dark cards.
 	 */
+	/** Same light gray as the NSW map basemap shell (`.nsw-incident-map` #e8e8e8). */
+	const MAP_GRID_GRAY = '#e8e8e8';
+
 	const CHART_FALLBACKS = {
 		light: {
 			accent: '#0072B2',
 			ticks: '#3a3b3d',
 			legend: '#181818',
-			grid: '#9a9d9e',
+			// Match map chart gray for axis gridlines
+			grid: MAP_GRID_GRAY,
 			pointBorder: '#ffffff'
 		},
 		dark: {
 			accent: '#56B4E9',
 			ticks: '#e0e2e2',
 			legend: '#f8f8f8',
-			grid: '#6e7072',
+			// Subtle light gray on dark cards (same hue family as map gray)
+			grid: MAP_GRID_GRAY,
 			pointBorder: '#1e1f21'
 		}
 	} as const;
