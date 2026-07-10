@@ -2069,12 +2069,12 @@
 		line-height: 1.1rem;
 	}
 
-	/* 13.5rem + 30% = 17.55rem */
+	/* 17.55rem + 20% = 21.06rem */
 	:global(.dashboard-chart-plot) {
-		flex: 0 0 17.55rem;
-		height: 17.55rem;
-		min-height: 17.55rem;
-		max-height: 17.55rem;
+		flex: 0 0 21.06rem;
+		height: 21.06rem;
+		min-height: 21.06rem;
+		max-height: 21.06rem;
 		position: relative;
 		overflow: hidden;
 		width: 100%;
@@ -2083,7 +2083,7 @@
 	:global(.dashboard-chart-plot canvas) {
 		width: 100% !important;
 		height: 100% !important;
-		max-height: 17.55rem !important;
+		max-height: 21.06rem !important;
 	}
 
 	:global(.dashboard-chart-footer) {
