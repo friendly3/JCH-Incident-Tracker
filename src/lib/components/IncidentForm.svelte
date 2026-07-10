@@ -245,7 +245,7 @@
 
 	const inputClass =
 		'w-full rounded-md border border-warm-200 bg-white px-3 py-2 text-sm text-warm-700 input-focus dark:bg-warm-200';
-	/** Visible native date control with full-field picker hit target + trailing icon. */
+	/** Native date control; trailing custom calendar icon opens the picker. */
 	const nativeDateClass =
 		'native-datetime form-field-surface input-focus relative w-full min-h-[2.375rem] rounded-md border border-warm-200 bg-white px-3 py-2 pr-10 text-sm text-warm-700 dark:bg-warm-200';
 	/**
@@ -265,6 +265,10 @@
 		time: 'receivedAt-time-picker-dialog',
 		timeResponse: 'respondedAt-time-picker-dialog'
 	} as const;
+
+	/** Anchor wraps for positioning TimePickerPopover under each time field. */
+	let timeReceivedWrapEl = $state<HTMLDivElement | undefined>(undefined);
+	let timeResponseWrapEl = $state<HTMLDivElement | undefined>(undefined);
 
 	/** Open the OS/browser date picker for a native date input. */
 	function openPickerFor(input: HTMLInputElement | null | undefined) {
@@ -380,7 +384,7 @@
 		aria-controls={timePickerDialogId[field]}
 		data-time-picker-trigger
 		data-time-field={field}
-		onclick={(e) => openTimePicker(field, e)}
+		onclick={(e) => toggleTimePicker(field, e)}
 	>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
@@ -486,7 +490,11 @@
 								{@render dateTimeCalendarButton()}
 							</div>
 							<span id="receivedAt-date-hint" class="sr-only">Date</span>
-							<div class={timeFieldWrapClass} data-datetime-wrap>
+							<div
+								class={timeFieldWrapClass}
+								data-datetime-wrap
+								bind:this={timeReceivedWrapEl}
+							>
 								<input
 									id="receivedAt-time"
 									type="time"
@@ -502,6 +510,7 @@
 									value={form.time}
 									title="Time received"
 									idPrefix="receivedAt-time-picker"
+									anchorEl={timeReceivedWrapEl}
 									onApply={(t) => applyTimePicker('time', t)}
 									onClose={closeTimePicker}
 								/>
@@ -633,7 +642,11 @@
 								{@render dateTimeCalendarButton()}
 							</div>
 							<span id="respondedAt-date-hint" class="sr-only">Date</span>
-							<div class={timeFieldWrapClass} data-datetime-wrap>
+							<div
+								class={timeFieldWrapClass}
+								data-datetime-wrap
+								bind:this={timeResponseWrapEl}
+							>
 								<input
 									id="respondedAt-time"
 									type="time"
@@ -649,6 +662,7 @@
 									value={form.timeResponse}
 									title="Time responded"
 									idPrefix="respondedAt-time-picker"
+									anchorEl={timeResponseWrapEl}
 									onApply={(t) => applyTimePicker('timeResponse', t)}
 									onClose={closeTimePicker}
 								/>
