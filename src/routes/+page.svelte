@@ -595,8 +595,16 @@
 			</div>
 			<p class="mt-3 text-sm text-warm-500">{filtered.length} {filtered.length === 1 ? 'incident' : 'incidents'} found</p>
 		</div>
-		<!-- Actions under filters (left-aligned) -->
-		<div class="mt-3 flex items-center justify-start gap-2">
+		<!-- Actions under filters: Add then Refresh; indented ~2ch from left -->
+		<div class="mt-3 flex items-center justify-start gap-2 pl-[2ch]">
+			<button
+				type="button"
+				bind:this={addIncidentBtn}
+				onclick={openAdd}
+				class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+			>
+				+ Add Incident
+			</button>
 			<button
 				type="button"
 				onclick={handleRefresh}
@@ -619,14 +627,6 @@
 						d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
 					/>
 				</svg>
-			</button>
-			<button
-				type="button"
-				bind:this={addIncidentBtn}
-				onclick={openAdd}
-				class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
-			>
-				+ Add Incident
 			</button>
 		</div>
 	{/if}
