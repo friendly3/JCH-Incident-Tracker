@@ -9,10 +9,11 @@
 	import { theme } from '$lib/theme.svelte';
 	import type { Chart as ChartJS, ChartOptions } from 'chart.js';
 	import { Chart, registerables } from 'chart.js';
+	import ChartDataLabels from 'chartjs-plugin-datalabels';
 	import { onMount, untrack } from 'svelte';
 
-	// Register Chart.js plugins
-	Chart.register(...registerables);
+	// Register Chart.js plugins (datalabels for always-visible pie slice stats)
+	Chart.register(...registerables, ChartDataLabels);
 
 	function cssVar(name: string, fallback: string): string {
 		if (typeof document === 'undefined') return fallback;
@@ -90,6 +91,10 @@
 					callbacks: {
 						label: (context) => `${context.parsed.y} incidents`
 					}
+				},
+				// Global datalabels plugin is for pie charts only
+				datalabels: {
+					display: false
 				}
 			},
 			scales: {
@@ -323,6 +328,33 @@
 		};
 	}
 
+	/** Contrast text on a hex (or fallback) pie slice for readable datalabels. */
+	function contrastOnHex(bg: string, isDark: boolean): string {
+		if (bg.startsWith('#') && (bg.length === 7 || bg.length === 4)) {
+			const full =
+				bg.length === 4
+					? `#${bg[1]}${bg[1]}${bg[2]}${bg[2]}${bg[3]}${bg[3]}`
+					: bg;
+			const r = parseInt(full.slice(1, 3), 16);
+			const g = parseInt(full.slice(3, 5), 16);
+			const b = parseInt(full.slice(5, 7), 16);
+			// Relative luminance (sRGB approximation)
+			const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+			return luminance > 0.55 ? '#181818' : '#f8f8f8';
+		}
+		return isDark ? '#f8f8f8' : '#181818';
+	}
+
+	/** Sum only numeric dataset values (Chart.js data unions include Point etc.). */
+	function sumNumericData(data: unknown[] | undefined): number {
+		if (!data) return 0;
+		let total = 0;
+		for (const v of data) {
+			if (typeof v === 'number' && Number.isFinite(v)) total += v;
+		}
+		return total;
+	}
+
 	function buildPieChartOptions(
 		colors: ReturnType<typeof getChartTheme>,
 		sliceCount = 0
@@ -330,7 +362,15 @@
 		return {
 			responsive: true,
 			maintainAspectRatio: false,
+			layout: {
+				// Room for in-slice labels without crowding the legend
+				padding: 8
+			},
 			plugins: {
+				// HTML card heading is the only chart title — never draw a Chart.js title
+				title: {
+					display: false
+				},
 				legend: {
 					display: true,
 					position: getPieLegendPosition(sliceCount),
@@ -350,15 +390,58 @@
 					cornerRadius: 8,
 					callbacks: {
 						label: (context) => {
-							const total = context.dataset.data.reduce(
-								(sum, value) => sum + (typeof value === 'number' ? value : 0),
-								0
-							);
+							const total = sumNumericData(context.dataset.data as unknown[]);
 							const value = typeof context.parsed === 'number' ? context.parsed : 0;
 							const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
 							return `${value} incidents (${percentage}%)`;
 						}
 					}
+				},
+				// Always-visible count + % on every non-zero slice (no hover required)
+				datalabels: {
+					display: (context) => {
+						const raw = context.dataset.data[context.dataIndex];
+						const value = typeof raw === 'number' ? raw : 0;
+						// Skip empty slices only; all positive slices get labels
+						return value > 0;
+					},
+					// Prefer center of slice; plugin may auto-adjust when clamp is on
+					anchor: 'center',
+					align: 'center',
+					offset: 0,
+					formatter: (value, context) => {
+						const num = typeof value === 'number' ? value : 0;
+						const total = sumNumericData(context.dataset.data as unknown[]);
+						const percentage = total > 0 ? Math.round((num / total) * 100) : 0;
+						return `${num}\n(${percentage}%)`;
+					},
+					color: (context) => {
+						const bg = Array.isArray(context.dataset.backgroundColor)
+							? context.dataset.backgroundColor[context.dataIndex]
+							: context.dataset.backgroundColor;
+						return contrastOnHex(typeof bg === 'string' ? bg : '#05ac98', isDarkMode());
+					},
+					font: (context) => {
+						// Slightly smaller type when many slices share the ring
+						const sliceCount = context.dataset.data?.length ?? 0;
+						return {
+							size: sliceCount > 8 ? 10 : 11,
+							weight: 'bold' as const
+						};
+					},
+					textAlign: 'center',
+					// Soft outline so labels stay readable on any slice color
+					textStrokeColor: (context) => {
+						const bg = Array.isArray(context.dataset.backgroundColor)
+							? context.dataset.backgroundColor[context.dataIndex]
+							: context.dataset.backgroundColor;
+						const fg = contrastOnHex(typeof bg === 'string' ? bg : '#05ac98', isDarkMode());
+						// Opposite of label color for a thin halo
+						return fg === '#f8f8f8' ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.65)';
+					},
+					textStrokeWidth: 2,
+					clamp: true,
+					clip: false
 				}
 			}
 		};
@@ -382,6 +465,10 @@
 		}
 		if (chart.options?.plugins?.tooltip) {
 			chart.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
+		}
+		// Ensure Chart.js never draws a second title under the card heading
+		if (chart.options?.plugins) {
+			chart.options.plugins.title = { display: false };
 		}
 
 		chart.update('none');
@@ -724,8 +811,8 @@
 								style="max-height: 100%;"
 								aria-hidden="true"
 							></canvas>
+							<!-- Accessible data table (visually hidden); card h2 is the only visible title -->
 							<table class="sr-only" aria-labelledby="team-leader-chart-title">
-								<caption>Incidents by Team Leader</caption>
 								<thead>
 									<tr>
 										<th scope="col">Team Leader</th>
@@ -764,8 +851,8 @@
 								style="max-height: 100%;"
 								aria-hidden="true"
 							></canvas>
+							<!-- Accessible data table (visually hidden); card h2 is the only visible title -->
 							<table class="sr-only" aria-labelledby="driver-chart-title">
-								<caption>Incidents by Driver</caption>
 								<thead>
 									<tr>
 										<th scope="col">Driver</th>
@@ -783,67 +870,6 @@
 							</table>
 						</div>
 					</section>
-				</div>
-
-				<!-- Recent Incidents -->
-				<div class="mt-8 rounded-lg border border-warm-200 bg-white shadow-sm overflow-hidden">
-					<div class="px-6 py-4 border-b border-warm-200 bg-warm-50">
-						<h2 class="text-lg font-semibold text-warm-800">Recent Incidents</h2>
-					</div>
-					{#if incidents.length === 0}
-						<div class="p-8 text-center">
-							<p class="text-warm-500">No incidents recorded yet.</p>
-						</div>
-					{:else}
-						<table class="w-full text-left text-sm">
-							<thead class="border-b border-warm-200 bg-warm-50">
-								<tr>
-									<th class="px-6 py-3 font-medium text-warm-600">Date</th>
-									<th class="px-6 py-3 font-medium text-warm-600">Type</th>
-									<th class="px-6 py-3 font-medium text-warm-600">Ref No.</th>
-									<th class="px-6 py-3 font-medium text-warm-600">Team Leader</th>
-									<th class="px-6 py-3 font-medium text-warm-600">Driver</th>
-									<th class="px-6 py-3 font-medium text-warm-600">Status</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each incidents.slice(0, 10) as incident (incident.id)}
-									<tr class="border-b border-warm-100 last:border-0 hover:bg-warm-50/50">
-										<td class="px-6 py-3 whitespace-nowrap text-warm-700">{formatDate(incident.dateReceived)}</td>
-										<td class="px-6 py-3 whitespace-nowrap">
-											<span class="inline-flex items-center rounded-full px-3 py-0.5 text-xs font-medium bg-warm-100 text-warm-700">
-												{incident.type}
-											</span>
-										</td>
-										<td class="px-6 py-3 whitespace-nowrap font-mono text-xs text-warm-600">{incident.referenceNo}</td>
-										<td class="px-6 py-3 whitespace-nowrap text-warm-600 uppercase">
-											{#if incident.teamLeader?.trim()}
-												{incident.teamLeader.trim()}
-											{:else}
-												<span class="text-warm-300">-</span>
-											{/if}
-										</td>
-										<td class="px-6 py-3 whitespace-nowrap text-warm-600">
-											{#if incident.driver?.trim()}
-												{incident.driver.trim()}
-											{:else}
-												<span class="text-warm-300">-</span>
-											{/if}
-										</td>
-										<td class="px-6 py-3 whitespace-nowrap">
-											{#if incident.action === 'Resolved'}
-												<span class="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Resolved</span>
-											{:else if incident.action}
-												<span class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">{incident.action}</span>
-											{:else}
-												<span class="text-warm-300">-</span>
-											{/if}
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					{/if}
 				</div>
 			</div>
 		</div>
