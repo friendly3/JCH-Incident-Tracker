@@ -120,8 +120,8 @@
 			legend: isDark
 				? cssVar('--color-warm-800', fallbacks.legend)
 				: cssVar('--color-warm-900', fallbacks.legend),
-			// Clearer grid than the previous 25% wash
-			grid: withAlpha(fallbacks.grid, isDark ? 0.45 : 0.55),
+			// Light map-matching gray (soft on white; faint on dark cards)
+			grid: isDark ? withAlpha(MAP_GRID_GRAY, 0.18) : MAP_GRID_GRAY,
 			fill: withAlpha(accent, isDark ? 0.18 : 0.15),
 			pointBorder: fallbacks.pointBorder,
 			tooltipBg: isDark
