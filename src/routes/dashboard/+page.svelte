@@ -144,13 +144,9 @@
 			responsive: true,
 			maintainAspectRatio: false,
 			plugins: {
+				// Single-series chart — legend is redundant
 				legend: {
-					display: true,
-					labels: {
-						usePointStyle: true,
-						font: { size: 12 },
-						color: colors.legend
-					}
+					display: false
 				},
 				tooltip: {
 					backgroundColor: colors.tooltipBg,
