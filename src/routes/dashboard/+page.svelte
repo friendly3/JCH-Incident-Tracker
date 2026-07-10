@@ -151,10 +151,11 @@
 		return n === 'UNASSIGNED' || n === 'UNSPECIFIED';
 	}
 
-	/** Medium gray for Unassigned / Unspecified on all dashboard charts. */
+	/** Light–medium gray for Unassigned / Unspecified on all dashboard charts. */
 	function getUnassignedChartColor(isDark = isDarkMode()): string {
-		// medium gray — slightly brighter on dark cards
-		return isDark ? '#9CA3AF' : '#6B7280';
+		// Lighter than slate-500 so empty buckets read as secondary, not heavy
+		// light: gray-400 · dark: gray-300 (readable on dark cards without looking black)
+		return isDark ? '#D1D5DB' : '#9CA3AF';
 	}
 
 	/** Series colour by category label when special; otherwise palette by index. */

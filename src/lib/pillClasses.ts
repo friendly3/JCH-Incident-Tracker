@@ -65,7 +65,7 @@ export function getActionStatusChartColor(action: string, isDark = false): strin
 			// red-600 / red-400
 			return isDark ? '#f87171' : '#dc2626';
 		default:
-			// warm-600 / warm-500
-			return isDark ? '#9a9c9e' : '#6a6c6e';
+			// light–medium gray (aligned with Unassigned chart buckets)
+			return isDark ? '#D1D5DB' : '#9CA3AF';
 	}
 }
