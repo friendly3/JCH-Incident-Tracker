@@ -1,8 +1,8 @@
 /**
  * Lightweight NSW geocoding for map pins.
- * 1) Known suburb centroids (instant, offline — primary)
- * 2) Nominatim (OpenStreetMap) for street-level when available
- * 3) Deterministic micro-offset so co-located streets stay distinguishable
+ * 1) Street-level via /api/geocode (server Nominatim proxy) when street is known
+ * 2) Known suburb centroids (offline fallback)
+ * 3) Deterministic micro-offset only for co-located suburb fallbacks
  * Results are cached in-memory + localStorage.
  */
 
@@ -97,7 +97,7 @@ const SUBURB_CENTROIDS: Record<string, { lat: number; lng: number }> = {
 
 const memoryCache = new Map<string, GeoPoint | null>();
 /** Bump when strategy changes so stale null/bad coords are not reused. */
-const STORAGE_KEY = 'nsw-geocode-v3';
+const STORAGE_KEY = 'nsw-geocode-v4-street';
 
 function loadStorage(): Record<string, GeoPoint | null> {
 	if (typeof localStorage === 'undefined') return {};
@@ -202,37 +202,42 @@ function inNswBounds(lat: number, lng: number): boolean {
 	return lat >= -38 && lat <= -28 && lng >= 140 && lng <= 154;
 }
 
-async function nominatimSearch(q: string): Promise<GeoPoint | null> {
+/** Call our server geocode proxy (avoids browser CORS on Nominatim). */
+async function serverGeocode(q: string): Promise<GeoPoint | null> {
+	if (typeof fetch === 'undefined') return null;
 	try {
-		const url = new URL('https://nominatim.openstreetmap.org/search');
-		url.searchParams.set('q', q);
-		url.searchParams.set('format', 'json');
-		url.searchParams.set('limit', '1');
-		url.searchParams.set('countrycodes', 'au');
-		url.searchParams.set('addressdetails', '0');
-
-		const res = await fetch(url.toString(), {
-			headers: {
-				Accept: 'application/json',
-				'User-Agent': 'JCH-Incident-Tracker/0.3 (dashboard map; local ops tool)'
-			}
-		});
+		const url = `/api/geocode?q=${encodeURIComponent(q)}`;
+		const res = await fetch(url);
 		if (!res.ok) return null;
-		const data = (await res.json()) as { lat: string; lon: string; display_name?: string }[];
-		if (!data[0]?.lat || !data[0]?.lon) return null;
-		const lat = parseFloat(data[0].lat);
-		const lng = parseFloat(data[0].lon);
-		if (!inNswBounds(lat, lng)) return null;
+		const data = (await res.json()) as {
+			found?: boolean;
+			lat?: number;
+			lng?: number;
+			label?: string;
+			precision?: 'street' | 'suburb';
+		};
+		if (!data.found || data.lat == null || data.lng == null) return null;
+		if (!inNswBounds(data.lat, data.lng)) return null;
 		return {
-			lat,
-			lng,
-			precision: 'street',
-			label: data[0].display_name ?? q
+			lat: data.lat,
+			lng: data.lng,
+			precision: data.precision === 'suburb' ? 'suburb' : 'street',
+			label: data.label ?? q
 		};
 	} catch {
 		return null;
 	}
 }
+
+function kmBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+	const dLat = (a.lat - b.lat) * 111.32;
+	const dLng =
+		(a.lng - b.lng) * 111.32 * Math.cos((a.lat * Math.PI) / 180);
+	return Math.hypot(dLat, dLng);
+}
+
+/** Zoom at/above this shows street-level pins; below aggregates by suburb. */
+export const STREET_DETAIL_MIN_ZOOM = 13;
 
 /** Default map view: Sydney CBD, NSW, Australia. */
 export const SYDNEY_CENTER: [number, number] = [-33.8688, 151.2093];
@@ -250,7 +255,7 @@ export const NSW_BOUNDS: [[number, number], [number, number]] = [
 
 /**
  * Geocode a street + suburb in NSW.
- * Prefers suburb centroid (reliable offline), then Nominatim, then jitter by key.
+ * Prefers true street-level coords via server Nominatim; falls back to suburb centre.
  */
 export async function geocodeNswLocation(
 	query: string,
@@ -260,7 +265,7 @@ export async function geocodeNswLocation(
 	const cacheKey = query.trim().toLowerCase();
 	const cached = getCached(cacheKey);
 	if (cached !== undefined) {
-		// Re-apply street jitter on cached suburb points so stack separation stays stable
+		// Re-apply street jitter only on suburb-precision fallbacks
 		if (cached && cached.precision === 'suburb' && opts?.street) {
 			const j = jitterFromKey(cached.lat, cached.lng, cacheKey);
 			return { ...cached, lat: j.lat, lng: j.lng };
@@ -270,65 +275,61 @@ export async function geocodeNswLocation(
 
 	const street = (opts?.street ?? '').trim();
 	const suburbTrim = suburb.trim();
-
-	// 1) Known suburb centroid (instant) — primary path; Nominatim often blocked in browsers
 	const centroid = suburbCentroid(suburbTrim);
-	if (centroid) {
-		const base = street
-			? (() => {
-					const j = jitterFromKey(centroid.lat, centroid.lng, cacheKey);
-					return { ...centroid, lat: j.lat, lng: j.lng, label: `${street}, ${suburbTrim}, NSW` };
-				})()
-			: centroid;
-		// Still try Nominatim for better street precision when possible (non-blocking strategy: try then keep better)
-		const streetQuery = street
-			? `${street}, ${suburbTrim} NSW, Australia`
-			: `${suburbTrim} NSW, Australia`;
-		const remote = await nominatimSearch(streetQuery);
-		if (remote) {
-			// Prefer remote if it is close to suburb centroid (within ~8 km) — avoids wrong AU hits
-			const dLat = (remote.lat - centroid.lat) * 111.32;
-			const dLng =
-				(remote.lng - centroid.lng) *
-				111.32 *
-				Math.cos((centroid.lat * Math.PI) / 180);
-			const distKm = Math.hypot(dLat, dLng);
-			if (distKm < 8) {
-				const point: GeoPoint = {
-					...remote,
-					precision: street ? 'street' : 'suburb'
-				};
-				setCached(cacheKey, point);
-				return point;
-			}
+
+	// 1) Street-level (or full query) via server proxy — preferred precision
+	const streetQuery = street
+		? `${street}, ${suburbTrim} NSW, Australia`
+		: query || `${suburbTrim} NSW, Australia`;
+	const remote = await serverGeocode(streetQuery);
+	if (remote) {
+		// If we know the suburb centre, reject hits that are clearly the wrong suburb
+		if (centroid && kmBetween(remote, centroid) > 12) {
+			// try suburb-only geocode next
+		} else {
+			const point: GeoPoint = {
+				...remote,
+				precision: street ? 'street' : remote.precision,
+				label: street
+					? `${street}, ${suburbTrim}, NSW`
+					: (remote.label ?? `${suburbTrim}, NSW`)
+			};
+			setCached(cacheKey, point);
+			return point;
 		}
-		setCached(cacheKey, centroid); // cache base centroid; jitter reapplied per key above
-		return base;
 	}
 
-	// 2) No known suburb — try Nominatim on full query then suburb-only
-	const remoteFull = await nominatimSearch(query);
-	if (remoteFull) {
-		setCached(cacheKey, remoteFull);
-		return remoteFull;
-	}
+	// 2) Suburb-only remote if street miss
 	if (suburbTrim) {
-		const remoteSuburb = await nominatimSearch(`${suburbTrim} NSW, Australia`);
-		if (remoteSuburb) {
+		const remoteSuburb = await serverGeocode(`${suburbTrim} NSW, Australia`);
+		if (remoteSuburb && inNswBounds(remoteSuburb.lat, remoteSuburb.lng)) {
 			const point: GeoPoint = {
 				...remoteSuburb,
 				precision: 'suburb',
 				label: `${suburbTrim}, NSW`
 			};
-			const out = street
-				? (() => {
-						const j = jitterFromKey(point.lat, point.lng, cacheKey);
-						return { ...point, lat: j.lat, lng: j.lng };
-					})()
-				: point;
 			setCached(cacheKey, point);
-			return out;
+			if (street) {
+				const j = jitterFromKey(point.lat, point.lng, cacheKey);
+				return { ...point, lat: j.lat, lng: j.lng, label: `${street}, ${suburbTrim}, NSW` };
+			}
+			return point;
 		}
+	}
+
+	// 3) Offline suburb centroid catalogue
+	if (centroid) {
+		setCached(cacheKey, centroid);
+		if (street) {
+			const j = jitterFromKey(centroid.lat, centroid.lng, cacheKey);
+			return {
+				...centroid,
+				lat: j.lat,
+				lng: j.lng,
+				label: `${street}, ${suburbTrim}, NSW`
+			};
+		}
+		return centroid;
 	}
 
 	setCached(cacheKey, null);
@@ -381,7 +382,84 @@ export async function geocodeMany(
 		if (point) out.set(item.key, point);
 		done += 1;
 		onProgress?.(done, items.length);
-		await new Promise((r) => setTimeout(r, 80));
+		// Nominatim policy ~1 req/s when hitting the network (cached = fast)
+		await new Promise((r) => setTimeout(r, 200));
 	}
 	return out;
+}
+
+/** Aggregate street-level geocoded places into suburb-level pins. */
+export function aggregatePlacesBySuburb<
+	T extends {
+		key: string;
+		lat: number;
+		lng: number;
+		count: number;
+		suburb: string;
+		street: string;
+		precision: GeoPoint['precision'];
+	}
+>(
+	places: T[]
+): {
+	key: string;
+	lat: number;
+	lng: number;
+	count: number;
+	suburb: string;
+	street: string;
+	placeCount: number;
+	precision: 'suburb';
+}[] {
+	const map = new Map<
+		string,
+		{
+			key: string;
+			latSum: number;
+			lngSum: number;
+			n: number;
+			count: number;
+			suburb: string;
+			placeCount: number;
+		}
+	>();
+
+	for (const p of places) {
+		const sk = p.suburb.trim().toLowerCase() || 'unknown';
+		const existing = map.get(sk);
+		if (existing) {
+			existing.latSum += p.lat;
+			existing.lngSum += p.lng;
+			existing.n += 1;
+			existing.count += p.count;
+			existing.placeCount += 1;
+		} else {
+			map.set(sk, {
+				key: `suburb|${sk}`,
+				latSum: p.lat,
+				lngSum: p.lng,
+				n: 1,
+				count: p.count,
+				suburb: p.suburb,
+				placeCount: 1
+			});
+		}
+	}
+
+	return [...map.values()]
+		.map((g) => {
+			const centroid = suburbCentroid(g.suburb);
+			return {
+				key: g.key,
+				// Prefer known suburb centre for stable suburb pins; else mean of streets
+				lat: centroid?.lat ?? g.latSum / g.n,
+				lng: centroid?.lng ?? g.lngSum / g.n,
+				count: g.count,
+				suburb: g.suburb,
+				street: '',
+				placeCount: g.placeCount,
+				precision: 'suburb' as const
+			};
+		})
+		.sort((a, b) => b.count - a.count);
 }

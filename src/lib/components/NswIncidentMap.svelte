@@ -2,8 +2,10 @@
 	import { onDestroy, onMount, tick } from 'svelte';
 	import type { Incident } from '$lib/data/incidents';
 	import {
+		STREET_DETAIL_MIN_ZOOM,
 		SYDNEY_CENTER,
 		SYDNEY_DEFAULT_ZOOM,
+		aggregatePlacesBySuburb,
 		geocodeNswLocation,
 		spreadCoincidentPoints,
 		type GeoPoint
@@ -31,6 +33,10 @@
 	let geocoding = $state(false);
 	let ready = $state(false);
 	let expanded = $state(false);
+	/** street = individual streets; suburb = aggregated by suburb (zoom-dependent). */
+	let viewMode = $state<'street' | 'suburb'>('suburb');
+	let streetLevelCount = $state(0);
+	let suburbLevelCount = $state(0);
 
 	// Leaflet map instance (typed loosely to avoid SSR issues)
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -46,8 +52,23 @@
 	/** Placed markers — used to re-layout name labels so they don’t stack. */
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	let placedMarkers: MapMarkerEntry[] = [];
+	/** Full geocoded street-level dataset (before zoom aggregation). */
+	let streetPlaces: StreetPlace[] = [];
 	let labelLayoutBound = false;
 	let labelLayoutTimer: ReturnType<typeof setTimeout> | null = null;
+	let viewModeBound = false;
+	let initialFitDone = false;
+
+	type StreetPlace = {
+		key: string;
+		lat: number;
+		lng: number;
+		count: number;
+		suburb: string;
+		street: string;
+		precision: GeoPoint['precision'];
+		placeLabel: string;
+	};
 
 	/** Fixed icon box centred on the pulse; room for fanned-out labels. */
 	const MARKER_ICON_W = 260;
@@ -162,9 +183,25 @@
 			map.on('zoomend moveend', scheduleLabelLayout);
 			labelLayoutBound = true;
 		}
+		if (!viewModeBound) {
+			map.on('zoomend', onZoomModeChange);
+			viewModeBound = true;
+		}
 
 		ready = true;
 		await plotLocations(L, locations);
+	}
+
+	function onZoomModeChange() {
+		if (!map || streetPlaces.length === 0 || geocoding) return;
+		const next: 'street' | 'suburb' =
+			map.getZoom() >= STREET_DETAIL_MIN_ZOOM ? 'street' : 'suburb';
+		if (next !== viewMode) {
+			viewMode = next;
+			renderMarkersForMode(false);
+		} else {
+			scheduleLabelLayout();
+		}
 	}
 
 	function scheduleLabelLayout() {
@@ -372,6 +409,184 @@
 		}
 	}
 
+	function addMarkerEntry(opts: {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		L: any;
+		lat: number;
+		lng: number;
+		count: number;
+		nameLine: string;
+		suburbLine: string;
+		placeLabel: string;
+		precisionNote: string;
+		popupDetail: string;
+	}) {
+		const corePx = Math.min(16, 8 + Math.log2(opts.count + 1) * 2.5);
+		const countLabel =
+			opts.count === 1 ? '1 incident' : `${opts.count} incidents`;
+
+		const entry: MapMarkerEntry = {
+			marker: null,
+			lat: opts.lat,
+			lng: opts.lng,
+			count: opts.count,
+			corePx,
+			nameLine: opts.nameLine,
+			suburbLine: opts.suburbLine,
+			placeLabel: opts.placeLabel,
+			side: 'right',
+			sideOffset: 0
+		};
+
+		const marker = opts.L.marker([opts.lat, opts.lng], {
+			icon: buildMarkerIcon(entry, opts.L),
+			keyboard: true,
+			riseOnHover: true,
+			title: opts.placeLabel,
+			zIndexOffset: Math.round(opts.count * 10)
+		});
+		entry.marker = marker;
+
+		marker.bindTooltip(
+			`<div class="incident-map-tooltip-inner">
+				<span class="incident-map-tooltip-count">${escapeHtml(countLabel)}</span>
+				<span class="incident-map-tooltip-place">${escapeHtml(opts.placeLabel)}</span>
+			</div>`,
+			{
+				direction: 'top',
+				offset: [0, -Math.ceil(corePx / 2) - 2],
+				opacity: 1,
+				sticky: false,
+				interactive: false,
+				className: 'incident-map-tooltip',
+				permanent: false
+			}
+		);
+
+		marker.bindPopup(
+			`<div style="min-width:12rem;font:12px/1.4 system-ui,sans-serif">
+				<strong>${escapeHtml(opts.nameLine)}</strong><br/>
+				${escapeHtml(opts.popupDetail)}<br/>
+				<span style="color:#555">${escapeHtml(countLabel)}</span><br/>
+				<span style="color:#777;font-size:11px">${escapeHtml(opts.precisionNote)}</span>
+			</div>`
+		);
+
+		markersLayer.addLayer(marker);
+		placedMarkers.push(entry);
+	}
+
+	/**
+	 * Draw markers for the current zoom mode from `streetPlaces`.
+	 * Suburb mode aggregates; street mode shows each street (with stack spread).
+	 */
+	function renderMarkersForMode(fitBounds: boolean) {
+		if (!map || !markersLayer || !Lref) return;
+
+		const L = Lref;
+		markersLayer.clearLayers();
+		placedMarkers = [];
+
+		const zoom = map.getZoom() as number;
+		viewMode = zoom >= STREET_DETAIL_MIN_ZOOM ? 'street' : 'suburb';
+
+		if (streetPlaces.length === 0) {
+			mappedPlaceCount = 0;
+			statusText = 'No geocoded places to show.';
+			return;
+		}
+
+		if (viewMode === 'suburb') {
+			const suburbs = aggregatePlacesBySuburb(
+				streetPlaces.map((p) => ({
+					key: p.key,
+					lat: p.lat,
+					lng: p.lng,
+					count: p.count,
+					suburb: p.suburb,
+					street: p.street,
+					precision: p.precision
+				}))
+			);
+			suburbLevelCount = suburbs.length;
+
+			for (const s of suburbs) {
+				addMarkerEntry({
+					L,
+					lat: s.lat,
+					lng: s.lng,
+					count: s.count,
+					nameLine: s.suburb,
+					suburbLine: `${s.placeCount} street${s.placeCount === 1 ? '' : 's'} · NSW`,
+					placeLabel: s.suburb,
+					precisionNote: `Suburb total · zoom in (level ${STREET_DETAIL_MIN_ZOOM}+) for streets`,
+					popupDetail: `${s.suburb}, NSW · ${s.placeCount} street location${s.placeCount === 1 ? '' : 's'}`
+				});
+			}
+
+			mappedPlaceCount = suburbs.length;
+			statusText = `Suburb view: ${suburbs.length} suburb${suburbs.length === 1 ? '' : 's'} (${mappedIncidentCount} incidents). Zoom in to level ${STREET_DETAIL_MIN_ZOOM}+ for street locations.`;
+		} else {
+			// Street view — spread only suburb-precision fallbacks that still coincide
+			const spread = spreadCoincidentPoints(
+				streetPlaces.map((p) => ({
+					key: p.key,
+					lat: p.lat,
+					lng: p.lng,
+					count: p.count,
+					suburb: p.suburb,
+					street: p.street,
+					precision: p.precision,
+					placeLabel: p.placeLabel
+				}))
+			);
+
+			for (const p of spread) {
+				const isStreet = p.precision === 'street';
+				addMarkerEntry({
+					L,
+					lat: p.lat,
+					lng: p.lng,
+					count: p.count,
+					nameLine: p.street || p.suburb,
+					suburbLine: p.street ? p.suburb : 'NSW',
+					placeLabel: p.placeLabel,
+					precisionNote: isStreet
+						? 'Street-level geocode'
+						: 'Approx. suburb (street geocode unavailable)',
+					popupDetail: p.street ? `${p.suburb}, NSW` : `${p.suburb}, NSW`
+				});
+			}
+
+			mappedPlaceCount = spread.length;
+			const streetHits = streetPlaces.filter((p) => p.precision === 'street').length;
+			statusText = `Street view: ${spread.length} location${spread.length === 1 ? '' : 's'} (${streetHits} street-precise, ${spread.length - streetHits} suburb approx.). Zoom out for suburb totals.`;
+		}
+
+		if (fitBounds && placedMarkers.length > 0) {
+			const group = L.featureGroup(placedMarkers.map((p) => p.marker));
+			map.fitBounds(group.getBounds().pad(0.22), {
+				maxZoom: viewMode === 'street' ? 15 : 13,
+				animate: false,
+				padding: [28, 28]
+			});
+			// Re-evaluate mode after fit (fit may change zoom)
+			const afterZoom = map.getZoom() as number;
+			const afterMode: 'street' | 'suburb' =
+				afterZoom >= STREET_DETAIL_MIN_ZOOM ? 'street' : 'suburb';
+			if (afterMode !== viewMode) {
+				viewMode = afterMode;
+				renderMarkersForMode(false);
+				return;
+			}
+		}
+
+		map.invalidateSize({ animate: false });
+		requestAnimationFrame(() => resolveLabelLayout());
+		setTimeout(() => resolveLabelLayout(), 120);
+		setTimeout(() => resolveLabelLayout(), 400);
+	}
+
 	async function plotLocations(
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		L: any,
@@ -381,11 +596,15 @@
 		const gen = ++plotGeneration;
 		markersLayer.clearLayers();
 		placedMarkers = [];
+		streetPlaces = [];
 		mappedPlaceCount = 0;
 		failedPlaceCount = 0;
 		mappedIncidentCount = 0;
 		geocodeFailedIncidentCount = 0;
+		streetLevelCount = 0;
+		suburbLevelCount = 0;
 		geocoding = true;
+		initialFitDone = false;
 
 		if (locs.length === 0) {
 			statusText =
@@ -397,22 +616,14 @@
 			return;
 		}
 
-		statusText = `Geocoding ${locs.length} location${locs.length === 1 ? '' : 's'}…`;
+		statusText = `Geocoding ${locs.length} street location${locs.length === 1 ? '' : 's'}…`;
 
-		type GeocodedPlace = {
-			key: string;
-			lat: number;
-			lng: number;
-			loc: LocationAggregate;
-			point: GeoPoint;
-		};
-
-		const geocoded: GeocodedPlace[] = [];
+		const geocoded: StreetPlace[] = [];
 
 		for (let i = 0; i < locs.length; i++) {
 			if (cancelled || gen !== plotGeneration) return;
 			const loc = locs[i];
-			statusText = `Geocoding ${i + 1} of ${locs.length}…`;
+			statusText = `Geocoding street ${i + 1} of ${locs.length}…`;
 
 			const point: GeoPoint | null = await geocodeNswLocation(loc.query, loc.suburb, {
 				street: loc.street
@@ -422,120 +633,53 @@
 			if (!point) {
 				failedPlaceCount += 1;
 				geocodeFailedIncidentCount += loc.count;
-				await sleep(20);
+				// Pace lightly even on failure
+				await sleep(150);
 				continue;
 			}
+
+			mappedIncidentCount += loc.count;
+			if (point.precision === 'street') streetLevelCount += 1;
+
+			const placeLabel = loc.street
+				? `${loc.street}, ${loc.suburb}`
+				: loc.suburb;
 
 			geocoded.push({
 				key: loc.key,
 				lat: point.lat,
 				lng: point.lng,
-				loc,
-				point
-			});
-			await sleep(20);
-		}
-
-		if (cancelled || gen !== plotGeneration) return;
-
-		// Separate pins that share the same coordinates (common when many streets
-		// fall back to one suburb centre) so every place shows its own indicator.
-		const spread = spreadCoincidentPoints(geocoded);
-
-		for (const item of spread) {
-			const { loc, point } = item;
-			mappedPlaceCount += 1;
-			mappedIncidentCount += loc.count;
-
-			const corePx = Math.min(16, 8 + Math.log2(loc.count + 1) * 2.5);
-			const precisionNote =
-				point.precision === 'street'
-					? 'Street-level'
-					: point.precision === 'suburb'
-						? 'Suburb area (spread for visibility)'
-						: 'Region';
-
-			const countLabel =
-				loc.count === 1 ? '1 incident' : `${loc.count} incidents`;
-			const placeLabel = loc.street
-				? `${loc.street}, ${loc.suburb}`
-				: loc.suburb;
-			const nameLine = loc.street || loc.suburb;
-			const suburbLine = loc.street ? loc.suburb : 'NSW';
-
-			const entry: MapMarkerEntry = {
-				marker: null,
-				lat: item.lat,
-				lng: item.lng,
 				count: loc.count,
-				corePx,
-				nameLine,
-				suburbLine,
-				placeLabel,
-				side: 'right',
-				sideOffset: 0
-			};
-
-			const marker = L.marker([item.lat, item.lng], {
-				icon: buildMarkerIcon(entry, L),
-				keyboard: true,
-				riseOnHover: true,
-				title: placeLabel,
-				// Keep marker icons above labels of other markers when dense
-				zIndexOffset: Math.round(loc.count * 10)
+				suburb: loc.suburb,
+				street: loc.street,
+				precision: point.precision,
+				placeLabel
 			});
-			entry.marker = marker;
 
-			marker.bindTooltip(
-				`<div class="incident-map-tooltip-inner">
-					<span class="incident-map-tooltip-count">${escapeHtml(countLabel)}</span>
-					<span class="incident-map-tooltip-place">${escapeHtml(placeLabel)}</span>
-				</div>`,
-				{
-					direction: 'top',
-					offset: [0, -Math.ceil(corePx / 2) - 2],
-					opacity: 1,
-					sticky: false,
-					interactive: false,
-					className: 'incident-map-tooltip',
-					permanent: false
-				}
-			);
-
-			marker.bindPopup(
-				`<div style="min-width:12rem;font:12px/1.4 system-ui,sans-serif">
-					<strong>${escapeHtml(loc.street || loc.suburb)}</strong><br/>
-					${escapeHtml(loc.suburb)}, NSW<br/>
-					<span style="color:#555">${escapeHtml(countLabel)}</span><br/>
-					<span style="color:#777;font-size:11px">${precisionNote}</span>
-				</div>`
-			);
-
-			markersLayer.addLayer(marker);
-			placedMarkers.push(entry);
+			// Nominatim courtesy via server (~1/s when uncached)
+			await sleep(point.precision === 'street' ? 900 : 120);
 		}
 
 		if (cancelled || gen !== plotGeneration) return;
 
-		// Fit all indicators into view so nothing is stranded off-screen
-		if (placedMarkers.length > 0) {
-			const group = L.featureGroup(placedMarkers.map((p) => p.marker));
-			map.fitBounds(group.getBounds().pad(0.22), {
-				maxZoom: 14,
-				animate: false,
-				padding: [28, 28]
-			});
-			statusText = `Showing all ${mappedPlaceCount} place${mappedPlaceCount === 1 ? '' : 's'} (${mappedIncidentCount} incident${mappedIncidentCount === 1 ? '' : 's'}). Co-located streets are fanned out. Drag / zoom to explore.`;
-		} else {
+		streetPlaces = geocoded;
+		geocoding = false;
+
+		if (streetPlaces.length === 0) {
 			applySydneyView(false);
 			statusText = 'Parsed locations but none could be geocoded yet.';
+			return;
 		}
 
-		geocoding = false;
-		map.invalidateSize({ animate: false });
-		requestAnimationFrame(() => resolveLabelLayout());
-		setTimeout(() => resolveLabelLayout(), 120);
-		setTimeout(() => resolveLabelLayout(), 400);
+		// Start in suburb mode for overview, then user zooms for streets
+		if (map.getZoom() >= STREET_DETAIL_MIN_ZOOM) {
+			// drop to suburb overview first for initial fit
+			map.setZoom(Math.min(map.getZoom(), STREET_DETAIL_MIN_ZOOM - 1), {
+				animate: false
+			});
+		}
+		renderMarkersForMode(true);
+		initialFitDone = true;
 	}
 
 	function sleep(ms: number) {
@@ -583,12 +727,15 @@
 		resizeObserver = null;
 		if (map) {
 			map.off('zoomend moveend', scheduleLabelLayout);
+			map.off('zoomend', onZoomModeChange);
 			map.remove();
 			map = null;
 			markersLayer = null;
 		}
 		placedMarkers = [];
+		streetPlaces = [];
 		labelLayoutBound = false;
+		viewModeBound = false;
 		Lref = null;
 	});
 </script>
@@ -621,7 +768,11 @@
 				Incident locations (NSW)
 			</h2>
 			<p class="mt-0.5 text-xs text-warm-500 sm:text-sm">
-				Default view: Sydney. Hover a pulse for counts; drag to pan; scroll or +/− to zoom.
+				{#if viewMode === 'suburb'}
+					Suburb totals (zoom to {STREET_DETAIL_MIN_ZOOM}+ for street locations). Hover for counts.
+				{:else}
+					Street locations. Zoom out below {STREET_DETAIL_MIN_ZOOM} for suburb totals.
+				{/if}
 			</p>
 			<p class="mt-0.5 text-xs text-warm-400" aria-live="polite">{statusText}</p>
 		</div>
@@ -705,15 +856,20 @@
 				<li class="flex items-center gap-2">
 					<span class="incident-legend-pulse shrink-0" aria-hidden="true"></span>
 					<span class="min-w-0 leading-snug">
-						<span class="font-medium text-warm-800">Mapped location</span>
+						<span class="font-medium text-warm-800">
+							{viewMode === 'suburb' ? 'Suburb total' : 'Street location'}
+						</span>
 						<span class="mt-0.5 block text-[11px] text-warm-500">
 							{#if geocoding}
-								Placing markers…
+								Geocoding streets…
+							{:else if viewMode === 'suburb'}
+								{mappedIncidentCount} incident{mappedIncidentCount === 1 ? '' : 's'}
+								· {mappedPlaceCount} suburb{mappedPlaceCount === 1 ? '' : 's'}
+								· zoom in for streets
 							{:else}
-								{mappedIncidentCount}
-								incident{mappedIncidentCount === 1 ? '' : 's'}
-								· {mappedPlaceCount} place{mappedPlaceCount === 1 ? '' : 's'}
-								· every place labelled
+								{mappedIncidentCount} incident{mappedIncidentCount === 1 ? '' : 's'}
+								· {mappedPlaceCount} street pin{mappedPlaceCount === 1 ? '' : 's'}
+								({streetLevelCount} precise)
 							{/if}
 						</span>
 					</span>
