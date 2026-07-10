@@ -207,8 +207,8 @@
 			responsive: true,
 			maintainAspectRatio: false,
 			layout: {
-				// Extra top room so labels above peak points stay fully visible
-				padding: { top: 28, right: 10, left: 4, bottom: 4 }
+				// Compact top room for point labels inside a short plot box
+				padding: { top: 14, right: 6, left: 2, bottom: 2 }
 			},
 			plugins: {
 				// Single-series chart — legend is redundant
@@ -267,7 +267,7 @@
 			responsive: true,
 			maintainAspectRatio: false,
 			layout: {
-				padding: { top: 28, right: 10, left: 4, bottom: 4 }
+				padding: { top: 14, right: 6, left: 2, bottom: 2 }
 			},
 			interaction: {
 				mode: 'index',
@@ -279,10 +279,10 @@
 					position: 'bottom',
 					labels: {
 						usePointStyle: true,
-						font: { size: 12, weight: 500 },
+						font: { size: 10, weight: 500 },
 						color: colors.legend,
-						boxWidth: 10,
-						padding: 14
+						boxWidth: 8,
+						padding: 6
 					}
 				},
 				tooltip: {
@@ -530,10 +530,6 @@
 		return `${title}: ${total} total incidents. ${topEntries}${remainder}`;
 	}
 
-	function getPieLegendPosition(sliceCount: number): 'bottom' | 'right' {
-		return sliceCount > 6 ? 'right' : 'bottom';
-	}
-
 	function buildPieChartData(
 		entries: [string, number][]
 	): { labels: string[]; datasets: { data: number[]; backgroundColor: string[]; borderColor: string[]; borderWidth: number }[] } {
@@ -585,7 +581,8 @@
 	 */
 	const OUTSIDE_LABEL_RADIUS_GAP = 22;
 	/** Canvas layout padding so outside labels/leaders are never clipped by the bitmap edge. */
-	const DOUGHNUT_LAYOUT_PADDING = { top: 52, right: 48, bottom: 44, left: 48 } as const;
+	/** Compact padding so the donut fits a short plot box without forcing height. */
+	const DOUGHNUT_LAYOUT_PADDING = { top: 18, right: 16, bottom: 12, left: 16 } as const;
 
 	function getDoughnutSliceShareFromValues(value: number, total: number): number {
 		return total > 0 ? value / total : 0;
@@ -749,14 +746,14 @@
 				},
 				legend: {
 					display: true,
-					// Prefer right legend so top/bottom keep space for outside labels
-					position: sliceCount > 4 ? 'right' : getPieLegendPosition(sliceCount),
+					// Bottom legend keeps the plot short and consistent across the row
+					position: 'bottom',
 					labels: {
 						usePointStyle: true,
-						font: { size: 13, weight: 500 },
+						font: { size: 10, weight: 500 },
 						color: colors.legend,
-						padding: 14,
-						boxWidth: 12
+						padding: 6,
+						boxWidth: 8
 					}
 				},
 				tooltip: {
@@ -803,11 +800,12 @@
 		dataset.borderWidth = 3;
 
 		if (chart.options?.plugins?.legend) {
-			// Prefer right when many slices so top padding stays free for outside labels
-			chart.options.plugins.legend.position =
-				sliceCount > 4 ? 'right' : getPieLegendPosition(sliceCount);
+			chart.options.plugins.legend.position = 'bottom';
 			if (chart.options.plugins.legend.labels) {
 				chart.options.plugins.legend.labels.color = colors.legend;
+				chart.options.plugins.legend.labels.font = { size: 10, weight: 500 };
+				chart.options.plugins.legend.labels.padding = 6;
+				chart.options.plugins.legend.labels.boxWidth = 8;
 			}
 		}
 		if (chart.options?.plugins?.tooltip) {
@@ -1584,14 +1582,14 @@
 					</section>
 				</div>
 
-				<!-- Three equal charts: volume, type over time, driver -->
-				<div class="grid grid-cols-1 gap-2 lg:grid-cols-3 lg:items-stretch">
+				<!-- Three equal charts: fixed plot height (do not use flex-1 — it ignored height and grew). -->
+				<div class="grid grid-cols-1 gap-2 lg:grid-cols-3 lg:items-start">
 					<section
-						class="flex min-w-0 flex-col rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
+						class="min-w-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="over-time-chart-title"
 					>
-						<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-							<h2 class="text-base font-semibold text-warm-800" id="over-time-chart-title">
+						<div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+							<h2 class="text-sm font-semibold text-warm-800" id="over-time-chart-title">
 								Incidents Over Time
 							</h2>
 							<label class="flex items-center gap-2 text-sm text-warm-600">
@@ -1607,11 +1605,8 @@
 								</select>
 							</label>
 						</div>
-						<p class="mb-1.5 text-xs text-warm-500">{timeRangeLabel}</p>
-						<div
-							class="min-h-0 w-full flex-1 overflow-visible"
-							style="position: relative; height: 9rem; min-height: 9rem;"
-						>
+						<p class="mb-1 text-xs text-warm-500">{timeRangeLabel}</p>
+						<div class="dashboard-chart-plot relative w-full">
 							{#if incidentsByDate.length === 0}
 								<div class="flex h-full items-center justify-center">
 									<p class="text-sm text-warm-500">No incidents in this period.</p>
@@ -1621,27 +1616,23 @@
 								id="over-time-chart-canvas"
 								bind:this={canvasElement}
 								class={incidentsByDate.length === 0 ? 'hidden' : 'block h-full w-full'}
-								style="max-height: 100%;"
 							></canvas>
 						</div>
 					</section>
 
 					<section
-						class="flex min-w-0 flex-col rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
+						class="min-w-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="type-over-time-chart-title"
 						aria-describedby="type-over-time-chart-summary"
 					>
-						<div class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-							<h2 class="text-base font-semibold text-warm-800" id="type-over-time-chart-title">
+						<div class="mb-1.5 flex flex-wrap items-baseline justify-between gap-2">
+							<h2 class="text-sm font-semibold text-warm-800" id="type-over-time-chart-title">
 								Incidents by Type Over Time
 							</h2>
 							<p class="text-xs text-warm-500">{timeRangeLabel}</p>
 						</div>
 						<p id="type-over-time-chart-summary" class="sr-only">{typeOverTimeAriaLabel}</p>
-						<div
-							class="min-h-0 w-full flex-1 overflow-visible"
-							style="position: relative; height: 9rem; min-height: 9rem;"
-						>
+						<div class="dashboard-chart-plot relative w-full">
 							{#if !hasTypeOverTimeData}
 								<div class="flex h-full items-center justify-center">
 									<p class="text-sm text-warm-500">No incident type data available.</p>
@@ -1650,7 +1641,6 @@
 							<canvas
 								bind:this={typeOverTimeCanvas}
 								class={!hasTypeOverTimeData ? 'hidden' : 'block h-full w-full'}
-								style="max-height: 100%;"
 								aria-hidden="true"
 							></canvas>
 							<table class="sr-only" aria-labelledby="type-over-time-chart-title">
@@ -1677,18 +1667,15 @@
 					</section>
 
 					<section
-						class="flex min-w-0 flex-col overflow-visible rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
+						class="min-w-0 overflow-visible rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="driver-chart-title"
 						aria-describedby="driver-chart-summary"
 					>
-						<h2 class="mb-2 text-base font-semibold text-warm-800" id="driver-chart-title">
+						<h2 class="mb-1.5 text-sm font-semibold text-warm-800" id="driver-chart-title">
 							Incidents by Driver
 						</h2>
 						<p id="driver-chart-summary" class="sr-only">{driverChartAriaLabel}</p>
-						<div
-							class="min-h-0 w-full flex-1 overflow-visible"
-							style="position: relative; height: 9rem; min-height: 9rem;"
-						>
+						<div class="dashboard-chart-plot relative w-full">
 							{#if incidentsByDriver.length === 0}
 								<div class="flex h-full items-center justify-center">
 									<p class="text-sm text-warm-500">No incident data available.</p>
@@ -1728,3 +1715,23 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	/*
+	 * Fixed plot height — must not use flex-grow on these boxes (that ignored
+	 * earlier height: rem rules when the grid row stretched).
+	 */
+	:global(.dashboard-chart-plot) {
+		height: 9rem;
+		min-height: 9rem;
+		max-height: 9rem;
+		position: relative;
+		overflow: hidden;
+	}
+
+	:global(.dashboard-chart-plot canvas) {
+		width: 100% !important;
+		height: 100% !important;
+		max-height: 9rem !important;
+	}
+</style>
