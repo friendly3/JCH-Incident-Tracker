@@ -1317,16 +1317,20 @@
 
 	/**
 	 * Stacked horizontal bars: one row per driver, segments = incident type.
-	 * Drivers ordered by total count (desc); types ordered by global volume.
+	 * Uses the same relative time window as the over-time charts.
+	 * Drivers ordered by total count (desc); types ordered by volume in range.
 	 */
 	const driverStackedBarData = $derived.by(() => {
 		const dark = theme.isDark;
+		const range = timeRange;
 		type DriverRow = { label: string; types: Map<string, number>; total: number };
 		const byDriver = new Map<string, DriverRow>();
 		const typeMeta = new Map<string, string>();
 		const typeTotals = new Map<string, number>();
 
 		for (const incident of incidents) {
+			if (!isDateReceivedInTimeRange(incident.dateReceived, range)) continue;
+
 			const d = normalizeAggregationKey(incident.driver, 'Unassigned');
 			const t = normalizeAggregationKey(incident.type, 'Unspecified');
 			typeMeta.set(t.key, t.label);
@@ -1380,11 +1384,13 @@
 
 	const driverChartAriaLabel = $derived.by(() => {
 		const { labels, datasets } = driverStackedBarData;
-		if (labels.length === 0) return 'Incidents by Driver: no incident data available';
+		if (labels.length === 0) {
+			return `Incidents by Driver (${timeRangeLabel}): no incident data available`;
+		}
 		const typeNames = datasets.map((d) => d.label).slice(0, 6).join(', ');
 		const more =
 			datasets.length > 6 ? `, plus ${datasets.length - 6} more types` : '';
-		return `Incidents by driver, stacked by type. ${labels.length} drivers. Types: ${typeNames}${more}.`;
+		return `Incidents by driver (${timeRangeLabel}), stacked by type. ${labels.length} drivers. Types: ${typeNames}${more}.`;
 	});
 
 	onMount(() => {
@@ -1906,14 +1912,14 @@
 								Incidents by Driver
 							</h2>
 							<p class="dashboard-chart-meta text-xs text-warm-500">
-								Stacked by incident type
+								{timeRangeLabel} · stacked by type
 							</p>
 						</div>
 						<p id="driver-chart-summary" class="sr-only">{driverChartAriaLabel}</p>
 						<div class="dashboard-chart-plot relative w-full">
 							{#if !hasDriverData}
 								<div class="flex h-full items-center justify-center">
-									<p class="text-sm text-warm-500">No incident data available.</p>
+									<p class="text-sm text-warm-500">No incidents in this period.</p>
 								</div>
 							{/if}
 							<canvas
