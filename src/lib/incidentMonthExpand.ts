@@ -1,10 +1,17 @@
 const STORAGE_KEY = 'incidents-expanded-months';
 
+/**
+ * Load persisted expanded month keys.
+ * - `null` = no preference stored → UI uses default (most recent month expanded)
+ * - `[]` = user explicitly collapsed all months
+ * - non-empty array = those months expanded
+ */
 export function loadExpandedMonths(): string[] | null {
 	if (typeof window === 'undefined') return null;
 	try {
 		const raw = sessionStorage.getItem(STORAGE_KEY);
-		if (!raw) return null;
+		// Missing key only — empty JSON array is a deliberate "all collapsed" preference
+		if (raw === null) return null;
 		const parsed: unknown = JSON.parse(raw);
 		if (Array.isArray(parsed) && parsed.every((k) => typeof k === 'string')) {
 			return parsed;
@@ -24,13 +31,16 @@ export function saveExpandedMonths(keys: Iterable<string>): void {
 	}
 }
 
-/** Keep only keys present in current data; null means use default (most recent month). */
+/**
+ * Keep only keys present in current data.
+ * - `null` when `saved` is null (no preference → default most-recent)
+ * - empty Set when user collapsed everything or saved keys no longer exist
+ */
 export function filterExpandedMonths(
 	saved: string[] | null,
 	validKeys: Set<string>
 ): Set<string> | null {
-	if (!saved || saved.length === 0) return null;
+	if (saved === null) return null;
 	const filtered = saved.filter((k) => validKeys.has(k));
-	if (filtered.length === 0) return null;
 	return new Set(filtered);
 }

@@ -92,7 +92,10 @@
 		sortBy = 'date-desc';
 	}
 
-	const hasFilters = $derived(search || filterType || filterDriver || filterTeamLeader || filterAction);
+	const hasFilters = $derived(
+		Boolean(search || filterType || filterDriver || filterTeamLeader || filterAction) ||
+			sortBy !== 'date-desc'
+	);
 
 	type MonthGroup = {
 		key: string;
@@ -143,7 +146,11 @@
 		return keys;
 	});
 
-	/** Month-group accordion in incidents table (unrelated to isFormExpanded). null = defaults; Set = overrides. */
+	/**
+	 * Month-group accordion (unrelated to isFormExpanded).
+	 * - `null` = no user override yet → default expand most recent month
+	 * - `Set` (incl. empty) = explicit override; empty means all months collapsed
+	 */
 	let expandedMonths = $state<Set<string> | null>(null);
 	let prevMonthKeysStr = '';
 	let expandedMonthsHydrated = false;
@@ -158,7 +165,8 @@
 			expandedMonthsHydrated = true;
 			prevMonthKeysStr = keysStr;
 			const filtered = filterExpandedMonths(loadExpandedMonths(), currentKeys);
-			if (filtered) expandedMonths = filtered;
+			// null = no stored preference; empty/non-empty Set = explicit preference
+			if (filtered !== null) expandedMonths = filtered;
 			return;
 		}
 
@@ -166,17 +174,13 @@
 		prevMonthKeysStr = keysStr;
 
 		if (expandedMonths !== null) {
+			// Keep explicit preference (including all-collapsed empty Set)
 			const filtered = [...expandedMonths].filter((k) => currentKeys.has(k));
-			if (filtered.length > 0) {
-				expandedMonths = new Set(filtered);
-				saveExpandedMonths(filtered);
-			} else {
-				expandedMonths = null;
-				saveExpandedMonths([]);
-			}
+			expandedMonths = new Set(filtered);
+			saveExpandedMonths(filtered);
 		} else {
 			const filtered = filterExpandedMonths(loadExpandedMonths(), currentKeys);
-			if (filtered) expandedMonths = filtered;
+			if (filtered !== null) expandedMonths = filtered;
 		}
 	});
 
@@ -184,10 +188,13 @@
 		if (expandedMonths !== null) {
 			return expandedMonths.has(key);
 		}
+		// Default before any user toggle: most recent month open
 		return key === mostRecentMonthKey;
 	}
 
 	function toggleMonth(key: string) {
+		// Materialize defaults on first interaction so collapsing the last open
+		// month can yield an empty Set (all collapsed) instead of resetting to null.
 		const current =
 			expandedMonths ?? new Set(mostRecentMonthKey ? [mostRecentMonthKey] : []);
 		const next = new Set(current);
@@ -196,13 +203,8 @@
 		} else {
 			next.add(key);
 		}
-		if (next.size === 0) {
-			expandedMonths = null;
-			saveExpandedMonths([]);
-		} else {
-			expandedMonths = next;
-			saveExpandedMonths(next);
-		}
+		expandedMonths = next;
+		saveExpandedMonths(next);
 	}
 
 	const TABLE_COLUMN_COUNT = 10;
@@ -351,17 +353,39 @@
 	<header class="border-b border-warm-200 bg-white/80 px-6 py-5 backdrop-blur flex-shrink-0">
 		<div class="mx-auto max-w-[1600px]">
 			<div class="flex items-center justify-between">
-				<div>
-					<h1 class="text-2xl font-bold text-warm-800">JCH Pham AusPost Incident Tracker</h1>
-					{#if data.loadError}
-						<p class="mt-1 text-sm text-red-600 font-medium">Unable to load incidents</p>
-					{:else if incidentStore.error}
-						<p class="mt-1 text-sm text-red-600 font-medium">{incidentStore.error}</p>
-					{:else}
-						<p class="mt-1 text-sm text-warm-500">
-							{incidents.length} incidents recorded
-						</p>
-					{/if}
+				<div class="flex min-w-0 items-start gap-3">
+					<!-- Heroicons outline truck (MIT) — free courier/van mark for list title -->
+					<span
+						class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-50 text-accent-600 dark:bg-accent-100 dark:text-accent-600"
+						aria-hidden="true"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							class="h-6 w-6"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke="currentColor"
+							stroke-width="1.75"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"
+							/>
+						</svg>
+					</span>
+					<div class="min-w-0">
+						<h1 class="text-2xl font-bold text-warm-800">JCH Pham AusPost Incident Tracker</h1>
+						{#if data.loadError}
+							<p class="mt-1 text-sm text-red-600 font-medium">Unable to load incidents</p>
+						{:else if incidentStore.error}
+							<p class="mt-1 text-sm text-red-600 font-medium">{incidentStore.error}</p>
+						{:else}
+							<p class="mt-1 text-sm text-warm-500">
+								{incidents.length} incidents recorded
+							</p>
+						{/if}
+					</div>
 				</div>
 				{#if mode === 'list'}
 					<div class="flex items-center gap-2">
@@ -460,14 +484,25 @@
 					<option value="" class="normal-case">All Actions</option>
 					{#each data.incidentActions ?? [] as a}<option value={a.name} class="uppercase">{a.name}</option>{/each}
 				</select>
-				<button onclick={() => { sortBy = sortBy === 'date-desc' ? 'date-asc' : 'date-desc'; }}
-					class="rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-700 hover:bg-warm-100 input-focus flex items-center gap-1">
+				<button
+					type="button"
+					onclick={() => {
+						sortBy = sortBy === 'date-desc' ? 'date-asc' : 'date-desc';
+					}}
+					class="flex items-center gap-1 rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-700 hover:bg-warm-100 input-focus"
+				>
 					<span>Date Received</span>
 					<span class="text-xs">{sortBy === 'date-desc' ? '↓' : '↑'}</span>
 				</button>
-				{#if hasFilters}
-					<button onclick={clearFilters} class="text-sm text-accent-600 hover:text-accent-700">Clear</button>
-				{/if}
+				<button
+					type="button"
+					onclick={clearFilters}
+					disabled={!hasFilters}
+					aria-label="Clear all filters"
+					class="rounded-lg border border-warm-200 bg-white px-4 py-2 text-sm font-medium text-warm-700 transition hover:bg-warm-100 input-focus disabled:cursor-not-allowed disabled:opacity-40 dark:bg-warm-100"
+				>
+					Clear filters
+				</button>
 			</div>
 			<p class="mt-3 text-sm text-warm-500">{filtered.length} {filtered.length === 1 ? 'incident' : 'incidents'} found</p>
 		</div>
