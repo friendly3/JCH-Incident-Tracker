@@ -313,7 +313,7 @@
 		// Nested custom time popover (portaled to body) owns Escape.
 		if (
 			target instanceof Element &&
-			(target.closest('.time-picker-popover') || target.closest('[data-time-picker-portal]'))
+			(target.closest('[data-time-picker-portal]') || target.closest('[data-time-picker-panel]'))
 		) {
 			return;
 		}
