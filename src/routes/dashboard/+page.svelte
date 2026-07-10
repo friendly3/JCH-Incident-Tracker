@@ -605,19 +605,62 @@
 		syncIncidentStoreFromPageData(data.supabase, data.incidents);
 	});
 
-	// Group incidents by date and count them
+	/** Relative window for the over-time line charts (user-selectable). */
+	type TimeRangeKey = 'all' | '7' | '30' | '90';
+
+	const TIME_RANGE_OPTIONS: { value: TimeRangeKey; label: string }[] = [
+		{ value: 'all', label: 'All time' },
+		{ value: '90', label: 'Last 90 days' },
+		{ value: '30', label: 'Last 30 days' },
+		{ value: '7', label: 'Last 7 days' }
+	];
+
+	let timeRange = $state<TimeRangeKey>('30');
+
+	const timeRangeLabel = $derived(
+		TIME_RANGE_OPTIONS.find((o) => o.value === timeRange)?.label ?? 'Last 30 days'
+	);
+
+	/**
+	 * Inclusive calendar window ending today (local).
+	 * e.g. last 7 days = today and the previous 6 calendar days.
+	 * `all` → no lower bound.
+	 */
+	function isDateReceivedInTimeRange(dateStr: string, range: TimeRangeKey, now = new Date()): boolean {
+		const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr?.trim() ?? '');
+		if (!match) return false;
+		const year = parseInt(match[1], 10);
+		const month = parseInt(match[2], 10);
+		const day = parseInt(match[3], 10);
+		const received = new Date(year, month - 1, day);
+		if (Number.isNaN(received.getTime())) return false;
+
+		const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+		if (received > end) return false;
+
+		if (range === 'all') return true;
+
+		const days = parseInt(range, 10);
+		if (!Number.isFinite(days) || days < 1) return true;
+
+		const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		start.setDate(start.getDate() - (days - 1));
+		start.setHours(0, 0, 0, 0);
+		return received >= start;
+	}
+
+	// Group incidents by date and count them (filtered by selected relative period)
 	const incidentsByDate = $derived.by(() => {
 		const grouped: Record<string, number> = {};
+		const range = timeRange;
 
 		incidents.forEach((incident) => {
 			const date = incident.dateReceived;
+			if (!isDateReceivedInTimeRange(date, range)) return;
 			grouped[date] = (grouped[date] || 0) + 1;
 		});
 
-		// Sort by date and return
-		return Object.entries(grouped)
-			.sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
-			.slice(-30); // Last 30 days
+		return Object.entries(grouped).sort(([dateA], [dateB]) => dateA.localeCompare(dateB));
 	});
 
 	const chartData = $derived.by(() => ({
@@ -638,7 +681,7 @@
 
 	/**
 	 * Multi-series line data: for each incident type, counts per day on the same
-	 * last-30-date window as "Incidents Over Time".
+	 * relative time window as "Incidents Over Time".
 	 */
 	const typeOverTimeChartData = $derived.by(() => {
 		const dateKeys = incidentsByDate.map(([date]) => date);
@@ -696,7 +739,7 @@
 		const typeNames = datasets.map((d) => d.label).slice(0, 8).join(', ');
 		const more =
 			datasets.length > 8 ? `, plus ${datasets.length - 8} more types` : '';
-		return `Incidents by type over time for ${dateKeys.length} days. Types: ${typeNames}${more}.`;
+		return `Incidents by type over time (${timeRangeLabel}) for ${dateKeys.length} days. Types: ${typeNames}${more}.`;
 	});
 
 	const incidentsByTeamLeader = $derived.by(() => aggregateIncidentsBy('teamLeader'));
@@ -990,11 +1033,36 @@
 						class="rounded-lg border border-warm-200 bg-white p-6 shadow-sm"
 						aria-labelledby="over-time-chart-title"
 					>
-						<h2 class="mb-4 text-lg font-semibold text-warm-800" id="over-time-chart-title">
-							Incidents Over Time (Last 30 Days)
-						</h2>
+						<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+							<h2 class="text-lg font-semibold text-warm-800" id="over-time-chart-title">
+								Incidents Over Time
+							</h2>
+							<label class="flex items-center gap-2 text-sm text-warm-600">
+								<span class="sr-only">Time period for incidents over time</span>
+								<select
+									bind:value={timeRange}
+									class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-1.5 text-sm text-warm-700 input-focus dark:bg-warm-200"
+									aria-controls="over-time-chart-canvas"
+								>
+									{#each TIME_RANGE_OPTIONS as opt (opt.value)}
+										<option value={opt.value}>{opt.label}</option>
+									{/each}
+								</select>
+							</label>
+						</div>
+						<p class="mb-3 text-xs text-warm-500">{timeRangeLabel}</p>
 						<div class="h-96 w-full" style="position: relative; min-height: 400px;">
-							<canvas bind:this={canvasElement} style="max-height: 100%;"></canvas>
+							{#if incidentsByDate.length === 0}
+								<div class="flex h-full items-center justify-center">
+									<p class="text-sm text-warm-500">No incidents in this period.</p>
+								</div>
+							{/if}
+							<canvas
+								id="over-time-chart-canvas"
+								bind:this={canvasElement}
+								class={incidentsByDate.length === 0 ? 'hidden' : 'block h-full w-full'}
+								style="max-height: 100%;"
+							></canvas>
 						</div>
 					</section>
 
@@ -1003,9 +1071,12 @@
 						aria-labelledby="type-over-time-chart-title"
 						aria-describedby="type-over-time-chart-summary"
 					>
-						<h2 class="mb-4 text-lg font-semibold text-warm-800" id="type-over-time-chart-title">
-							Incidents by Type Over Time
-						</h2>
+						<div class="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+							<h2 class="text-lg font-semibold text-warm-800" id="type-over-time-chart-title">
+								Incidents by Type Over Time
+							</h2>
+							<p class="text-xs text-warm-500">{timeRangeLabel}</p>
+						</div>
 						<p id="type-over-time-chart-summary" class="sr-only">{typeOverTimeAriaLabel}</p>
 						<div class="h-96 w-full" style="position: relative; min-height: 400px;">
 							{#if !hasTypeOverTimeData}
