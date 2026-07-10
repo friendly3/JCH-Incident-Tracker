@@ -37,36 +37,106 @@
 		return color;
 	}
 
+	/**
+	 * Chart chrome (axes / tooltips) — high-contrast neutrals independent of the
+	 * teal UI accent so plots stay readable on white and dark cards.
+	 */
 	const CHART_FALLBACKS = {
 		light: {
-			accent: '#05ac98',
-			ticks: '#6a6c6e',
-			legend: '#3a3b3d',
-			grid: '#bbbfc0',
-			pointBorder: '#e2e4e4'
+			accent: '#0072B2',
+			ticks: '#3a3b3d',
+			legend: '#181818',
+			grid: '#9a9d9e',
+			pointBorder: '#ffffff'
 		},
 		dark: {
-			accent: '#0cac99',
-			ticks: '#9a9c9e',
-			legend: '#e0e2e2',
-			grid: '#2e3032',
-			pointBorder: '#2e3032'
+			accent: '#56B4E9',
+			ticks: '#e0e2e2',
+			legend: '#f8f8f8',
+			grid: '#6e7072',
+			pointBorder: '#1e1f21'
 		}
 	} as const;
 
+	/**
+	 * Categorical series palette (Okabe–Ito + Paul Tol extensions).
+	 * Distinct hues for pie slices and multi-line type series — avoids the old
+	 * teal/grey ramp that was hard to tell apart.
+	 */
+	const SERIES_PALETTE_LIGHT = [
+		'#0072B2', // blue
+		'#D55E00', // vermillion
+		'#009E73', // bluish green
+		'#CC79A7', // reddish purple
+		'#E69F00', // orange
+		'#56B4E9', // sky blue
+		'#882255', // wine
+		'#117733', // forest
+		'#332288', // indigo
+		'#AA4499', // purple
+		'#44AA99', // teal (separated from greys)
+		'#999933', // olive
+		'#661100', // brown
+		'#6699CC', // soft blue
+		'#AA4466' // rose
+	] as const;
+
+	/** Brighter variants for dark cards (same hue order as light). */
+	const SERIES_PALETTE_DARK = [
+		'#56B4E9', // sky
+		'#FF7A45', // bright vermillion
+		'#33D4A0', // bright green
+		'#F0A0D0', // pink
+		'#FFC14D', // gold
+		'#7DD3FC', // light blue
+		'#F472B6', // hot pink
+		'#4ADE80', // lime green
+		'#A5B4FC', // periwinkle
+		'#E879F9', // fuchsia
+		'#2DD4BF', // cyan
+		'#FDE047', // yellow
+		'#FB923C', // orange
+		'#93C5FD', // pale blue
+		'#FDA4AF' // rose
+	] as const;
+
 	function getChartTheme(isDark = isDarkMode()) {
 		const fallbacks = isDark ? CHART_FALLBACKS.dark : CHART_FALLBACKS.light;
+		const accent = fallbacks.accent;
 		return {
-			accent: cssVar('--color-accent-500', fallbacks.accent),
-			ticks: cssVar('--color-warm-600', fallbacks.ticks),
-			legend: cssVar('--color-warm-800', fallbacks.legend),
-			grid: withAlpha(cssVar('--color-warm-300', fallbacks.grid), 0.25),
-			fill: withAlpha(cssVar('--color-accent-500', fallbacks.accent), 0.12),
-			pointBorder: cssVar('--color-warm-300', fallbacks.pointBorder),
+			accent,
+			// Prefer CSS text tokens when available, but fall back to stronger neutrals
+			ticks: isDark
+				? cssVar('--color-warm-700', fallbacks.ticks)
+				: cssVar('--color-warm-700', fallbacks.ticks),
+			legend: isDark
+				? cssVar('--color-warm-800', fallbacks.legend)
+				: cssVar('--color-warm-900', fallbacks.legend),
+			// Clearer grid than the previous 25% wash
+			grid: withAlpha(fallbacks.grid, isDark ? 0.45 : 0.55),
+			fill: withAlpha(accent, isDark ? 0.18 : 0.15),
+			pointBorder: fallbacks.pointBorder,
 			tooltipBg: isDark
-				? withAlpha(cssVar('--color-warm-200', '#1e1f21'), 0.95)
-				: withAlpha(cssVar('--color-warm-800', fallbacks.legend), 0.92)
+				? withAlpha(cssVar('--color-warm-200', '#1e1f21'), 0.96)
+				: withAlpha('#1a1a1a', 0.92),
+			tooltipTitle: '#ffffff',
+			cardBg: isDark
+				? cssVar('--color-warm-100', '#141516')
+				: cssVar('--color-warm-50', '#ffffff')
 		};
+	}
+
+	/** High-contrast colour for the n-th series / pie slice (0-based). */
+	function getSeriesColor(index: number, isDark = isDarkMode()): string {
+		const palette = isDark ? SERIES_PALETTE_DARK : SERIES_PALETTE_LIGHT;
+		if (index < palette.length) return palette[index];
+
+		// Beyond palette: spaced hues at strong saturation (still readable)
+		const hue = (index * 47 + 12) % 360;
+		const sat = isDark ? 0.72 : 0.68;
+		const light = isDark ? 0.62 : 0.42;
+		const [r, g, b] = hslToRgb(hue, sat, light);
+		return rgbToHex(r, g, b);
 	}
 
 	function buildChartOptions(colors: ReturnType<typeof getChartTheme>): ChartOptions<'line'> {
@@ -84,8 +154,10 @@
 				},
 				tooltip: {
 					backgroundColor: colors.tooltipBg,
-					titleFont: { size: 14 },
-					bodyFont: { size: 12 },
+					titleColor: colors.tooltipTitle,
+					bodyColor: colors.tooltipTitle,
+					titleFont: { size: 14, weight: 'bold' },
+					bodyFont: { size: 13 },
 					padding: 12,
 					cornerRadius: 8,
 					displayColors: false,
@@ -103,7 +175,8 @@
 					beginAtZero: true,
 					ticks: {
 						color: colors.ticks,
-						stepSize: 1
+						stepSize: 1,
+						font: { size: 12, weight: 500 }
 					},
 					grid: {
 						color: colors.grid
@@ -111,7 +184,8 @@
 				},
 				x: {
 					ticks: {
-						color: colors.ticks
+						color: colors.ticks,
+						font: { size: 11, weight: 500 }
 					},
 					grid: {
 						display: false
@@ -138,16 +212,18 @@
 					position: 'bottom',
 					labels: {
 						usePointStyle: true,
-						font: { size: 11 },
+						font: { size: 12, weight: 500 },
 						color: colors.legend,
-						boxWidth: 8,
-						padding: 12
+						boxWidth: 10,
+						padding: 14
 					}
 				},
 				tooltip: {
 					backgroundColor: colors.tooltipBg,
-					titleFont: { size: 14 },
-					bodyFont: { size: 12 },
+					titleColor: colors.tooltipTitle,
+					bodyColor: colors.tooltipTitle,
+					titleFont: { size: 14, weight: 'bold' },
+					bodyFont: { size: 13 },
 					padding: 12,
 					cornerRadius: 8,
 					displayColors: true,
@@ -169,7 +245,8 @@
 					stacked: false,
 					ticks: {
 						color: colors.ticks,
-						stepSize: 1
+						stepSize: 1,
+						font: { size: 12, weight: 500 }
 					},
 					grid: {
 						color: colors.grid
@@ -179,7 +256,8 @@
 					ticks: {
 						color: colors.ticks,
 						maxRotation: 45,
-						minRotation: 0
+						minRotation: 0,
+						font: { size: 11, weight: 500 }
 					},
 					grid: {
 						display: false
@@ -197,6 +275,10 @@
 		dataset.backgroundColor = colors.fill;
 		dataset.pointBackgroundColor = colors.accent;
 		dataset.pointBorderColor = colors.pointBorder;
+		dataset.borderWidth = 3;
+		dataset.pointRadius = 5;
+		dataset.pointHoverRadius = 7;
+		dataset.pointBorderWidth = 2;
 		if (chart.options?.plugins?.legend?.labels) {
 			chart.options.plugins.legend.labels.color = colors.legend;
 		}
@@ -211,6 +293,8 @@
 		}
 		if (chart.options?.plugins?.tooltip) {
 			chart.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
+			chart.options.plugins.tooltip.titleColor = colors.tooltipTitle;
+			chart.options.plugins.tooltip.bodyColor = colors.tooltipTitle;
 		}
 		chart.update('none');
 	}
@@ -220,11 +304,15 @@
 		const colors = getChartTheme(theme.isDark);
 		const isDark = theme.isDark;
 		chart.data.datasets.forEach((dataset, index) => {
-			const stroke = getPieChartColor(index, isDark);
+			const stroke = getSeriesColor(index, isDark);
 			dataset.borderColor = stroke;
-			dataset.backgroundColor = withAlpha(stroke, 0.08);
+			dataset.backgroundColor = withAlpha(stroke, 0.06);
 			dataset.pointBackgroundColor = stroke;
 			dataset.pointBorderColor = colors.pointBorder;
+			dataset.borderWidth = 2.5;
+			dataset.pointRadius = 4;
+			dataset.pointHoverRadius = 6;
+			dataset.pointBorderWidth = 2;
 		});
 		if (chart.options?.plugins?.legend?.labels) {
 			chart.options.plugins.legend.labels.color = colors.legend;
@@ -240,35 +328,11 @@
 		}
 		if (chart.options?.plugins?.tooltip) {
 			chart.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
+			chart.options.plugins.tooltip.titleColor = colors.tooltipTitle;
+			chart.options.plugins.tooltip.bodyColor = colors.tooltipTitle;
 		}
 		chart.update('none');
 	}
-
-	const PIE_PALETTE_FALLBACKS = {
-		light: [
-			'#05ac98', '#038676', '#026b5c', '#8fdcd2', '#c5ede8', '#6a6c6e', '#878787', '#525456',
-			'#9a9d9e', '#bbbfc0', '#3a3b3d', '#e8f8f6'
-		],
-		dark: [
-			'#0cac99', '#1dd4be', '#5ee8d4', '#1b4a44', '#0f2a26', '#9a9c9e', '#6e7072', '#bbbfc0',
-			'#4a4c4e', '#2e3032', '#e0e2e2', '#0a1a18'
-		]
-	} as const;
-
-	const PIE_PALETTE_VARS = [
-		'--color-accent-500',
-		'--color-accent-600',
-		'--color-accent-700',
-		'--color-accent-200',
-		'--color-accent-100',
-		'--color-warm-600',
-		'--color-warm-500',
-		'--color-warm-700',
-		'--color-warm-400',
-		'--color-warm-300',
-		'--color-warm-800',
-		'--color-accent-50'
-	] as const;
 
 	function parseHex(color: string): [number, number, number] | null {
 		if (!color.startsWith('#') || color.length !== 7) return null;
@@ -333,29 +397,17 @@
 		return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
 	}
 
-	function getPieChartPalette(isDark = isDarkMode()) {
-		const fallbacks = isDark ? PIE_PALETTE_FALLBACKS.dark : PIE_PALETTE_FALLBACKS.light;
-		return PIE_PALETTE_VARS.map((name, index) => cssVar(name, fallbacks[index]));
-	}
-
+	/** @deprecated alias — use getSeriesColor; kept for any remaining call sites */
 	function getPieChartColor(index: number, isDark = isDarkMode()) {
-		const palette = getPieChartPalette(isDark);
-		if (index < palette.length) return palette[index];
-
-		const accentFallback = isDark ? '#0cac99' : '#05ac98';
-		const accent = cssVar('--color-accent-500', accentFallback);
-		const rgb = parseHex(accent) ?? (isDark ? [12, 172, 153] : [5, 172, 152]);
-		const [baseHue, saturation, lightness] = rgbToHsl(rgb[0], rgb[1], rgb[2]);
-		const hue = (baseHue + (index - palette.length + 1) * 47) % 360;
-		const [r, g, b] = hslToRgb(hue, Math.min(0.72, Math.max(0.38, saturation)), lightness);
-		return rgbToHex(r, g, b);
+		return getSeriesColor(index, isDark);
 	}
 
+	/** Slice separators: card-coloured ring so neighbouring slices don't blend. */
 	function getPieSliceBorder(isDark = isDarkMode()) {
 		if (isDark) {
-			return cssVar('--color-warm-400', '#4a4c4e');
+			return cssVar('--color-warm-100', '#141516');
 		}
-		return cssVar('--color-warm-200', '#e2e4e4');
+		return '#ffffff';
 	}
 
 	function normalizeAggregationKey(
@@ -474,24 +526,28 @@
 					position: getPieLegendPosition(sliceCount),
 					labels: {
 						usePointStyle: true,
-						font: { size: 12 },
+						font: { size: 13, weight: 500 },
 						color: colors.legend,
 						padding: 16,
-						boxWidth: 10
+						boxWidth: 12
 					}
 				},
 				tooltip: {
 					backgroundColor: colors.tooltipBg,
-					titleFont: { size: 14 },
-					bodyFont: { size: 12 },
+					titleColor: colors.tooltipTitle,
+					bodyColor: colors.tooltipTitle,
+					titleFont: { size: 14, weight: 'bold' },
+					bodyFont: { size: 13 },
 					padding: 12,
 					cornerRadius: 8,
+					displayColors: true,
 					callbacks: {
 						label: (context) => {
 							const total = sumNumericData(context.dataset.data as unknown[]);
 							const value = typeof context.parsed === 'number' ? context.parsed : 0;
 							const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
-							return `${value} incidents (${percentage}%)`;
+							const name = context.label ?? '';
+							return `${name}: ${value} (${percentage}%)`;
 						}
 					}
 				},
@@ -517,27 +573,26 @@
 						const bg = Array.isArray(context.dataset.backgroundColor)
 							? context.dataset.backgroundColor[context.dataIndex]
 							: context.dataset.backgroundColor;
-						return contrastOnHex(typeof bg === 'string' ? bg : '#05ac98', isDarkMode());
+						return contrastOnHex(typeof bg === 'string' ? bg : '#0072B2', isDarkMode());
 					},
 					font: (context) => {
 						// Slightly smaller type when many slices share the ring
 						const sliceCount = context.dataset.data?.length ?? 0;
 						return {
-							size: sliceCount > 8 ? 10 : 11,
+							size: sliceCount > 8 ? 11 : 12,
 							weight: 'bold' as const
 						};
 					},
 					textAlign: 'center',
-					// Soft outline so labels stay readable on any slice color
+					// Stronger halo so labels stay readable on saturated slices
 					textStrokeColor: (context) => {
 						const bg = Array.isArray(context.dataset.backgroundColor)
 							? context.dataset.backgroundColor[context.dataIndex]
 							: context.dataset.backgroundColor;
-						const fg = contrastOnHex(typeof bg === 'string' ? bg : '#05ac98', isDarkMode());
-						// Opposite of label color for a thin halo
-						return fg === '#f8f8f8' ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.65)';
+						const fg = contrastOnHex(typeof bg === 'string' ? bg : '#0072B2', isDarkMode());
+						return fg === '#f8f8f8' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.75)';
 					},
-					textStrokeWidth: 2,
+					textStrokeWidth: 3,
 					clamp: true,
 					clip: false
 				}
@@ -552,8 +607,9 @@
 		if (!dataset) return;
 
 		dataset.backgroundColor =
-			chart.data.labels?.map((_, index) => getPieChartColor(index, theme.isDark)) ?? [];
+			chart.data.labels?.map((_, index) => getSeriesColor(index, theme.isDark)) ?? [];
 		dataset.borderColor = chart.data.labels?.map(() => sliceBorder) ?? sliceBorder;
+		dataset.borderWidth = 3;
 
 		if (chart.options?.plugins?.legend) {
 			chart.options.plugins.legend.position = getPieLegendPosition(sliceCount);
@@ -563,6 +619,8 @@
 		}
 		if (chart.options?.plugins?.tooltip) {
 			chart.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
+			chart.options.plugins.tooltip.titleColor = colors.tooltipTitle;
+			chart.options.plugins.tooltip.bodyColor = colors.tooltipTitle;
 		}
 		// Ensure Chart.js never draws a second title under the card heading
 		if (chart.options?.plugins) {
@@ -669,12 +727,12 @@
 			{
 				label: 'Incidents',
 				data: incidentsByDate.map(([, count]) => count),
-				borderWidth: 2,
+				borderWidth: 3,
 				fill: true,
-				tension: 0.4,
-				pointRadius: 4,
+				tension: 0.35,
+				pointRadius: 5,
 				pointBorderWidth: 2,
-				pointHoverRadius: 6
+				pointHoverRadius: 7
 			}
 		]
 	}));
