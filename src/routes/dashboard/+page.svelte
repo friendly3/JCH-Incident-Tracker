@@ -506,9 +506,10 @@
 	}
 
 	function getPieChartHeightClass(sliceCount: number): string {
-		if (sliceCount > 10) return 'h-[28rem]';
-		if (sliceCount > 6) return 'h-96';
-		return 'h-72';
+		// Taller canvases leave room for outside labels + leader lines
+		if (sliceCount > 10) return 'h-[30rem]';
+		if (sliceCount > 6) return 'h-[26rem]';
+		return 'h-80';
 	}
 
 	function buildPieChartData(
@@ -554,8 +555,10 @@
 		return total;
 	}
 
-	/** Share of a doughnut slice (0–1). Small slices get outside labels. */
+	/** Share of a doughnut slice (0–1). Small slices get outside labels + leader lines. */
 	const SMALL_SLICE_SHARE = 0.08;
+	/** Distance from outer arc to outside label (must match leader geometry). */
+	const OUTSIDE_LABEL_OFFSET = 16;
 
 	function getDoughnutSliceShare(context: {
 		dataset: { data: unknown[] };
@@ -575,6 +578,83 @@
 		return share > 0 && share < SMALL_SLICE_SHARE;
 	}
 
+	/**
+	 * Faint gray polylines from small slice midpoints to their outside data labels.
+	 * Registered per doughnut instance via `plugins: [doughnutOutsideLabelLeaders]`.
+	 */
+	const doughnutOutsideLabelLeaders = {
+		id: 'doughnutOutsideLabelLeaders',
+		afterDatasetsDraw(chart: ChartJS) {
+			if (chart.config.type !== 'doughnut') return;
+			const dataset = chart.data.datasets[0];
+			const meta = chart.getDatasetMeta(0);
+			if (!dataset || !meta?.data?.length) return;
+
+			const total = sumNumericData(dataset.data as unknown[]);
+			if (total <= 0) return;
+
+			const dark = isDarkMode();
+			// Faint gray — readable on white and dark cards without competing with labels
+			const stroke = dark ? 'rgba(170, 174, 180, 0.55)' : 'rgba(120, 124, 130, 0.5)';
+			const ctx = chart.ctx;
+
+			meta.data.forEach((element, index) => {
+				const raw = dataset.data[index];
+				const value = typeof raw === 'number' ? raw : 0;
+				if (value <= 0) return;
+				const share = value / total;
+				if (share >= SMALL_SLICE_SHARE) return;
+
+				// Arc geometry (Chart.js angles: 0 = east, clockwise positive)
+				const arc = element as unknown as {
+					getProps: (
+						keys: string[],
+						final?: boolean
+					) => {
+						startAngle: number;
+						endAngle: number;
+						outerRadius: number;
+						x: number;
+						y: number;
+					};
+				};
+				const props = arc.getProps(
+					['startAngle', 'endAngle', 'outerRadius', 'x', 'y'],
+					true
+				);
+				const mid = (props.startAngle + props.endAngle) / 2;
+				const cos = Math.cos(mid);
+				const sin = Math.sin(mid);
+
+				const x0 = props.x + cos * props.outerRadius;
+				const y0 = props.y + sin * props.outerRadius;
+				const rElbow = props.outerRadius + 6;
+				const rEnd = props.outerRadius + OUTSIDE_LABEL_OFFSET - 2;
+				const x1 = props.x + cos * rElbow;
+				const y1 = props.y + sin * rElbow;
+				const x2 = props.x + cos * rEnd;
+				const y2 = props.y + sin * rEnd;
+
+				ctx.save();
+				ctx.strokeStyle = stroke;
+				ctx.fillStyle = stroke;
+				ctx.lineWidth = 1;
+				ctx.lineCap = 'round';
+				ctx.lineJoin = 'round';
+				ctx.beginPath();
+				ctx.moveTo(x0, y0);
+				ctx.lineTo(x1, y1);
+				ctx.lineTo(x2, y2);
+				ctx.stroke();
+				// Small tick at the label end so the slice↔label link is obvious
+				ctx.beginPath();
+				ctx.arc(x2, y2, 2, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.restore();
+			});
+		}
+	};
+
 	function buildPieChartOptions(
 		colors: ReturnType<typeof getChartTheme>,
 		sliceCount = 0
@@ -583,10 +663,10 @@
 			responsive: true,
 			maintainAspectRatio: false,
 			// Donut hole
-			cutout: '55%',
+			cutout: '52%',
 			layout: {
-				// Extra padding so outside labels on thin slices are not clipped
-				padding: 20
+				// Generous padding so outside labels + leaders are not clipped (esp. top)
+				padding: { top: 36, right: 36, bottom: 28, left: 36 }
 			},
 			plugins: {
 				// HTML card heading is the only chart title — never draw a Chart.js title
@@ -633,7 +713,8 @@
 					// Large slices: centre of the ring segment. Small: outside the arc.
 					anchor: (context) => (isSmallDoughnutSlice(context) ? 'end' : 'center'),
 					align: (context) => (isSmallDoughnutSlice(context) ? 'end' : 'center'),
-					offset: (context) => (isSmallDoughnutSlice(context) ? 10 : 0),
+					offset: (context) =>
+						isSmallDoughnutSlice(context) ? OUTSIDE_LABEL_OFFSET : 0,
 					formatter: (value, context) => {
 						const num = typeof value === 'number' ? value : 0;
 						const total = sumNumericData(context.dataset.data as unknown[]);
@@ -810,8 +891,8 @@
 		// Match bar fills to action-status pill colours (by label, not series index)
 		const labels = (chart.data.labels ?? []).map((l) => String(l));
 		const solid = labels.map((label) => getActionStatusChartColor(label, isDark));
-		// 25% fill opacity; solid border keeps status colour readable
-		dataset.backgroundColor = solid.map((c) => withAlpha(c, 0.25));
+		// 70% fill opacity; solid border keeps status colour readable
+		dataset.backgroundColor = solid.map((c) => withAlpha(c, 0.7));
 		dataset.borderColor = solid;
 		dataset.borderWidth = 1.5;
 		dataset.borderRadius = 4;
@@ -1155,7 +1236,8 @@
 		const instance = new Chart(canvas, {
 			type: 'doughnut',
 			data: initialData,
-			options: buildPieChartOptions(colors, sliceCount)
+			options: buildPieChartOptions(colors, sliceCount),
+			plugins: [doughnutOutsideLabelLeaders]
 		});
 		applyPieChartTheme(instance, sliceCount);
 		teamLeaderChart = instance;
@@ -1177,7 +1259,8 @@
 		const instance = new Chart(canvas, {
 			type: 'doughnut',
 			data: initialData,
-			options: buildPieChartOptions(colors, sliceCount)
+			options: buildPieChartOptions(colors, sliceCount),
+			plugins: [doughnutOutsideLabelLeaders]
 		});
 		applyPieChartTheme(instance, sliceCount);
 		driverChart = instance;
@@ -1608,7 +1691,10 @@
 							Incidents by Team Leader
 						</h2>
 						<p id="team-leader-chart-summary" class="sr-only">{teamLeaderChartAriaLabel}</p>
-						<div class="{teamLeaderChartHeightClass} w-full overflow-visible" style="position: relative;">
+						<div
+							class="{teamLeaderChartHeightClass} w-full overflow-visible pt-2"
+							style="position: relative;"
+						>
 							{#if incidentsByTeamLeader.length === 0}
 								<div class="flex h-full items-center justify-center">
 									<p class="text-sm text-warm-500">No incident data available.</p>
@@ -1617,7 +1703,6 @@
 							<canvas
 								bind:this={teamLeaderCanvas}
 								class={incidentsByTeamLeader.length === 0 ? 'hidden' : 'block h-full w-full'}
-								style="max-height: 100%;"
 								aria-hidden="true"
 							></canvas>
 							<!-- Accessible data table (visually hidden); card h2 is the only visible title -->
@@ -1648,7 +1733,10 @@
 							Incidents by Driver
 						</h2>
 						<p id="driver-chart-summary" class="sr-only">{driverChartAriaLabel}</p>
-						<div class="{driverChartHeightClass} w-full overflow-visible" style="position: relative;">
+						<div
+							class="{driverChartHeightClass} w-full overflow-visible pt-2"
+							style="position: relative;"
+						>
 							{#if incidentsByDriver.length === 0}
 								<div class="flex h-full items-center justify-center">
 									<p class="text-sm text-warm-500">No incident data available.</p>
@@ -1657,7 +1745,6 @@
 							<canvas
 								bind:this={driverCanvas}
 								class={incidentsByDriver.length === 0 ? 'hidden' : 'block h-full w-full'}
-								style="max-height: 100%;"
 								aria-hidden="true"
 							></canvas>
 							<!-- Accessible data table (visually hidden); card h2 is the only visible title -->
