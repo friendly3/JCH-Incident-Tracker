@@ -96,8 +96,14 @@ body {
 	}
 
 	/*
-	 * Date inputs: full-field click target via stretched webkit indicator + showPicker.
-	 * Note: opacity:0 can disable hit-testing on some Chromium builds — use ~0.
+	 * Date inputs: hide native calendar glyph (often left/inline in Chromium).
+	 * Field click + right custom calendar button open the picker via showPicker.
+	 * Use size/opacity/pointer-events fallbacks — display:none alone is ignored
+	 * on some WebKit/Chromium builds of the date control.
+	 *
+	 * Firefox: the date/time control’s calendar chrome is not exposed via a
+	 * stable pseudo-element (no ::-webkit-calendar-picker-indicator). Residual
+	 * native UI there is engine-limited; the custom right-side button still works.
 	 */
 	.native-datetime {
 		/* Button sits in pr-10 gutter; keep native control behavior intact */
@@ -111,21 +117,27 @@ body {
 	}
 
 	.native-datetime::-webkit-calendar-picker-indicator {
-		position: absolute;
-		inset: 0;
-		width: 100%;
-		height: 100%;
+		appearance: none;
+		-webkit-appearance: none;
+		display: none;
+		opacity: 0;
+		width: 0;
+		height: 0;
 		margin: 0;
 		padding: 0;
-		cursor: pointer;
-		/* Not 0: fully transparent indicators often ignore clicks in Chromium */
-		opacity: 0.001;
+		pointer-events: none;
+		background: transparent;
+		color: transparent;
 	}
 
 	/* Some Chromium builds use a separate clear/spin UI — keep the field clickable */
 	.native-datetime::-webkit-clear-button,
 	.native-datetime::-webkit-inner-spin-button {
 		display: none;
+		opacity: 0;
+		width: 0;
+		height: 0;
+		pointer-events: none;
 	}
 
 	/*
@@ -143,12 +155,26 @@ body {
 	}
 
 	.native-time::-webkit-calendar-picker-indicator {
+		appearance: none;
+		-webkit-appearance: none;
 		display: none;
+		opacity: 0;
+		width: 0;
+		height: 0;
+		margin: 0;
+		padding: 0;
+		pointer-events: none;
+		background: transparent;
+		color: transparent;
 	}
 
 	.native-time::-webkit-clear-button,
 	.native-time::-webkit-inner-spin-button {
 		display: none;
+		opacity: 0;
+		width: 0;
+		height: 0;
+		pointer-events: none;
 	}
 
 	.dark input::placeholder,
