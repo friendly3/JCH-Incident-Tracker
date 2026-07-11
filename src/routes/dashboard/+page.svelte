@@ -1189,10 +1189,16 @@
 		syncIncidentStoreFromPageData(data.supabase, data.incidents);
 	});
 
-	/** Relative window for the over-time line charts (user-selectable). */
-	type TimeRangeKey = 'all' | '7' | '30' | '90';
+	/**
+	 * Time window for over-time / driver charts.
+	 * - Relative: all | 7 | 30 | 90 (days ending today)
+	 * - Calendar month with data: m:YYYY-MM
+	 */
+	type RelativeTimeRangeKey = 'all' | '7' | '30' | '90';
+	type MonthTimeRangeKey = `m:${string}`;
+	type TimeRangeKey = RelativeTimeRangeKey | MonthTimeRangeKey;
 
-	const TIME_RANGE_OPTIONS: { value: TimeRangeKey; label: string }[] = [
+	const TIME_RANGE_OPTIONS: { value: RelativeTimeRangeKey; label: string }[] = [
 		{ value: 'all', label: 'All time' },
 		{ value: '90', label: 'Last 90 days' },
 		{ value: '30', label: 'Last 30 days' },
@@ -1201,12 +1207,61 @@
 
 	let timeRange = $state<TimeRangeKey>('all');
 
-	const timeRangeLabel = $derived(
-		TIME_RANGE_OPTIONS.find((o) => o.value === timeRange)?.label ?? 'Last 30 days'
-	);
+	/** Canonical YYYY-MM-DD from dateReceived (handles ISO datetimes). */
+	function dateReceivedKey(dateStr: string | undefined | null): string | null {
+		const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr?.trim() ?? '');
+		return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
+	}
+
+	function isMonthTimeRange(range: string): range is MonthTimeRangeKey {
+		return /^m:\d{4}-\d{2}$/.test(range);
+	}
+
+	function monthKeyFromRange(range: MonthTimeRangeKey): string {
+		return range.slice(2); // YYYY-MM
+	}
+
+	/** en-AU long month label, e.g. "March 2026" */
+	function formatMonthYearLabel(ym: string): string {
+		const m = /^(\d{4})-(\d{2})$/.exec(ym);
+		if (!m) return ym;
+		const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, 1);
+		if (Number.isNaN(d.getTime())) return ym;
+		return d.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
+	}
 
 	/**
-	 * Inclusive calendar window ending today (local).
+	 * Distinct calendar months (YYYY-MM) that have at least one incident,
+	 * newest first — for the time picker month list.
+	 */
+	const availableMonths = $derived.by(() => {
+		const counts = new Map<string, number>();
+		for (const incident of incidents) {
+			const key = dateReceivedKey(incident.dateReceived);
+			if (!key) continue;
+			const ym = key.slice(0, 7);
+			counts.set(ym, (counts.get(ym) ?? 0) + 1);
+		}
+		return [...counts.entries()]
+			.sort(([a], [b]) => b.localeCompare(a))
+			.map(([ym, count]) => ({ ym, count, value: `m:${ym}` as MonthTimeRangeKey }));
+	});
+
+	const timeRangeLabel = $derived.by(() => {
+		const relative = TIME_RANGE_OPTIONS.find((o) => o.value === timeRange);
+		if (relative) return relative.label;
+		if (isMonthTimeRange(timeRange)) {
+			const ym = monthKeyFromRange(timeRange);
+			const hit = availableMonths.find((m) => m.ym === ym);
+			const base = formatMonthYearLabel(ym);
+			return hit ? `${base} (${hit.count})` : base;
+		}
+		return 'All time';
+	});
+
+	/**
+	 * Inclusive calendar window ending today (local) for relative ranges,
+	 * or a single calendar month (YYYY-MM) when range is m:YYYY-MM.
 	 * e.g. last 7 days = today and the previous 6 calendar days.
 	 * `all` → no lower bound.
 	 */
@@ -1218,6 +1273,12 @@
 		const day = parseInt(match[3], 10);
 		const received = new Date(year, month - 1, day);
 		if (Number.isNaN(received.getTime())) return false;
+
+		// Specific calendar month that has data
+		if (isMonthTimeRange(range)) {
+			const ym = monthKeyFromRange(range);
+			return match[1] === ym.slice(0, 4) && match[2] === ym.slice(5, 7);
+		}
 
 		const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 		if (received > end) return false;
@@ -1233,11 +1294,14 @@
 		return received >= start;
 	}
 
-	/** Canonical YYYY-MM-DD from dateReceived (handles ISO datetimes). */
-	function dateReceivedKey(dateStr: string | undefined | null): string | null {
-		const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr?.trim() ?? '');
-		return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
-	}
+	// If selected month disappears after data reload, fall back to all time
+	$effect(() => {
+		if (!isMonthTimeRange(timeRange)) return;
+		const ym = monthKeyFromRange(timeRange);
+		if (!availableMonths.some((m) => m.ym === ym)) {
+			timeRange = 'all';
+		}
+	});
 
 	// Group incidents by date and count them (filtered by selected relative period)
 	const incidentsByDate = $derived.by(() => {
@@ -1898,12 +1962,24 @@
 									<span class="sr-only">Time period for incidents over time</span>
 									<select
 										bind:value={timeRange}
-										class="rounded-lg border border-warm-200 bg-warm-50 px-2.5 py-1 text-sm text-warm-700 input-focus dark:bg-warm-200"
+										class="max-w-[14rem] rounded-lg border border-warm-200 bg-warm-50 px-2.5 py-1 text-sm text-warm-700 input-focus dark:bg-warm-200"
 										aria-controls="over-time-chart-canvas"
+										title="Relative period or a calendar month with incident data"
 									>
-										{#each TIME_RANGE_OPTIONS as opt (opt.value)}
-											<option value={opt.value}>{opt.label}</option>
-										{/each}
+										<optgroup label="Relative">
+											{#each TIME_RANGE_OPTIONS as opt (opt.value)}
+												<option value={opt.value}>{opt.label}</option>
+											{/each}
+										</optgroup>
+										{#if availableMonths.length > 0}
+											<optgroup label="Months with data">
+												{#each availableMonths as m (m.value)}
+													<option value={m.value}
+														>{formatMonthYearLabel(m.ym)} ({m.count})</option
+													>
+												{/each}
+											</optgroup>
+										{/if}
 									</select>
 								</label>
 							</div>
