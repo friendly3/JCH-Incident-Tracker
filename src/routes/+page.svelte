@@ -852,8 +852,20 @@
 											</span>
 										</span>
 									</td>
-									<td class="px-4 py-3 whitespace-normal break-all text-xs text-warm-600 min-w-[10rem] max-w-[14rem]">{incident.emailSender || ''}</td>
-									<td class="px-4 py-3 whitespace-normal break-words text-xs text-warm-600 min-w-[12rem] max-w-sm">{incident.emailSubject || ''}</td>
+									<td
+										class="px-4 py-3 whitespace-normal break-all text-xs min-w-[10rem] max-w-[14rem] {!incident.referenceNo?.trim()
+											? 'text-amber-600 dark:text-amber-400'
+											: 'text-warm-600'}"
+									>
+										{incident.emailSender || ''}
+									</td>
+									<td
+										class="px-4 py-3 whitespace-normal break-words text-xs min-w-[12rem] max-w-sm {!incident.referenceNo?.trim()
+											? 'text-amber-600 dark:text-amber-400'
+											: 'text-warm-600'}"
+									>
+										{incident.emailSubject || ''}
+									</td>
 									<td class="px-4 py-3 whitespace-nowrap font-mono text-xs text-warm-700">{incident.driver}</td>
 									<td class="px-4 py-3 whitespace-normal break-words text-warm-600 min-w-[8rem] max-w-xs">{incident.response}</td>
 									<td class="px-4 py-3 whitespace-nowrap text-warm-500">
