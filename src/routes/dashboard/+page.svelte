@@ -1233,6 +1233,12 @@
 		return received >= start;
 	}
 
+	/** Canonical YYYY-MM-DD from dateReceived (handles ISO datetimes). */
+	function dateReceivedKey(dateStr: string | undefined | null): string | null {
+		const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr?.trim() ?? '');
+		return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
+	}
+
 	// Group incidents by date and count them (filtered by selected relative period)
 	const incidentsByDate = $derived.by(() => {
 		const grouped: Record<string, number> = {};
@@ -1241,7 +1247,9 @@
 		incidents.forEach((incident) => {
 			const date = incident.dateReceived;
 			if (!isDateReceivedInTimeRange(date, range)) return;
-			grouped[date] = (grouped[date] || 0) + 1;
+			const key = dateReceivedKey(date);
+			if (!key) return;
+			grouped[key] = (grouped[key] || 0) + 1;
 		});
 
 		return Object.entries(grouped).sort(([dateA], [dateB]) => dateA.localeCompare(dateB));
@@ -1269,6 +1277,8 @@
 	 * Missing/blank types are bucketed as "Unspecified" (medium-gray series colour).
 	 */
 	const typeOverTimeChartData = $derived.by(() => {
+		// Same relative window as the time picker (via incidentsByDate)
+		const range = timeRange;
 		const dateKeys = incidentsByDate.map(([date]) => date);
 		const dateSet = new Set(dateKeys);
 		const dark = theme.isDark;
@@ -1277,10 +1287,15 @@
 		const typeMeta = new Map<string, string>();
 		/** typeKey → date → count */
 		const counts = new Map<string, Map<string, number>>();
+		/** typeKey → total in selected period (legend; explicit range filter) */
+		const typeTotals = new Map<string, number>();
 
 		for (const incident of incidents) {
-			const date = incident.dateReceived;
-			if (!dateSet.has(date)) continue;
+			// Honour time picker directly (do not rely only on date-key set membership)
+			if (!isDateReceivedInTimeRange(incident.dateReceived, range)) continue;
+			const date = dateReceivedKey(incident.dateReceived);
+			if (!date || !dateSet.has(date)) continue;
+
 			// Canonical empty-type bucket for this chart
 			const { key, label } = normalizeAggregationKey(incident.type, 'Unspecified');
 			const displayLabel = isUnassignedCategory(label) ? 'Unspecified' : label;
@@ -1291,6 +1306,7 @@
 			}
 			const byDate = counts.get(typeKey)!;
 			byDate.set(date, (byDate.get(date) ?? 0) + 1);
+			typeTotals.set(typeKey, (typeTotals.get(typeKey) ?? 0) + 1);
 		}
 
 		// Named types A–Z, then Unspecified last so it is easy to find in the legend
@@ -1309,10 +1325,14 @@
 				counts: dateKeys.map((d) => counts.get(key)?.get(d) ?? 0)
 			})),
 			dateKeys,
+			/** Active time window label for legends / a11y */
+			periodLabel: timeRangeLabel,
 			datasets: sortedTypes.map(([key, label], index) => {
 				const color = getChartCategoryColor(label, index, dark);
 				const data = dateKeys.map((d) => counts.get(key)?.get(d) ?? 0);
-				const total = data.reduce((sum, n) => sum + n, 0);
+				// Prefer explicit period total (same filter as time picker)
+				const total =
+					typeTotals.get(key) ?? data.reduce((sum, n) => sum + n, 0);
 				return {
 					label,
 					/** Total incidents for this type in the selected period (legend). */
@@ -1436,6 +1456,8 @@
 		return {
 			labels,
 			datasets,
+			/** Active time window for legends / a11y */
+			periodLabel: timeRangeLabel,
 			/** For accessible table / HTML legend */
 			typeLabels: typeKeys.map((k) => typeMeta.get(k) ?? k),
 			driverRows: drivers.map((d) => ({
@@ -1950,8 +1972,11 @@
 						</div>
 						<div class="dashboard-chart-footer">
 							{#if hasTypeOverTimeData}
-								<ul class="flex flex-wrap gap-x-2.5 gap-y-1" aria-label="Incident type legend">
-									{#each typeOverTimeChartData.datasets as ds (ds.label)}
+								<ul
+									class="flex flex-wrap gap-x-2.5 gap-y-1"
+									aria-label="Incident type legend for {typeOverTimeChartData.periodLabel}"
+								>
+									{#each typeOverTimeChartData.datasets as ds (`${ds.label}-${ds.total}-${timeRange}`)}
 										<li class="flex items-center gap-1 text-[10px] leading-tight text-warm-600">
 											<span
 												class="inline-block h-2 w-2 shrink-0 rounded-full"
@@ -2020,8 +2045,11 @@
 						</div>
 						<div class="dashboard-chart-footer">
 							{#if hasDriverData}
-								<ul class="flex flex-wrap gap-x-2.5 gap-y-1" aria-label="Incident type legend">
-									{#each driverStackedBarData.datasets as ds (ds.label)}
+								<ul
+									class="flex flex-wrap gap-x-2.5 gap-y-1"
+									aria-label="Incident type legend for {driverStackedBarData.periodLabel}"
+								>
+									{#each driverStackedBarData.datasets as ds (`${ds.label}-${ds.total}-${timeRange}`)}
 										<li class="flex items-center gap-1 text-[10px] leading-tight text-warm-600">
 											<span
 												class="inline-block h-2 w-2 shrink-0 rounded-full"
