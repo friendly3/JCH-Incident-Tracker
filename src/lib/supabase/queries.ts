@@ -1,7 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from './types'
 import type { Facility } from '../data/facilities'
-import type { Incident, IncidentSource, IncidentType, IncidentAction } from '../data/incidents'
+import type {
+	Incident,
+	IncidentSource,
+	IncidentType,
+	IncidentAction,
+	RespondedByOption
+} from '../data/incidents'
 import type { TeamLeader, Driver } from '../data/team'
 import {
 	normalizeDateOnly,
@@ -15,6 +21,7 @@ export type SupabaseIncident = Database['public']['Tables']['incidents']['Row']
 export const INCIDENT_SENDER_MIGRATION = 'add_incident_sender_marked_source.sql'
 export const INCIDENT_NORMALIZATION_MIGRATION = 'normalise_incidents_lookup_tables.sql'
 export const INCIDENT_LOCATION_MIGRATION = 'add_incident_location_fields.sql'
+export const RESPONDED_BY_MIGRATION = 'add_responded_by_lookup.sql'
 /** @deprecated Use INCIDENT_SENDER_MIGRATION or INCIDENT_NORMALIZATION_MIGRATION */
 export const INCIDENT_SCHEMA_MIGRATION = INCIDENT_SENDER_MIGRATION
 
@@ -272,6 +279,76 @@ export function createDb(supabase: SupabaseClient) {
 				.eq('id', id);
 			if (error) console.error('Error updating incident action:', error);
 			return !error;
+		},
+
+		// Responded By lookup (person names — preserve casing)
+		async getRespondedByOptions(): Promise<RespondedByOption[]> {
+			const { data, error } = await supabase.from('responded_by').select('*').order('name')
+			if (error) {
+				console.error('Error fetching responded_by options:', error)
+				return []
+			}
+			return (data || []).map((row) => ({ id: row.id, name: row.name }))
+		},
+
+		/**
+		 * When the lookup table is empty, copy team leader names into it.
+		 * Safe to call repeatedly (unique on name).
+		 */
+		async seedRespondedByFromTeamLeaders(): Promise<number> {
+			const leaders = await this.getTeamLeaders()
+			const names = [
+				...new Set(
+					leaders
+						.map((l) => l.name?.trim())
+						.filter((n): n is string => !!n)
+				)
+			]
+			if (names.length === 0) return 0
+			const { data, error } = await supabase
+				.from('responded_by')
+				.upsert(
+					names.map((name) => ({ name })),
+					{ onConflict: 'name', ignoreDuplicates: true }
+				)
+				.select('id')
+			if (error) {
+				console.error('Error seeding responded_by from team leaders:', error)
+				return 0
+			}
+			return data?.length ?? 0
+		},
+
+		async addRespondedBy(name: string): Promise<RespondedByOption | null> {
+			const trimmed = name.trim()
+			if (!trimmed) return null
+			const { data, error } = await supabase
+				.from('responded_by')
+				.insert({ name: trimmed })
+				.select()
+				.single()
+			if (error) {
+				console.error('Error adding responded_by:', error)
+				return null
+			}
+			return { id: data.id, name: data.name }
+		},
+
+		async updateRespondedBy(id: string, name: string): Promise<boolean> {
+			const trimmed = name.trim()
+			if (!trimmed) return false
+			const { error } = await supabase
+				.from('responded_by')
+				.update({ name: trimmed })
+				.eq('id', id)
+			if (error) console.error('Error updating responded_by:', error)
+			return !error
+		},
+
+		async deleteRespondedBy(id: string): Promise<boolean> {
+			const { error } = await supabase.from('responded_by').delete().eq('id', id)
+			if (error) console.error('Error deleting responded_by:', error)
+			return !error
 		},
 
 		// Incidents

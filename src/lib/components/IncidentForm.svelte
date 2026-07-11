@@ -1,5 +1,10 @@
 <script lang="ts">
-	import type { Incident, IncidentType, IncidentAction } from '$lib/data/incidents';
+	import type {
+		Incident,
+		IncidentType,
+		IncidentAction,
+		RespondedByOption
+	} from '$lib/data/incidents';
 	import type { Driver, TeamLeader } from '$lib/data/team';
 	import {
 		formatDateTimeFields,
@@ -23,6 +28,8 @@
 		incidentActions: IncidentAction[];
 		drivers: Driver[];
 		teamLeaders: TeamLeader[];
+		/** Managed Responded By dropdown options (Configuration). */
+		respondedByOptions?: RespondedByOption[];
 		onSubmit: (incident: Incident) => void;
 		onCancel: (hasUnsavedChanges: boolean) => void;
 		onUnsavedChangesChange?: (hasChanges: boolean) => void;
@@ -38,6 +45,7 @@
 		incidentActions,
 		drivers,
 		teamLeaders,
+		respondedByOptions = [],
 		onSubmit,
 		onCancel,
 		onUnsavedChangesChange,
@@ -1095,7 +1103,22 @@
 				<div class="sn-field-row">
 					<label for="response" class="sn-field-label">Responded By</label>
 					<div class="sn-field-control">
-						<input id="response" type="text" bind:value={form.response} class={inputClass} />
+						<select
+							id="response"
+							value={form.response || FK_EMPTY}
+							onchange={(e) => {
+								form.response = e.currentTarget.value;
+							}}
+							class={inputClass}
+						>
+							<option value={FK_EMPTY}>— Select —</option>
+							{#if form.response && !respondedByOptions.some((o) => o.name === form.response)}
+								<option value={form.response}>{form.response}</option>
+							{/if}
+							{#each respondedByOptions as opt (opt.id)}
+								<option value={opt.name}>{opt.name}</option>
+							{/each}
+						</select>
 					</div>
 				</div>
 				<div class="sn-field-row">

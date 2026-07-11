@@ -33,7 +33,11 @@
 	);
 
 	function isConfigPath(path: string): boolean {
-		return path === '/team' || path.startsWith('/admin/dropdowns');
+		return (
+			path === '/team' ||
+			path.startsWith('/admin/dropdowns') ||
+			path.startsWith('/admin/responded-by')
+		);
 	}
 
 	let isConfigExpanded = $state(isConfigPath(page.url.pathname));
@@ -178,6 +182,14 @@
 							>
 								Dropdowns
 							</a>
+							<a
+								href="/admin/responded-by"
+								class="block rounded-lg px-3 py-2 transition {currentPath.startsWith('/admin/responded-by')
+									? 'bg-accent-100 text-accent-700 font-medium'
+									: 'hover:bg-warm-200'}"
+							>
+								Responded By
+							</a>
 						</div>
 					</div>
 				</nav>
@@ -203,6 +215,15 @@
 							: 'hover:bg-warm-200 hover:text-warm-800'}"
 					>
 						Dropdowns
+					</a>
+					<a
+						href="/admin/responded-by"
+						title="Responded By"
+						class="rounded-lg px-1 py-1 transition {currentPath.startsWith('/admin/responded-by')
+							? 'bg-accent-100 text-accent-700 font-medium'
+							: 'hover:bg-warm-200 hover:text-warm-800'}"
+					>
+						Responded
 					</a>
 				</nav>
 			{/if}

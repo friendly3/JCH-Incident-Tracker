@@ -37,6 +37,20 @@ export interface Database {
           name?: string
         }
       }
+      responded_by: {
+        Row: {
+          id: string
+          name: string
+        }
+        Insert: {
+          id?: string
+          name: string
+        }
+        Update: {
+          id?: string
+          name?: string
+        }
+      }
       facilities: {
         Row: {
           id: string

@@ -5,13 +5,22 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const db = createDb(locals.supabase)
 
 	try {
-		const [incidents, incidentTypes, incidentActions, drivers, teamLeaders] = await Promise.all([
-			db.getIncidents(),
-			db.getIncidentTypes(),
-			db.getIncidentActions(),
-			db.getDrivers(),
-			db.getTeamLeaders()
-		])
+		const [incidents, incidentTypes, incidentActions, drivers, teamLeaders, respondedByOptions] =
+			await Promise.all([
+				db.getIncidents(),
+				db.getIncidentTypes(),
+				db.getIncidentActions(),
+				db.getDrivers(),
+				db.getTeamLeaders(),
+				db.getRespondedByOptions()
+			])
+
+		// Seed Responded By from team leaders when the lookup is empty
+		let respondedBy = respondedByOptions
+		if (respondedBy.length === 0) {
+			await db.seedRespondedByFromTeamLeaders()
+			respondedBy = await db.getRespondedByOptions()
+		}
 
 		return {
 			incidents,
@@ -19,6 +28,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			incidentActions,
 			drivers,
 			teamLeaders,
+			respondedByOptions: respondedBy,
 			loadError: null as string | null
 		}
 	} catch (err) {
@@ -30,6 +40,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			incidentActions: [],
 			drivers: [],
 			teamLeaders: [],
+			respondedByOptions: [],
 			loadError: message
 		}
 	}

@@ -8,6 +8,12 @@ export interface IncidentAction {
     name: string;
 }
 
+/** Managed Responded By options (Configuration → Responded By). */
+export interface RespondedByOption {
+    id: string;
+    name: string;
+}
+
 export type IncidentSource = 'ui' | 'import';
 
 export interface Incident {
