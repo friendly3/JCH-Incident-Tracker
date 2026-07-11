@@ -670,7 +670,7 @@
 			? 'sn-form-surface'
 			: 'bg-transparent'} flex-1 overflow-y-auto"
 	>
-		<div class="mx-auto w-full max-w-3xl px-6 {showTitle ? 'py-6' : 'pb-6 pt-3'}">
+		<div class="mx-auto w-full max-w-3xl px-6 {showTitle ? 'py-6' : 'pb-6 pt-0'}">
 			{#if showTitle}
 				<h2 id="incident-form-title" class="mb-6 text-xl font-semibold text-warm-800">
 					{isEdit ? 'Edit Incident' : 'New Incident'}

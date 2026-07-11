@@ -535,11 +535,12 @@
 
 <svelte:window onkeydowncapture={handleModalKeydownCapture} />
 
-<div class="flex-1 flex flex-col bg-warm-50 text-warm-900 overflow-hidden">
-	<!-- List shell: hidden when incident form is expanded so it does not leave a blank top band -->
+<div class="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-warm-50 text-warm-900">
+	<!-- List shell: inert under modal; visually hidden when form is expanded to full main pane -->
 	<div
-		class="flex min-h-0 flex-1 flex-col overflow-hidden {isFormExpanded ? 'hidden' : ''}"
+		class="flex min-h-0 flex-1 flex-col overflow-hidden {isFormExpanded ? 'invisible pointer-events-none' : ''}"
 		inert={isModalOpen || isFormExpanded || undefined}
+		aria-hidden={isFormExpanded || undefined}
 	>
 	<header class="border-b border-warm-200 bg-white/80 px-6 py-5 backdrop-blur flex-shrink-0">
 		<div class="flex w-full min-w-0 items-start gap-3">
@@ -1027,12 +1028,12 @@
 
 		<div
 			class={isFormExpanded
-				? 'flex min-h-0 flex-1 flex-col overflow-hidden bg-warm-100 px-3 py-2 sm:px-4 sm:py-3'
+				? 'absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-white'
 				: 'fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none'}
 		>
 			<div
 				class={isFormExpanded
-					? 'mx-auto flex h-full w-full max-w-4xl min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-warm-200 bg-white shadow-sm'
+					? 'flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-white'
 					: 'pointer-events-auto flex max-h-[92vh] w-full max-w-4xl min-h-0 flex-col overflow-hidden rounded-lg border border-warm-200 bg-white shadow-2xl'}
 				onclick={(e) => {
 					if (!isFormExpanded) e.stopPropagation();
