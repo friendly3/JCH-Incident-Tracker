@@ -8,7 +8,7 @@ export interface IncidentAction {
     name: string;
 }
 
-/** Managed Responded By options (Configuration → Responded By). */
+/** Managed Responded By options (Configuration → Dropdowns → Responded By). */
 export interface RespondedByOption {
     id: string;
     name: string;
