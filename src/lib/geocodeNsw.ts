@@ -339,6 +339,7 @@ export async function geocodeNswLocation(
 /**
  * After geocoding, spread pins that share (nearly) the same coordinates
  * so every place is visible as its own indicator.
+ * @deprecated Prefer collapseOverlappingToSuburbPins for map display.
  */
 export function spreadCoincidentPoints<
 	T extends { lat: number; lng: number; key: string }
@@ -366,6 +367,85 @@ export function spreadCoincidentPoints<
 		});
 	}
 	return out;
+}
+
+export type CollapsedMapPin = {
+	key: string;
+	lat: number;
+	lng: number;
+	count: number;
+	suburb: string;
+	/** Empty when several streets were merged into one pin. */
+	street: string;
+	placeCount: number;
+	/** True when more than one geocoded place was collapsed. */
+	merged: boolean;
+	precision: GeoPoint['precision'];
+	/** Streets represented (for popup). */
+	streets: string[];
+};
+
+/**
+ * When indicators share (nearly) the same map position, keep **one** pin and
+ * label it with the **suburb** (not individual streets).
+ * Isolated pins keep their street label when known.
+ *
+ * @param gridDecimals - lat/lng rounding for “same spot” (4 ≈ 11 m, 5 ≈ 1 m)
+ */
+export function collapseOverlappingToSuburbPins<
+	T extends {
+		key: string;
+		lat: number;
+		lng: number;
+		count: number;
+		suburb: string;
+		street: string;
+		precision: GeoPoint['precision'];
+	}
+>(items: T[], gridDecimals = 4): CollapsedMapPin[] {
+	const groups = new Map<string, T[]>();
+	for (const item of items) {
+		const gkey = `${item.lat.toFixed(gridDecimals)},${item.lng.toFixed(gridDecimals)}`;
+		const list = groups.get(gkey) ?? [];
+		list.push(item);
+		groups.set(gkey, list);
+	}
+
+	const out: CollapsedMapPin[] = [];
+	for (const list of groups.values()) {
+		const count = list.reduce((s, p) => s + p.count, 0);
+		const lat = list.reduce((s, p) => s + p.lat, 0) / list.length;
+		const lng = list.reduce((s, p) => s + p.lng, 0) / list.length;
+		const streets = [
+			...new Set(list.map((p) => p.street.trim()).filter(Boolean))
+		].sort((a, b) => a.localeCompare(b));
+		const suburbs = [
+			...new Set(list.map((p) => p.suburb.trim()).filter(Boolean))
+		];
+		const suburb = suburbs[0] || 'Unknown';
+		const merged = list.length > 1 || streets.length > 1;
+		const precision: GeoPoint['precision'] = list.every((p) => p.precision === 'street')
+			? 'street'
+			: 'suburb';
+
+		out.push({
+			key: merged
+				? `cluster|${suburb.toLowerCase()}|${lat.toFixed(gridDecimals)},${lng.toFixed(gridDecimals)}`
+				: list[0].key,
+			lat,
+			lng,
+			count,
+			suburb,
+			// Single unique street & not merged → keep street; else suburb-only label
+			street: !merged && streets.length === 1 ? streets[0] : '',
+			placeCount: list.length,
+			merged,
+			precision,
+			streets
+		});
+	}
+
+	return out.sort((a, b) => b.count - a.count || a.suburb.localeCompare(b.suburb));
 }
 
 /** Geocode many locations with pacing (Nominatim courtesy). */

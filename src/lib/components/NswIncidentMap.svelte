@@ -6,8 +6,8 @@
 		SYDNEY_CENTER,
 		SYDNEY_DEFAULT_ZOOM,
 		aggregatePlacesBySuburb,
+		collapseOverlappingToSuburbPins,
 		geocodeNswLocation,
-		spreadCoincidentPoints,
 		type GeoPoint
 	} from '$lib/geocodeNsw';
 	import {
@@ -478,7 +478,9 @@
 
 	/**
 	 * Draw markers for the current zoom mode from `streetPlaces`.
-	 * Suburb mode aggregates; street mode shows each street (with stack spread).
+	 * - Suburb mode: one pin per suburb
+	 * - Street mode: one pin per geocode; overlapping positions collapse to a
+	 *   single pin labelled with the suburb (not fanned-out streets)
 	 */
 	function renderMarkersForMode(fitBounds: boolean) {
 		if (!map || !markersLayer || !Lref) return;
@@ -517,18 +519,18 @@
 					lng: s.lng,
 					count: s.count,
 					nameLine: s.suburb,
-					suburbLine: `${s.placeCount} street${s.placeCount === 1 ? '' : 's'} · NSW`,
+					suburbLine: `${s.placeCount} location${s.placeCount === 1 ? '' : 's'} · NSW`,
 					placeLabel: s.suburb,
-					precisionNote: `Suburb total · zoom in (level ${STREET_DETAIL_MIN_ZOOM}+) for streets`,
-					popupDetail: `${s.suburb}, NSW · ${s.placeCount} street location${s.placeCount === 1 ? '' : 's'}`
+					precisionNote: `Suburb total · zoom in (level ${STREET_DETAIL_MIN_ZOOM}+) for detail`,
+					popupDetail: `${s.suburb}, NSW · ${s.placeCount} location${s.placeCount === 1 ? '' : 's'}`
 				});
 			}
 
 			mappedPlaceCount = suburbs.length;
-			statusText = `Suburb view: ${suburbs.length} suburb${suburbs.length === 1 ? '' : 's'} (${mappedIncidentCount} incidents). Zoom in to level ${STREET_DETAIL_MIN_ZOOM}+ for street locations.`;
+			statusText = `Suburb view: ${suburbs.length} suburb${suburbs.length === 1 ? '' : 's'} (${mappedIncidentCount} incidents). Zoom in to level ${STREET_DETAIL_MIN_ZOOM}+ for more detail.`;
 		} else {
-			// Street view — spread only suburb-precision fallbacks that still coincide
-			const spread = spreadCoincidentPoints(
+			// Overlapping coords → one indicator, suburb label only
+			const collapsed = collapseOverlappingToSuburbPins(
 				streetPlaces.map((p) => ({
 					key: p.key,
 					lat: p.lat,
@@ -536,31 +538,51 @@
 					count: p.count,
 					suburb: p.suburb,
 					street: p.street,
-					precision: p.precision,
-					placeLabel: p.placeLabel
-				}))
+					precision: p.precision
+				})),
+				4 // ~11 m grid — treats near-identical pins as one
 			);
 
-			for (const p of spread) {
-				const isStreet = p.precision === 'street';
+			for (const p of collapsed) {
+				const isMerged = p.merged;
+				const nameLine = isMerged || !p.street ? p.suburb : p.street;
+				const suburbLine = isMerged
+					? `${p.placeCount} locations · NSW`
+					: p.street
+						? p.suburb
+						: 'NSW';
+				const placeLabel = isMerged || !p.street ? p.suburb : `${p.street}, ${p.suburb}`;
+				const streetsNote =
+					isMerged && p.streets.length
+						? p.streets.slice(0, 8).join(', ') +
+							(p.streets.length > 8 ? ` (+${p.streets.length - 8} more)` : '')
+						: '';
+
 				addMarkerEntry({
 					L,
 					lat: p.lat,
 					lng: p.lng,
 					count: p.count,
-					nameLine: p.street || p.suburb,
-					suburbLine: p.street ? p.suburb : 'NSW',
-					placeLabel: p.placeLabel,
-					precisionNote: isStreet
-						? 'Street-level geocode'
-						: 'Approx. suburb (street geocode unavailable)',
-					popupDetail: p.street ? `${p.suburb}, NSW` : `${p.suburb}, NSW`
+					nameLine,
+					suburbLine,
+					placeLabel,
+					precisionNote: isMerged
+						? 'Overlapping locations combined · suburb label'
+						: p.precision === 'street'
+							? 'Street-level geocode'
+							: 'Approx. location',
+					popupDetail: isMerged
+						? `${p.suburb}, NSW${streetsNote ? `<br/><span style="color:#555">${escapeHtml(streetsNote)}</span>` : ''}`
+						: `${p.suburb}, NSW`
 				});
 			}
 
-			mappedPlaceCount = spread.length;
-			const streetHits = streetPlaces.filter((p) => p.precision === 'street').length;
-			statusText = `Street view: ${spread.length} location${spread.length === 1 ? '' : 's'} (${streetHits} street-precise, ${spread.length - streetHits} suburb approx.). Zoom out for suburb totals.`;
+			mappedPlaceCount = collapsed.length;
+			const mergedCount = collapsed.filter((p) => p.merged).length;
+			statusText =
+				mergedCount > 0
+					? `Showing ${collapsed.length} indicator${collapsed.length === 1 ? '' : 's'} (${mergedCount} combined where locations overlapped · labelled by suburb).`
+					: `Showing ${collapsed.length} location${collapsed.length === 1 ? '' : 's'}. Overlapping pins combine into one suburb label.`;
 		}
 
 		if (fitBounds && placedMarkers.length > 0) {
