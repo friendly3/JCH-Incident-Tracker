@@ -1063,7 +1063,7 @@
 			<section class="mb-2" aria-labelledby="section-response-heading">
 				<h3 id="section-response-heading" class="sn-section-title">Response</h3>
 				<div class="sn-field-row">
-					<label for="response" class="sn-field-label">Response By</label>
+					<label for="response" class="sn-field-label">Responded By</label>
 					<div class="sn-field-control">
 						<input id="response" type="text" bind:value={form.response} class={inputClass} />
 					</div>
