@@ -1311,9 +1311,13 @@
 			dateKeys,
 			datasets: sortedTypes.map(([key, label], index) => {
 				const color = getChartCategoryColor(label, index, dark);
+				const data = dateKeys.map((d) => counts.get(key)?.get(d) ?? 0);
+				const total = data.reduce((sum, n) => sum + n, 0);
 				return {
 					label,
-					data: dateKeys.map((d) => counts.get(key)?.get(d) ?? 0),
+					/** Total incidents for this type in the selected period (legend). */
+					total,
+					data,
 					borderColor: color,
 					backgroundColor: withAlpha(color, 0.06),
 					pointBackgroundColor: color,
@@ -1412,9 +1416,13 @@
 		const datasets = typeKeys.map((typeKey, index) => {
 			const typeLabel = typeMeta.get(typeKey) ?? typeKey;
 			const solid = getChartCategoryColor(typeLabel, index, dark);
+			const data = drivers.map((d) => d.types.get(typeKey) ?? 0);
+			const total = typeTotals.get(typeKey) ?? data.reduce((sum, n) => sum + n, 0);
 			return {
 				label: typeLabel,
-				data: drivers.map((d) => d.types.get(typeKey) ?? 0),
+				/** Total incidents of this type across all drivers in range (legend). */
+				total,
+				data,
 				backgroundColor: withAlpha(solid, 0.82),
 				borderColor: solid,
 				borderWidth: 1,
@@ -1952,7 +1960,9 @@
 													: '#666'}"
 												aria-hidden="true"
 											></span>
-											<span class="truncate">{ds.label}</span>
+											<span class="truncate"
+												>{ds.label} ({ds.total})</span
+											>
 										</li>
 									{/each}
 								</ul>
@@ -2020,7 +2030,9 @@
 													: '#666'}"
 												aria-hidden="true"
 											></span>
-											<span class="truncate">{ds.label}</span>
+											<span class="truncate"
+												>{ds.label} ({ds.total})</span
+											>
 										</li>
 									{/each}
 								</ul>
