@@ -536,7 +536,11 @@
 <svelte:window onkeydowncapture={handleModalKeydownCapture} />
 
 <div class="flex-1 flex flex-col bg-warm-50 text-warm-900 overflow-hidden">
-	<div class="flex min-h-0 flex-1 flex-col overflow-hidden" inert={isModalOpen || undefined}>
+	<!-- List shell: hidden when incident form is expanded so it does not leave a blank top band -->
+	<div
+		class="flex min-h-0 flex-1 flex-col overflow-hidden {isFormExpanded ? 'hidden' : ''}"
+		inert={isModalOpen || isFormExpanded || undefined}
+	>
 	<header class="border-b border-warm-200 bg-white/80 px-6 py-5 backdrop-blur flex-shrink-0">
 		<div class="flex w-full min-w-0 items-start gap-3">
 			<CourierTruckIcon />
@@ -1023,12 +1027,12 @@
 
 		<div
 			class={isFormExpanded
-				? 'flex flex-1 min-h-0 flex-col overflow-hidden bg-warm-100 px-4 py-5 sm:px-6'
+				? 'flex min-h-0 flex-1 flex-col overflow-hidden bg-warm-100 px-3 py-2 sm:px-4 sm:py-3'
 				: 'fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none'}
 		>
 			<div
 				class={isFormExpanded
-					? 'mx-auto flex h-full w-full max-w-4xl min-h-0 flex-col overflow-hidden rounded-lg border border-warm-200 bg-white shadow-sm'
+					? 'mx-auto flex h-full w-full max-w-4xl min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-warm-200 bg-white shadow-sm'
 					: 'pointer-events-auto flex max-h-[92vh] w-full max-w-4xl min-h-0 flex-col overflow-hidden rounded-lg border border-warm-200 bg-white shadow-2xl'}
 				onclick={(e) => {
 					if (!isFormExpanded) e.stopPropagation();
@@ -1038,7 +1042,7 @@
 				aria-labelledby="incident-form-title"
 			>
 				<header
-					class="flex shrink-0 items-center justify-between gap-4 border-b border-warm-200 bg-warm-50 px-5 py-3.5"
+					class="flex shrink-0 items-center justify-between gap-4 border-b border-warm-200 bg-warm-50 px-5 py-2.5"
 				>
 					<div class="min-w-0">
 						<h2 id="incident-form-title" class="truncate text-lg font-semibold text-warm-800">
