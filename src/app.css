@@ -520,7 +520,8 @@ body {
 		font-weight: 600;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: var(--color-warm-500);
+		/* Teal accent (matches Vichy brand accent) */
+		color: var(--color-accent-600);
 	}
 
 	.sn-field-row {
