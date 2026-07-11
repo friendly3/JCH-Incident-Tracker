@@ -2,10 +2,15 @@
  * One-off / manual backfill: ensure email-received time is populated and
  * displayed from stored incident fields.
  *
+ * After migration, the UI reads Date Received time from `email_received_time`
+ * (with fallbacks). This backfill writes through `incident.time`, which maps to
+ * `email_received_time` on update (legacy `time` is left alone).
+ *
  * Sources (in order):
- * 1) Existing `time` column (normalize HH:mm:ss → HH:mm)
- * 2) ISO / datetime embedded in `date_received` (split into date + time)
- * 3) Leave blank if neither available (true mailbox Date needs import-side capture)
+ * 1) Existing time already loaded on the incident (email_received_time → time)
+ * 2) Normalize HH:mm:ss → HH:mm
+ * 3) ISO / datetime embedded in `date_received` (split into date + time)
+ * 4) Leave blank if neither available (true mailbox Date needs import-side capture)
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Incident } from '$lib/data/incidents';

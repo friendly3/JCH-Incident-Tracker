@@ -116,6 +116,8 @@ export interface Database {
           reference_no: string
           date_received: string
           time: string
+          /** Gmail/import received clock (HH:mm); source of truth for Date Received time in the UI */
+          email_received_time?: string | null
           type_id: string | null
           driver_id: string | null
           team_leader_id: string | null
@@ -141,6 +143,7 @@ export interface Database {
           reference_no: string
           date_received: string
           time: string
+          email_received_time?: string | null
           type_id?: string | null
           driver_id?: string | null
           team_leader_id?: string | null
@@ -164,6 +167,7 @@ export interface Database {
           reference_no?: string
           date_received?: string
           time?: string
+          email_received_time?: string | null
           type_id?: string | null
           driver_id?: string | null
           team_leader_id?: string | null

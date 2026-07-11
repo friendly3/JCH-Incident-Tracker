@@ -29,6 +29,10 @@ export interface Incident {
     locationStreet?: string;
     locationSuburb?: string;
     dateReceived: string;
+    /**
+     * Clock for Date Received (HH:mm).
+     * Loaded from DB `email_received_time` when present, else legacy `time`.
+     */
     time: string;
     sender: string;
     /** ID referencing team_leaders.id */

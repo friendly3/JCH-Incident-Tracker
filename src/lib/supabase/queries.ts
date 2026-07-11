@@ -22,6 +22,7 @@ export const INCIDENT_SENDER_MIGRATION = 'add_incident_sender_marked_source.sql'
 export const INCIDENT_NORMALIZATION_MIGRATION = 'normalise_incidents_lookup_tables.sql'
 export const INCIDENT_LOCATION_MIGRATION = 'add_incident_location_fields.sql'
 export const RESPONDED_BY_MIGRATION = 'add_responded_by_lookup.sql'
+export const EMAIL_RECEIVED_TIME_MIGRATION = 'add_email_received_time.sql'
 /** @deprecated Use INCIDENT_SENDER_MIGRATION or INCIDENT_NORMALIZATION_MIGRATION */
 export const INCIDENT_SCHEMA_MIGRATION = INCIDENT_SENDER_MIGRATION
 
@@ -42,6 +43,7 @@ const NORMALIZATION_SCHEMA_MARKERS = [
 
 const SENDER_SCHEMA_MARKERS = ['sender', 'marked', 'source'] as const
 const LOCATION_SCHEMA_MARKERS = ['location_street', 'location_suburb'] as const
+const EMAIL_RECEIVED_TIME_MARKERS = ['email_received_time'] as const
 
 function escapeRegExp(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -83,7 +85,11 @@ function getIncidentSchemaErrorMessage(error: { message?: string; code?: string 
 		return `Database migration required. Please apply ${INCIDENT_LOCATION_MIGRATION}.`
 	}
 
-	return `Database schema mismatch. Please apply pending migrations: ${INCIDENT_NORMALIZATION_MIGRATION}, ${INCIDENT_SENDER_MIGRATION}, and ${INCIDENT_LOCATION_MIGRATION}.`
+	if (messageMentionsAny(msg, EMAIL_RECEIVED_TIME_MARKERS)) {
+		return `Database migration required. Please apply ${EMAIL_RECEIVED_TIME_MIGRATION}.`
+	}
+
+	return `Database schema mismatch. Please apply pending migrations: ${INCIDENT_NORMALIZATION_MIGRATION}, ${INCIDENT_SENDER_MIGRATION}, ${INCIDENT_LOCATION_MIGRATION}, and ${EMAIL_RECEIVED_TIME_MIGRATION}.`
 }
 
 // Convert Supabase row to our app's Facility type
@@ -116,11 +122,14 @@ export function toFacility(row: SupabaseFacility): Facility {
 
 // Convert app Incident to Supabase format
 export function toIncidentInsert(incident: Incident, userId?: string): any {
+	const receivedTime = normalizeTimeField(incident.time) || incident.time?.trim() || ''
 	return {
 		id: incident.id,
 		reference_no: incident.referenceNo,
 		date_received: incident.dateReceived,
-		time: incident.time?.trim() || '',
+		// Legacy column kept for older rows / tools; primary received clock is email_received_time
+		time: receivedTime,
+		email_received_time: receivedTime || null,
 		type_id: incident.typeId || null,
 		driver_id: incident.driverId || null,
 		team_leader_id: incident.teamLeaderId || null,
@@ -151,7 +160,12 @@ export function toIncidentUpdate(updates: Partial<Incident>, existingSource: Inc
 
 	if (updates.referenceNo !== undefined) payload.reference_no = updates.referenceNo;
 	if (updates.dateReceived !== undefined) payload.date_received = updates.dateReceived;
-	if (updates.time !== undefined) payload.time = updates.time?.trim() || '';
+	if (updates.time !== undefined) {
+		const receivedTime = normalizeTimeField(updates.time) || updates.time?.trim() || '';
+		// Date Received time in the UI maps to email_received_time only.
+		// Do not overwrite legacy `time` — Apps Script may store incident/body time there.
+		payload.email_received_time = receivedTime || null;
+	}
 	if (updates.typeId !== undefined) payload.type_id = updates.typeId || null;
 	if (updates.driverId !== undefined) payload.driver_id = updates.driverId || null;
 	if (updates.teamLeaderId !== undefined) payload.team_leader_id = updates.teamLeaderId || null;
@@ -381,8 +395,11 @@ export function createDb(supabase: SupabaseClient) {
 			}
 
 			return (data || []).map((row: any) => {
-				// Prefer dedicated `time` column; else recover clock from date_received datetime
-				let time = normalizeTimeField(row.time || '');
+				// Date Received clock: prefer email_received_time (Apps Script / Gmail),
+				// then legacy `time`, then any clock embedded in date_received.
+				let time =
+					normalizeTimeField(row.email_received_time || '') ||
+					normalizeTimeField(row.time || '');
 				let dateReceived = row.date_received || '';
 				if (!time && dateReceived) {
 					const split = splitDateTimeToLocalParts(String(dateReceived));

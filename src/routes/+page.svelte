@@ -104,7 +104,8 @@
 
 	/**
 	 * One-off: recover email-received clock times from stored columns
-	 * (normalize `time`, or split datetime out of `date_received`) and write back.
+	 * (legacy `time`, or split datetime out of `date_received`) and write to
+	 * `email_received_time` (and legacy `time`).
 	 */
 	async function runEmailTimeBackfill() {
 		if (!data.supabase || isBackfillingTimes) return;
@@ -710,7 +711,7 @@
 				type="button"
 				onclick={runEmailTimeBackfill}
 				disabled={isBackfillingTimes || isParsingSubjects || incidents.length === 0}
-				title="One-off: fill blank email-received times from the time column or datetime in date_received, then save to the database."
+				title="One-off: fill blank email-received times from legacy time or datetime in date_received, writing email_received_time."
 				aria-label="Backfill email received times"
 				class="rounded-lg border border-warm-200 bg-white px-3 py-2 text-sm font-medium text-warm-700 transition hover:bg-warm-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-40"
 			>
