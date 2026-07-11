@@ -3,6 +3,11 @@ import type { Database } from './types'
 import type { Facility } from '../data/facilities'
 import type { Incident, IncidentSource, IncidentType, IncidentAction } from '../data/incidents'
 import type { TeamLeader, Driver } from '../data/team'
+import {
+	normalizeDateOnly,
+	normalizeTimeField,
+	splitDateTimeToLocalParts
+} from '../formatDate'
 
 export type SupabaseFacility = Database['public']['Tables']['facilities']['Row']
 export type SupabaseIncident = Database['public']['Tables']['incidents']['Row']
@@ -298,31 +303,47 @@ export function createDb(supabase: SupabaseClient) {
 				return []
 			}
 
-			return (data || []).map((row: any) => ({
-				id: row.id,
-				source: normalizeIncidentSource(row.source),
-				emailSender: row.email_sender || '',
-				emailSubject: row.email_subject || '',
-				locationStreet: row.location_street || '',
-				locationSuburb: row.location_suburb || '',
-				dateReceived: row.date_received,
-				time: row.time || '',
-				sender: row.sender?.trim() ?? '',
-				teamLeaderId: row.team_leader_id || null,
-				teamLeader: row.team_leaders?.name || '',
-				typeId: row.type_id || null,
-				type: row.incident_types?.name || '',
-				marked: row.marked?.trim() ?? '',
-				referenceNo: row.reference_no || '',
-				referenceText: row.reference_text || '',
-				driverId: row.driver_id || null,
-				driver: row.drivers?.username || '',
-				response: row.response || '',
-				dateResponse: row.date_response || '',
-				timeResponse: row.time_response || '',
-				actionId: row.action_id || null,
-				action: row.incident_actions?.name || 'NEW'
-			}))
+			return (data || []).map((row: any) => {
+				// Prefer dedicated `time` column; else recover clock from date_received datetime
+				let time = normalizeTimeField(row.time || '');
+				let dateReceived = row.date_received || '';
+				if (!time && dateReceived) {
+					const split = splitDateTimeToLocalParts(String(dateReceived));
+					if (split?.time) {
+						time = split.time;
+						if (split.date) dateReceived = split.date;
+					}
+				} else {
+					const dateOnly = normalizeDateOnly(String(dateReceived));
+					if (dateOnly) dateReceived = dateOnly;
+				}
+
+				return {
+					id: row.id,
+					source: normalizeIncidentSource(row.source),
+					emailSender: row.email_sender || '',
+					emailSubject: row.email_subject || '',
+					locationStreet: row.location_street || '',
+					locationSuburb: row.location_suburb || '',
+					dateReceived,
+					time,
+					sender: row.sender?.trim() ?? '',
+					teamLeaderId: row.team_leader_id || null,
+					teamLeader: row.team_leaders?.name || '',
+					typeId: row.type_id || null,
+					type: row.incident_types?.name || '',
+					marked: row.marked?.trim() ?? '',
+					referenceNo: row.reference_no || '',
+					referenceText: row.reference_text || '',
+					driverId: row.driver_id || null,
+					driver: row.drivers?.username || '',
+					response: row.response || '',
+					dateResponse: row.date_response || '',
+					timeResponse: normalizeTimeField(row.time_response || ''),
+					actionId: row.action_id || null,
+					action: row.incident_actions?.name || 'NEW'
+				};
+			})
 		},
 
 		async addIncident(incident: Incident, userId?: string) {

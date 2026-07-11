@@ -69,9 +69,85 @@ export function formatDate(dateStr: string): string {
 	return `${day}-${month}-${year}`;
 }
 
-/** Normalizes a time field to HH:mm or empty when unset. */
+/** Normalizes a time field to HH:mm or empty when unset. Accepts HH:mm:ss. */
 export function normalizeTimeField(time?: string): string {
-	return time?.trim().slice(0, 5) ?? '';
+	const t = time?.trim() ?? '';
+	if (!t) return '';
+	const m = /^(\d{1,2}):(\d{2})(?::\d{2})?/.exec(t);
+	if (m) {
+		const hh = m[1].padStart(2, '0');
+		const mm = m[2];
+		const h = parseInt(hh, 10);
+		const mi = parseInt(mm, 10);
+		if (h >= 0 && h <= 23 && mi >= 0 && mi <= 59) return `${hh}:${mm}`;
+	}
+	return t.slice(0, 5);
+}
+
+/**
+ * Parse a datetime string into local calendar date (YYYY-MM-DD) and HH:mm.
+ * Used when email-received time was stored inside date_received.
+ */
+export function splitDateTimeToLocalParts(
+	raw: string
+): { date: string; time: string } | null {
+	const s = raw.trim();
+	if (!s) return null;
+
+	if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+		return isValidDateOnly(s) ? { date: s, time: '' } : null;
+	}
+
+	const iso = /^(\d{4}-\d{2}-\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/.exec(s);
+	if (iso) {
+		const datePart = iso[1];
+		if (!isValidDateOnly(datePart)) return null;
+		if (/[Zz]$/.test(s) || /[+-]\d{2}:?\d{2}$/.test(s)) {
+			const d = new Date(s);
+			if (!Number.isNaN(d.getTime())) {
+				try {
+					const fmt = new Intl.DateTimeFormat('en-AU', {
+						timeZone: 'Australia/Sydney',
+						year: 'numeric',
+						month: '2-digit',
+						day: '2-digit',
+						hour: '2-digit',
+						minute: '2-digit',
+						hour12: false
+					});
+					const parts = Object.fromEntries(
+						fmt.formatToParts(d).map((p) => [p.type, p.value])
+					);
+					let hh = parts.hour;
+					if (hh === '24') hh = '00';
+					const date = `${parts.year}-${parts.month}-${parts.day}`;
+					if (isValidDateOnly(date)) {
+						return { date, time: `${hh.padStart(2, '0')}:${parts.minute}` };
+					}
+				} catch {
+					/* fall through */
+				}
+				const y = d.getFullYear();
+				const m = String(d.getMonth() + 1).padStart(2, '0');
+				const day = String(d.getDate()).padStart(2, '0');
+				const hh = String(d.getHours()).padStart(2, '0');
+				const mm = String(d.getMinutes()).padStart(2, '0');
+				const date = `${y}-${m}-${day}`;
+				if (isValidDateOnly(date)) return { date, time: `${hh}:${mm}` };
+			}
+		}
+		return { date: datePart, time: `${iso[2]}:${iso[3]}` };
+	}
+
+	const loose = /(\d{4}-\d{2}-\d{2}).*?(\d{1,2}):(\d{2})/.exec(s);
+	if (loose && isValidDateOnly(loose[1])) {
+		return {
+			date: loose[1],
+			time: `${loose[2].padStart(2, '0')}:${loose[3]}`
+		};
+	}
+
+	return null;
 }
 
 /** Formats a time field (HH:mm) for display; returns empty string when unset. */
