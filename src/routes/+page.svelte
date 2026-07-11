@@ -935,11 +935,11 @@
 											<button
 												type="button"
 												onclick={() => startEdit(incident)}
-												title="Edit incident (no reference number)"
+												title="Edit incident (NO REF)"
 												aria-label="Edit incident with no reference number"
 												class="block w-full max-w-full cursor-pointer truncate text-left text-amber-600 hover:underline dark:text-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-warm-50 dark:focus-visible:ring-offset-warm-200"
 											>
-												No Ref Number
+												NO REF
 											</button>
 										{/if}
 									</td>
