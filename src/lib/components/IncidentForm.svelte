@@ -15,7 +15,12 @@
 		parseEmailSubject,
 		parseEmailSubjectLocation
 	} from '$lib/parseEmailSubjectLocation';
-	import { INCIDENT_PRIORITIES, normalizePriority } from '$lib/pillClasses';
+	import {
+		INCIDENT_PRIORITIES,
+		getPriorityPillClass,
+		getTypePillClass,
+		normalizePriority
+	} from '$lib/pillClasses';
 
 	interface Props {
 		incident?: Incident;
@@ -980,38 +985,81 @@
 					</div>
 				</div>
 				<div class="sn-field-row">
-					<label for="type" class="sn-field-label">Type <span class="text-red-600">*</span></label>
-					<div class="sn-field-control">
-						<select
-							id="type"
-							value={form.typeId ?? FK_EMPTY}
-							onchange={(e) => setFkField('typeId', e.currentTarget.value)}
-							aria-required="true"
-							aria-invalid={submitErrorField === 'type' ? 'true' : undefined}
-							aria-describedby={submitErrorField === 'type' ? 'incident-submit-error' : undefined}
-							class="{inputClass} uppercase"
-						>
-							<option value={FK_EMPTY}>— Select type —</option>
-							{#if form.typeId && !fkInList(form.typeId, incidentTypes)}
-								<option value={form.typeId}>{incident?.type ?? 'Current type'}</option>
-							{/if}
-							{#each incidentTypes as t}<option value={t.id} class="uppercase">{t.name}</option>{/each}
-						</select>
+					<span class="sn-field-label" id="type-label">
+						Type <span class="text-red-600">*</span>
+					</span>
+					<div
+						class="sn-field-control flex flex-wrap gap-2"
+						role="radiogroup"
+						aria-labelledby="type-label"
+						aria-required="true"
+						aria-invalid={submitErrorField === 'type' ? 'true' : undefined}
+						aria-describedby={submitErrorField === 'type' ? 'incident-submit-error' : undefined}
+					>
+						{#if form.typeId && !fkInList(form.typeId, incidentTypes)}
+							<label
+								class="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm uppercase transition {form.typeId
+									? `${getTypePillClass(incident?.type ?? '')} ring-2 ring-accent-500 ring-offset-1`
+									: 'border-warm-200 bg-white text-warm-700 hover:bg-warm-50 dark:bg-warm-200'}"
+							>
+								<input
+									type="radio"
+									name="incident-type"
+									value={form.typeId}
+									checked
+									class="h-3.5 w-3.5 shrink-0 accent-accent-600"
+									onchange={() => setFkField('typeId', form.typeId ?? FK_EMPTY)}
+								/>
+								<span>{incident?.type ?? 'Current type'}</span>
+							</label>
+						{/if}
+						{#each incidentTypes as t (t.id)}
+							<label
+								class="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm uppercase transition {form.typeId ===
+								t.id
+									? `${getTypePillClass(t.name)} ring-2 ring-accent-500 ring-offset-1`
+									: 'border-warm-200 bg-white text-warm-700 hover:bg-warm-50 dark:bg-warm-200'}"
+							>
+								<input
+									type="radio"
+									name="incident-type"
+									value={t.id}
+									checked={form.typeId === t.id}
+									class="h-3.5 w-3.5 shrink-0 accent-accent-600"
+									onchange={() => setFkField('typeId', t.id)}
+								/>
+								<span>{t.name}</span>
+							</label>
+						{/each}
 					</div>
 				</div>
 				<div class="sn-field-row">
-					<label for="priority" class="sn-field-label">Priority</label>
-					<div class="sn-field-control">
-						<select
-							id="priority"
-							bind:value={form.marked}
-							class="{inputClass} uppercase"
-							aria-label="Priority"
-						>
-							{#each INCIDENT_PRIORITIES as p (p)}
-								<option value={p} class="uppercase">{p}</option>
-							{/each}
-						</select>
+					<span class="sn-field-label" id="priority-label">Priority</span>
+					<div
+						class="sn-field-control flex flex-wrap gap-2"
+						role="radiogroup"
+						aria-labelledby="priority-label"
+					>
+						{#each INCIDENT_PRIORITIES as p (p)}
+							<label
+								class="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium uppercase transition {form.marked ===
+								p
+									? `${getPriorityPillClass(p)} ring-2 ring-accent-500 ring-offset-1`
+									: 'border-warm-200 bg-white text-warm-700 hover:bg-warm-50 dark:bg-warm-200'}"
+							>
+								<input
+									type="radio"
+									name="incident-priority"
+									value={p}
+									checked={form.marked === p}
+									class="h-3.5 w-3.5 shrink-0 accent-accent-600"
+									onchange={() => {
+										form.marked = p;
+									}}
+								/>
+								<span>{p}</span>
+							</label>
+						{/each}
 					</div>
 				</div>
 			</section>
