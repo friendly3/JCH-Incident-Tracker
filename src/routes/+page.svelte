@@ -943,7 +943,11 @@
 											</button>
 										{/if}
 									</td>
-									<td class="px-4 py-3 whitespace-nowrap text-warm-700 overflow-hidden">
+									<td
+										class="px-4 py-3 whitespace-nowrap overflow-hidden {!incident.referenceNo?.trim()
+											? 'text-amber-600 dark:text-amber-400'
+											: 'text-warm-700'}"
+									>
 										{formatDateTimeFields(incident.dateReceived, incident.time) ||
 											formatDate(incident.dateReceived)}
 									</td>
