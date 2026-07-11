@@ -394,7 +394,7 @@
 		saveExpandedMonths(next);
 	}
 
-	const TABLE_COLUMN_COUNT = 10;
+	const TABLE_COLUMN_COUNT = 11;
 
 	function resetModalState() {
 		showDiscardModal = false;
@@ -843,26 +843,28 @@
 			class="incidents-table-scroll flex-1 overflow-auto rounded-lg border border-warm-200 bg-white shadow-sm"
 			style="max-height: calc(100vh - 280px);"
 		>
-			<table class="w-full table-fixed text-left text-sm min-w-[1400px]">
+			<table class="w-full table-fixed text-left text-sm min-w-[1480px]">
 				<colgroup>
-					<col style="width: 11rem" />
-					<col style="width: 8.5rem" />
+					<col style="width: 10rem" />
+					<col style="width: 8rem" />
 					<col style="width: 7%" />
-					<col style="width: 9%" />
+					<col style="width: 6.5%" />
+					<col style="width: 8%" />
+					<col style="width: 12%" />
 					<col style="width: 13%" />
-					<col style="width: 14%" />
 					<col style="width: 7%" />
-					<col style="width: 11%" />
-					<col style="width: 9%" />
-					<col style="width: 9%" />
+					<col style="width: 10%" />
+					<col style="width: 8%" />
+					<col style="width: 8%" />
 				</colgroup>
 				<thead class="border-b border-warm-200 bg-warm-50 sticky top-0 z-10">
 					<tr>
-						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap w-[11rem]">Ref No.</th>
-						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap w-[8.5rem]">
+						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap w-[10rem]">Ref No.</th>
+						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap w-[8rem]">
 							Date Received
 						</th>
 						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Action Status</th>
+						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Priority</th>
 						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Type</th>
 						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Email Sender</th>
 						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Email Subject</th>
@@ -940,20 +942,18 @@
 											<span class="text-warm-300">-</span>
 										{/if}
 									</td>
+									<td class="px-4 py-3 whitespace-nowrap">
+										<span
+											class="inline-block rounded-full border px-3 py-0.5 text-xs font-medium uppercase {getPriorityPillClass(
+												incident.marked
+											)}"
+										>
+											{normalizePriority(incident.marked)}
+										</span>
+									</td>
 									<td class="px-4 py-3 max-w-[12rem]">
-										<span class="inline-flex flex-wrap items-center gap-1 max-w-full">
-											{#if normalizePriority(incident.marked) !== 'Normal'}
-												<span
-													class="rounded border px-1.5 py-0.5 text-xs font-semibold uppercase {getPriorityPillClass(
-														incident.marked
-													)}"
-												>
-													{normalizePriority(incident.marked)}
-												</span>
-											{/if}
-											<span class="inline-block max-w-full break-words whitespace-normal rounded-full px-3 py-0.5 text-xs font-medium border uppercase {getTypePillClass(incident.type ?? '')}">
-												{incident.type ?? ''}
-											</span>
+										<span class="inline-block max-w-full break-words whitespace-normal rounded-full px-3 py-0.5 text-xs font-medium border uppercase {getTypePillClass(incident.type ?? '')}">
+											{incident.type ?? ''}
 										</span>
 									</td>
 									<td

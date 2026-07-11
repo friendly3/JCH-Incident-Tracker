@@ -32,15 +32,19 @@ export function normalizePriority(value: string | undefined | null): IncidentPri
 	return 'Normal';
 }
 
-/** Tailwind classes for priority badges. */
+/**
+ * Tailwind classes for priority pills:
+ * Normal = green, High = amber, Urgent = red.
+ */
 export function getPriorityPillClass(priority: string): string {
 	switch (normalizePriority(priority)) {
 		case 'Urgent':
 			return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-950/50 dark:text-red-200 dark:border-red-800';
 		case 'High':
-			return 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-950/40 dark:text-orange-200 dark:border-orange-800';
+			return 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800';
 		default:
-			return 'bg-warm-100 text-warm-700 border-warm-200 dark:bg-warm-200 dark:text-warm-800 dark:border-warm-300';
+			// Normal
+			return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-950/40 dark:text-green-200 dark:border-green-800';
 	}
 }
 
