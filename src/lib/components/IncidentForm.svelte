@@ -53,7 +53,7 @@
 	const isEdit = $derived(!!incident);
 	let showConfirm = $state(false);
 	let submitError = $state<string | null>(null);
-	type SubmitErrorField = 'dateReceived' | 'dateResponse' | 'type' | 'location';
+	type SubmitErrorField = 'dateReceived' | 'dateResponse' | 'type' | 'action' | 'location';
 	let submitErrorField = $state<SubmitErrorField | null>(null);
 	const FK_EMPTY = '';
 
@@ -264,6 +264,13 @@
 			return;
 		}
 
+		const actionId = normalizeFkId(form.actionId);
+		if (!actionId) {
+			submitError = 'Action Status is required — please select a status.';
+			submitErrorField = 'action';
+			return;
+		}
+
 		const locationStreet = form.locationStreet?.trim() ?? '';
 		const locationSuburb = form.locationSuburb?.trim() ?? '';
 		// Street without suburb is not enough to place on the map
@@ -290,7 +297,7 @@
 			typeId,
 			driverId: normalizeFkId(form.driverId),
 			teamLeaderId: normalizeFkId(form.teamLeaderId),
-			actionId: normalizeFkId(form.actionId),
+			actionId,
 			time: normalizeTimeField(form.time),
 			timeResponse: normalizeTimeField(form.timeResponse)
 		};
@@ -968,15 +975,22 @@
 			<section class="mb-8" aria-labelledby="section-classification-heading">
 				<h3 id="section-classification-heading" class="sn-section-title">Classification</h3>
 				<div class="sn-field-row">
-					<label for="action" class="sn-field-label">Action Status</label>
+					<label for="action" class="sn-field-label">
+						Action Status <span class="text-red-600">*</span>
+					</label>
 					<div class="sn-field-control">
 						<select
 							id="action"
 							value={form.actionId ?? FK_EMPTY}
 							onchange={(e) => setFkField('actionId', e.currentTarget.value)}
+							aria-required="true"
+							aria-invalid={submitErrorField === 'action' ? 'true' : undefined}
+							aria-describedby={submitErrorField === 'action' ? 'incident-submit-error' : undefined}
 							class="{inputClass} uppercase"
 						>
-							<option value={FK_EMPTY}>— None —</option>
+							<option value={FK_EMPTY} disabled hidden={!!form.actionId}>
+								— Select action status —
+							</option>
 							{#if form.actionId && !fkInList(form.actionId, incidentActions)}
 								<option value={form.actionId}>{incident?.action ?? 'Current action status'}</option>
 							{/if}
