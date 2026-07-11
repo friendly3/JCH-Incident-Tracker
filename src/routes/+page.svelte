@@ -4,7 +4,7 @@
 	import CourierTruckIcon from '$lib/components/CourierTruckIcon.svelte';
 	import IncidentForm from '$lib/components/IncidentForm.svelte';
 	import { getActionPillClass, getTypePillClass } from '$lib/pillClasses';
-	import { formatDate, formatMonthYear, getMonthKey } from '$lib/formatDate';
+	import { formatDate, formatDateTimeFields, formatMonthYear, getMonthKey } from '$lib/formatDate';
 	import {
 		filterExpandedMonths,
 		loadExpandedMonths,
@@ -832,7 +832,10 @@
 											<span class="text-warm-300">-</span>
 										{/if}
 									</td>
-									<td class="px-4 py-3 whitespace-nowrap text-warm-700 overflow-hidden">{formatDate(incident.dateReceived)}</td>
+									<td class="px-4 py-3 whitespace-nowrap text-warm-700 overflow-hidden">
+										{formatDateTimeFields(incident.dateReceived, incident.time) ||
+											formatDate(incident.dateReceived)}
+									</td>
 									<td class="px-4 py-3 max-w-[10rem]">
 										{#if incident.action}
 											<span class="inline-block max-w-full break-words whitespace-normal rounded-full px-3 py-0.5 text-xs font-medium border uppercase {getActionPillClass(incident.action)}">

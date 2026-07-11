@@ -878,18 +878,20 @@
 				</div>
 
 				<div class="sn-field-row">
-					<label for="referenceText" class="sn-field-label">Reference Text</label>
-					<div class="sn-field-control">
-						<input id="referenceText" type="text" bind:value={form.referenceText} class={inputClass} />
-					</div>
-				</div>
-				<div class="sn-field-row">
 					<span id="receivedAt-label" class="sn-field-label">
-						Date Received <span class="text-red-600">*</span>
+						Email received <span class="text-red-600">*</span>
 					</span>
 					<div class="sn-field-control">
 						<span id="receivedAt-desc" class="sr-only">{receivedAtDesc}</span>
-						<div class={dateTimeControlClass} role="group" aria-labelledby="receivedAt-label">
+						<p class="mb-1.5 text-xs text-warm-500" id="receivedAt-help">
+							Date and time the email was received (stored as date + time on the incident).
+						</p>
+						<div
+							class={dateTimeControlClass}
+							role="group"
+							aria-labelledby="receivedAt-label"
+							aria-describedby="receivedAt-help {receivedAtDescribedBy}"
+						>
 							<div
 								class={dateFieldWrapClass}
 								data-datetime-wrap
@@ -912,12 +914,12 @@
 								/>
 								{@render dateTimeCalendarButton(
 									'dateReceived',
-									'Open date picker for date received'
+									'Open date picker for email received date'
 								)}
 								<DatePickerPopover
 									open={openDatePickerField === 'dateReceived'}
 									value={form.dateReceived}
-									title="Date received"
+									title="Email received date"
 									idPrefix="receivedAt-date-picker"
 									anchorEl={dateReceivedWrapEl}
 									onApply={(d) => applyDatePicker('dateReceived', d)}
@@ -935,22 +937,22 @@
 									type="time"
 									bind:value={form.time}
 									aria-labelledby="receivedAt-label receivedAt-time-hint"
-									aria-describedby="receivedAt-desc"
+									aria-describedby="receivedAt-desc receivedAt-help"
 									class={nativeTimeClass}
 									onclick={(e) => openTimePicker('time', e)}
 								/>
-								{@render dateTimeClockButton('time', 'Open time picker for date received')}
+								{@render dateTimeClockButton('time', 'Open time picker for email received time')}
 								<TimePickerPopover
 									open={openTimePickerField === 'time'}
 									value={form.time}
-									title="Time received"
+									title="Email received time"
 									idPrefix="receivedAt-time-picker"
 									anchorEl={timeReceivedWrapEl}
 									onApply={(t) => applyTimePicker('time', t)}
 									onClose={closeTimePicker}
 								/>
 							</div>
-							<span id="receivedAt-time-hint" class="sr-only">Time</span>
+							<span id="receivedAt-time-hint" class="sr-only">Time (email received)</span>
 						</div>
 					</div>
 				</div>
