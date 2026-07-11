@@ -32,10 +32,10 @@
 			return;
 		}
 		busy = true;
-		const created = await db.addRespondedBy(name);
+		const result = await db.addRespondedBy(name);
 		busy = false;
-		if (!created) {
-			formError = 'Could not add — name may already exist.';
+		if (!result.option) {
+			formError = result.errorMessage || 'Could not add Responded By value.';
 			return;
 		}
 		newName = '';
@@ -52,10 +52,10 @@
 			return;
 		}
 		busy = true;
-		const ok = await db.updateRespondedBy(editingId, name);
+		const result = await db.updateRespondedBy(editingId, name);
 		busy = false;
-		if (!ok) {
-			formError = 'Could not update — name may already exist.';
+		if (!result.ok) {
+			formError = result.errorMessage || 'Could not update.';
 			return;
 		}
 		editingId = null;
@@ -66,10 +66,10 @@
 	async function deleteItem(id: string) {
 		formError = null;
 		busy = true;
-		const ok = await db.deleteRespondedBy(id);
+		const result = await db.deleteRespondedBy(id);
 		busy = false;
-		if (!ok) {
-			formError = 'Could not delete this option.';
+		if (!result.ok) {
+			formError = result.errorMessage || 'Could not delete this option.';
 			return;
 		}
 		confirmDeleteId = null;

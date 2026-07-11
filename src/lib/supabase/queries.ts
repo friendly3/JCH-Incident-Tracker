@@ -333,36 +333,115 @@ export function createDb(supabase: SupabaseClient) {
 			return data?.length ?? 0
 		},
 
-		async addRespondedBy(name: string): Promise<RespondedByOption | null> {
-			const trimmed = name.trim()
-			if (!trimmed) return null
+		/**
+		 * Add a Responded By option.
+		 * Returns the row, or null with a human-readable errorMessage.
+		 */
+		async addRespondedBy(
+			name: string
+		): Promise<{ option: RespondedByOption | null; errorMessage: string | null }> {
+			const trimmed = name.replace(/\s+/g, ' ').trim()
+			if (!trimmed) {
+				return { option: null, errorMessage: 'Name is required.' }
+			}
+
+			// Pre-check (case-insensitive) so we don't mis-blame uniqueness for RLS failures
+			const existing = await this.getRespondedByOptions()
+			const clash = existing.find((o) => o.name.localeCompare(trimmed, undefined, { sensitivity: 'accent' }) === 0
+				|| o.name.toLowerCase() === trimmed.toLowerCase())
+			if (clash) {
+				return {
+					option: null,
+					errorMessage: `“${clash.name}” is already in the list.`
+				}
+			}
+
 			const { data, error } = await supabase
 				.from('responded_by')
 				.insert({ name: trimmed })
-				.select()
-				.single()
+				.select('id, name')
+				.maybeSingle()
+
 			if (error) {
 				console.error('Error adding responded_by:', error)
-				return null
+				const msg = (error.message || '').toLowerCase()
+				const code = error.code || ''
+				if (code === '23505' || msg.includes('duplicate') || msg.includes('unique')) {
+					return {
+						option: null,
+						errorMessage: `“${trimmed}” already exists (exact database match).`
+					}
+				}
+				if (code === '42501' || msg.includes('row-level security') || msg.includes('permission')) {
+					return {
+						option: null,
+						errorMessage:
+							'Permission denied writing responded_by. Run fix_responded_by_rls_grants.sql in Supabase.'
+					}
+				}
+				if (msg.includes('does not exist') || code === '42P01' || code === 'PGRST205') {
+					return {
+						option: null,
+						errorMessage:
+							'Table responded_by is missing. Run add_responded_by_lookup.sql in Supabase.'
+					}
+				}
+				// Insert may have succeeded but SELECT of the row failed (RLS) — try re-read
+				const after = await this.getRespondedByOptions()
+				const found = after.find((o) => o.name.toLowerCase() === trimmed.toLowerCase())
+				if (found) {
+					return { option: found, errorMessage: null }
+				}
+				return {
+					option: null,
+					errorMessage: error.message || 'Could not add Responded By value.'
+				}
 			}
-			return { id: data.id, name: data.name }
+
+			if (!data) {
+				// No error but no row returned — re-fetch list
+				const after = await this.getRespondedByOptions()
+				const found = after.find((o) => o.name.toLowerCase() === trimmed.toLowerCase())
+				if (found) return { option: found, errorMessage: null }
+				return {
+					option: null,
+					errorMessage:
+						'Insert did not return a row. Check RLS SELECT policy on responded_by (run fix_responded_by_rls_grants.sql).'
+				}
+			}
+
+			return { option: { id: data.id, name: data.name }, errorMessage: null }
 		},
 
-		async updateRespondedBy(id: string, name: string): Promise<boolean> {
-			const trimmed = name.trim()
-			if (!trimmed) return false
+		async updateRespondedBy(
+			id: string,
+			name: string
+		): Promise<{ ok: boolean; errorMessage: string | null }> {
+			const trimmed = name.replace(/\s+/g, ' ').trim()
+			if (!trimmed) return { ok: false, errorMessage: 'Name is required.' }
 			const { error } = await supabase
 				.from('responded_by')
 				.update({ name: trimmed })
 				.eq('id', id)
-			if (error) console.error('Error updating responded_by:', error)
-			return !error
+			if (error) {
+				console.error('Error updating responded_by:', error)
+				const msg = (error.message || '').toLowerCase()
+				const code = error.code || ''
+				if (code === '23505' || msg.includes('duplicate') || msg.includes('unique')) {
+					return { ok: false, errorMessage: `“${trimmed}” already exists.` }
+				}
+				return { ok: false, errorMessage: error.message || 'Could not update.' }
+			}
+			return { ok: true, errorMessage: null }
 		},
 
-		async deleteRespondedBy(id: string): Promise<boolean> {
+		async deleteRespondedBy(id: string): Promise<{ ok: boolean; errorMessage: string | null }> {
 			const { error } = await supabase.from('responded_by').delete().eq('id', id)
-			if (error) console.error('Error deleting responded_by:', error)
-			return !error
+			if (error) {
+				console.error('Error deleting responded_by:', error)
+				return { ok: false, errorMessage: error.message || 'Could not delete.' }
+			}
+			return { ok: true, errorMessage: null }
 		},
 
 		// Incidents
