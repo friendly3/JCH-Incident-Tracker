@@ -457,7 +457,10 @@
 				: 'Date and time not set'
 	);
 	const emailFieldsEditable = $derived((form.source ?? 'ui') === 'ui');
-	const readonlyEmailClass = `${inputClass} bg-warm-100 text-warm-400 cursor-default select-all dark:bg-warm-300`;
+	/** Plain text for read-only values — not styled as form controls. */
+	const readonlyValueClass =
+		'block w-full select-text break-words text-sm leading-relaxed text-warm-700 dark:text-warm-800';
+	const readonlyEmptyClass = 'block w-full text-sm italic text-warm-400';
 	const footerBtnFocus =
 		'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500';
 
@@ -686,29 +689,49 @@
 					</div>
 				</div>
 				<div class="sn-field-row">
-					<label for="emailSender" class="sn-field-label">Email Sender</label>
-					<div class="sn-field-control">
-						<input
-							id="emailSender"
-							type="text"
-							bind:value={form.emailSender}
-							readonly={!emailFieldsEditable}
-							class={emailFieldsEditable ? inputClass : readonlyEmailClass}
-						/>
-					</div>
+					{#if emailFieldsEditable}
+						<label for="emailSender" class="sn-field-label">Email Sender</label>
+						<div class="sn-field-control">
+							<input
+								id="emailSender"
+								type="text"
+								bind:value={form.emailSender}
+								class={inputClass}
+							/>
+						</div>
+					{:else}
+						<span class="sn-field-label" id="emailSender-ro-label">Email Sender</span>
+						<div class="sn-field-control" role="group" aria-labelledby="emailSender-ro-label">
+							{#if form.emailSender?.trim()}
+								<p class={readonlyValueClass}>{form.emailSender}</p>
+							{:else}
+								<p class={readonlyEmptyClass}>Not set</p>
+							{/if}
+						</div>
+					{/if}
 				</div>
 				<div class="sn-field-row">
-					<label for="emailSubject" class="sn-field-label">Email Subject</label>
-					<div class="sn-field-control">
-						<input
-							id="emailSubject"
-							type="text"
-							bind:value={form.emailSubject}
-							readonly={!emailFieldsEditable}
-							class={emailFieldsEditable ? inputClass : readonlyEmailClass}
-							placeholder="SOD Disputed Delivery: 72956318 N22226 Menai DRIVER - Street"
-						/>
-					</div>
+					{#if emailFieldsEditable}
+						<label for="emailSubject" class="sn-field-label">Email Subject</label>
+						<div class="sn-field-control">
+							<input
+								id="emailSubject"
+								type="text"
+								bind:value={form.emailSubject}
+								class={inputClass}
+								placeholder="SOD Disputed Delivery: 72956318 N22226 Menai DRIVER - Street"
+							/>
+						</div>
+					{:else}
+						<span class="sn-field-label" id="emailSubject-ro-label">Email Subject</span>
+						<div class="sn-field-control" role="group" aria-labelledby="emailSubject-ro-label">
+							{#if form.emailSubject?.trim()}
+								<p class={readonlyValueClass}>{form.emailSubject}</p>
+							{:else}
+								<p class={readonlyEmptyClass}>Not set</p>
+							{/if}
+						</div>
+					{/if}
 				</div>
 
 				{#if subjectDetectSummary}
