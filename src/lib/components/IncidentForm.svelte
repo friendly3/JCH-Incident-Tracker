@@ -15,6 +15,7 @@
 		parseEmailSubject,
 		parseEmailSubjectLocation
 	} from '$lib/parseEmailSubjectLocation';
+	import { INCIDENT_PRIORITIES, normalizePriority } from '$lib/pillClasses';
 
 	interface Props {
 		incident?: Incident;
@@ -77,7 +78,7 @@
 			locationStreet: source.locationStreet?.trim() ?? '',
 			locationSuburb: source.locationSuburb?.trim() ?? '',
 			sender: source.sender?.trim() ?? '',
-			marked: source.marked?.trim() ?? '',
+			marked: normalizePriority(source.marked),
 			response: source.response?.trim() ?? '',
 			referenceNo: source.referenceNo?.trim() ?? '',
 			referenceText: source.referenceText?.trim() ?? '',
@@ -101,7 +102,7 @@
 			sender: '',
 			teamLeaderId: null,
 			typeId: null,
-			marked: '',
+			marked: 'Normal',
 			referenceNo: '',
 			referenceText: '',
 			driverId: null,
@@ -145,7 +146,7 @@
 			sender: value.sender?.trim() ?? '',
 			teamLeaderId: value.teamLeaderId,
 			typeId: value.typeId,
-			marked: value.marked?.trim() ?? '',
+			marked: normalizePriority(value.marked),
 			referenceNo: value.referenceNo?.trim() ?? '',
 			referenceText: value.referenceText?.trim() ?? '',
 			driverId: value.driverId,
@@ -172,7 +173,7 @@
 		sender: '',
 		teamLeaderId: null,
 		typeId: null,
-		marked: '',
+		marked: 'Normal',
 		referenceNo: '',
 		referenceText: '',
 		driverId: null,
@@ -280,6 +281,7 @@
 			dateResponse,
 			locationStreet,
 			locationSuburb,
+			marked: normalizePriority(form.marked),
 			typeId,
 			driverId: normalizeFkId(form.driverId),
 			teamLeaderId: normalizeFkId(form.teamLeaderId),
@@ -998,11 +1000,17 @@
 					</div>
 				</div>
 				<div class="sn-field-row">
-					<label for="marked" class="sn-field-label">Marked</label>
+					<label for="priority" class="sn-field-label">Priority</label>
 					<div class="sn-field-control">
-						<select id="marked" bind:value={form.marked} class="{inputClass} uppercase">
-							<option value="" class="uppercase">None</option>
-							<option value="High" class="uppercase">High</option>
+						<select
+							id="priority"
+							bind:value={form.marked}
+							class="{inputClass} uppercase"
+							aria-label="Priority"
+						>
+							{#each INCIDENT_PRIORITIES as p (p)}
+								<option value={p} class="uppercase">{p}</option>
+							{/each}
 						</select>
 					</div>
 				</div>

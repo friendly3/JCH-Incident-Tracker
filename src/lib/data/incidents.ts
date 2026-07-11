@@ -33,6 +33,7 @@ export interface Incident {
     typeId: string | null;
     /** Resolved name for display (joined from incident_types) */
     type?: string;
+    /** Priority: Normal | High | Urgent (stored in DB column `marked`). */
     marked: string;
     referenceNo: string;
     referenceText: string;

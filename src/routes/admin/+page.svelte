@@ -2,7 +2,7 @@
 	import { incidentStore } from '$lib/data/store.svelte';
 	import type { Incident } from '$lib/data/incidents';
 	import IncidentForm from '$lib/components/IncidentForm.svelte';
-	import { getActionPillClass } from '$lib/pillClasses';
+	import { getActionPillClass, getPriorityPillClass, normalizePriority } from '$lib/pillClasses';
 	import { formatDate } from '$lib/formatDate';
 
 	// NOTE: Admin page is deprecated - functionality moved to main page (+page.svelte)
@@ -106,8 +106,14 @@
 								<td class="px-4 py-3 whitespace-nowrap text-warm-700">{formatDate(incident.dateReceived)} {incident.time}</td>
 								<td class="px-4 py-3">
 									<span class="text-warm-800">{incident.type}</span>
-									{#if incident.marked === 'High'}
-										<span class="ml-1 rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700">HIGH</span>
+									{#if normalizePriority(incident.marked) !== 'Normal'}
+										<span
+											class="ml-1 rounded border px-1.5 py-0.5 text-xs font-semibold uppercase {getPriorityPillClass(
+												incident.marked
+											)}"
+										>
+											{normalizePriority(incident.marked)}
+										</span>
 									{/if}
 								</td>
 								<td class="px-4 py-3 font-mono text-xs text-warm-600">{incident.referenceNo}</td>

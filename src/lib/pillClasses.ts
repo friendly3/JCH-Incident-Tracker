@@ -19,6 +19,31 @@ export function getTypePillClass(type: string): string {
 	return 'bg-warm-100 text-warm-700 border-warm-200';
 }
 
+/** Allowed priority values stored in incidents.marked */
+export const INCIDENT_PRIORITIES = ['Normal', 'High', 'Urgent'] as const;
+export type IncidentPriority = (typeof INCIDENT_PRIORITIES)[number];
+
+/** Normalize legacy/blank marked values to a priority. */
+export function normalizePriority(value: string | undefined | null): IncidentPriority {
+	const v = (value ?? '').trim().toLowerCase();
+	if (v === 'high') return 'High';
+	if (v === 'urgent') return 'Urgent';
+	// Empty / "none" / unknown → Normal
+	return 'Normal';
+}
+
+/** Tailwind classes for priority badges. */
+export function getPriorityPillClass(priority: string): string {
+	switch (normalizePriority(priority)) {
+		case 'Urgent':
+			return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-950/50 dark:text-red-200 dark:border-red-800';
+		case 'High':
+			return 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-950/40 dark:text-orange-200 dark:border-orange-800';
+		default:
+			return 'bg-warm-100 text-warm-700 border-warm-200 dark:bg-warm-200 dark:text-warm-800 dark:border-warm-300';
+	}
+}
+
 /** Tailwind color classes for incident action pills (bg, text, border). */
 export function getActionPillClass(action: string): string {
 	switch (action.toUpperCase()) {

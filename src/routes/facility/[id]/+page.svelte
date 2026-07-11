@@ -2,8 +2,10 @@
 	import { page } from '$app/state';
 	import { incidentStore } from '$lib/data/store.svelte';
 	import { formatDate } from '$lib/formatDate';
+	import { getPriorityPillClass, normalizePriority } from '$lib/pillClasses';
 
 	const incident = $derived(incidentStore.list.find((i) => i.id === page.params.id));
+	const priority = $derived(normalizePriority(incident?.marked));
 </script>
 
 <svelte:head>
@@ -26,8 +28,14 @@
 						<p class="mt-1 font-mono text-sm text-warm-500">Ref: {incident.referenceNo}</p>
 					{/if}
 				</div>
-				{#if incident.marked === 'High'}
-					<span class="rounded bg-red-100 px-2 py-1 text-sm font-semibold text-red-700">HIGH PRIORITY</span>
+				{#if priority !== 'Normal'}
+					<span
+						class="rounded border px-2 py-1 text-sm font-semibold uppercase {getPriorityPillClass(
+							incident.marked
+						)}"
+					>
+						{priority} priority
+					</span>
 				{/if}
 			</div>
 

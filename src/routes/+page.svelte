@@ -3,7 +3,12 @@
 	import type { Incident } from '$lib/data/incidents';
 	import CourierTruckIcon from '$lib/components/CourierTruckIcon.svelte';
 	import IncidentForm from '$lib/components/IncidentForm.svelte';
-	import { getActionPillClass, getTypePillClass } from '$lib/pillClasses';
+	import {
+		getActionPillClass,
+		getPriorityPillClass,
+		getTypePillClass,
+		normalizePriority
+	} from '$lib/pillClasses';
 	import { formatDate, formatDateTimeFields, formatMonthYear, getMonthKey } from '$lib/formatDate';
 	import {
 		filterExpandedMonths,
@@ -847,8 +852,14 @@
 									</td>
 									<td class="px-4 py-3 max-w-[12rem]">
 										<span class="inline-flex flex-wrap items-center gap-1 max-w-full">
-											{#if incident.marked === 'High'}
-												<span class="rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700">HIGH</span>
+											{#if normalizePriority(incident.marked) !== 'Normal'}
+												<span
+													class="rounded border px-1.5 py-0.5 text-xs font-semibold uppercase {getPriorityPillClass(
+														incident.marked
+													)}"
+												>
+													{normalizePriority(incident.marked)}
+												</span>
 											{/if}
 											<span class="inline-block max-w-full break-words whitespace-normal rounded-full px-3 py-0.5 text-xs font-medium border uppercase {getTypePillClass(incident.type ?? '')}">
 												{incident.type ?? ''}
