@@ -15,12 +15,7 @@
 		parseEmailSubject,
 		parseEmailSubjectLocation
 	} from '$lib/parseEmailSubjectLocation';
-	import {
-		INCIDENT_PRIORITIES,
-		getPriorityPillClass,
-		getTypePillClass,
-		normalizePriority
-	} from '$lib/pillClasses';
+	import { INCIDENT_PRIORITIES, getPriorityPillClass, normalizePriority } from '$lib/pillClasses';
 
 	interface Props {
 		incident?: Incident;
