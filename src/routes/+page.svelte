@@ -793,14 +793,14 @@
 		>
 			<table class="incidents-table w-full table-fixed text-left text-sm min-w-[1480px]">
 				<colgroup>
-					<!-- Narrower ref / date / resolution / priority; extra space → email subject -->
-					<col style="width: 6.75rem" />
-					<col style="width: 7.25rem" />
+					<!-- Ref −25% (6.75→5.06rem); Date −25% (7.25→5.44rem); freed → Email Sender / Subject -->
+					<col style="width: 5.06rem" />
+					<col style="width: 5.44rem" />
 					<col style="width: 5.5%" />
 					<col style="width: 5%" />
 					<col style="width: 7.5%" />
-					<col style="width: 10%" />
-					<col style="width: 22%" />
+					<col style="width: 12.9%" />
+					<col style="width: 22.9%" />
 					<col style="width: 6.5%" />
 					<col style="width: 9%" />
 					<col style="width: 7.5%" />
@@ -867,14 +867,14 @@
 									id={index === 0 ? `month-group-${group.key}` : undefined}
 									class="border-b border-warm-100 last:border-0 {index % 2 === 1 ? 'bg-warm-100/60 dark:bg-warm-200' : 'bg-white'} hover:bg-warm-200/50 dark:hover:bg-warm-300/50"
 								>
-									<td class="px-2 py-3 font-mono text-xs max-w-0 overflow-hidden">
+									<td class="px-2 py-3 font-mono text-xs max-w-0 overflow-hidden whitespace-nowrap">
 										{#if incident.referenceNo?.trim()}
 											<button
 												type="button"
 												onclick={() => startEdit(incident)}
 												title="Edit incident {incident.referenceNo}"
 												aria-label="Edit incident {incident.referenceNo}"
-												class="block w-full max-w-full cursor-pointer truncate text-left text-accent-600 hover:text-accent-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-warm-50 dark:focus-visible:ring-offset-warm-200"
+												class="block w-full max-w-full cursor-pointer truncate whitespace-nowrap text-left text-accent-600 hover:text-accent-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-warm-50 dark:focus-visible:ring-offset-warm-200"
 											>
 												{incident.referenceNo}
 											</button>
@@ -884,7 +884,7 @@
 												onclick={() => startEdit(incident)}
 												title="Edit incident (NO REF)"
 												aria-label="Edit incident with no reference number"
-												class="block w-full max-w-full cursor-pointer truncate text-left text-amber-600 hover:underline dark:text-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-warm-50 dark:focus-visible:ring-offset-warm-200"
+												class="block w-full max-w-full cursor-pointer truncate whitespace-nowrap text-left text-amber-600 hover:underline dark:text-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-warm-50 dark:focus-visible:ring-offset-warm-200"
 											>
 												NO REF
 											</button>
