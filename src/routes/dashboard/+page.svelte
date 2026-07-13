@@ -1433,10 +1433,16 @@
 		return `Incidents by type over time (${timeRangeLabel}) for ${dateKeys.length} days. Types: ${typeNames}${more}.`;
 	});
 
-	/** Counts by resolution status (New, Resolved, LIT, …) — sorted high → low. */
+	/** Incidents in the selected time period (shared by summary tiles, charts, tables). */
+	const periodIncidents = $derived.by(() => {
+		const range = timeRange;
+		return incidents.filter((i) => isDateReceivedInTimeRange(i.dateReceived, range));
+	});
+
+	/** Counts by resolution status in the selected period — sorted high → low. */
 	const incidentsByActionStatus = $derived.by(() => {
 		const grouped = new Map<string, { label: string; count: number }>();
-		for (const incident of incidents) {
+		for (const incident of periodIncidents) {
 			const { key, label } = normalizeAggregationKey(incident.action, 'Unspecified');
 			const existing = grouped.get(key);
 			grouped.set(key, {
@@ -1462,7 +1468,10 @@
 
 	const hasActionStatusData = $derived(incidentsByActionStatus.length > 0);
 	const actionStatusAriaLabel = $derived(
-		buildChartAriaLabel('Incidents by Resolution Status', incidentsByActionStatus)
+		buildChartAriaLabel(
+			`Incidents by Resolution Status (${timeRangeLabel})`,
+			incidentsByActionStatus
+		)
 	);
 
 	/**
@@ -1790,24 +1799,33 @@
 		}
 	});
 
-	// Calculate stats
-	const totalIncidents = $derived(incidents.length);
-	const incidentsThisMonth = $derived(
-		incidents.filter((i) => {
-			const date = new Date(i.dateReceived);
-			const now = new Date();
-			return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-		}).length
-	);
-	const incidentsThisWeek = $derived(
-		incidents.filter((i) => {
-			const date = new Date(i.dateReceived);
-			const now = new Date();
-			const weekAgo = new Date(now);
-			weekAgo.setDate(weekAgo.getDate() - 7);
-			return date >= weekAgo;
-		}).length
-	);
+	// Summary stats honour the selected period (header time picker)
+	const totalIncidents = $derived(periodIncidents.length);
+	const incidentsThisMonth = $derived.by(() => {
+		const now = new Date();
+		const y = now.getFullYear();
+		const m = now.getMonth();
+		return periodIncidents.filter((i) => {
+			const key = dateReceivedKey(i.dateReceived);
+			if (!key) return false;
+			const parts = key.split('-').map((n) => parseInt(n, 10));
+			return parts[0] === y && parts[1] === m + 1;
+		}).length;
+	});
+	const incidentsThisWeek = $derived.by(() => {
+		const now = new Date();
+		const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+		const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		start.setDate(start.getDate() - 6);
+		start.setHours(0, 0, 0, 0);
+		return periodIncidents.filter((i) => {
+			const key = dateReceivedKey(i.dateReceived);
+			if (!key) return false;
+			const [yy, mm, dd] = key.split('-').map((n) => parseInt(n, 10));
+			const received = new Date(yy, mm - 1, dd);
+			return received >= start && received <= end;
+		}).length;
+	});
 
 	/**
 	 * Resolved = resolution status is "Resolved" AND a responded date is set.
@@ -1820,8 +1838,8 @@
 		return actionStatusIsResolved && hasRespondedDate;
 	}
 
-	const resolvedIncidents = $derived(incidents.filter(isIncidentResolved).length);
-	const unresolvedIncidents = $derived(incidents.length - resolvedIncidents);
+	const resolvedIncidents = $derived(periodIncidents.filter(isIncidentResolved).length);
+	const unresolvedIncidents = $derived(totalIncidents - resolvedIncidents);
 	const resolvedPct = $derived(
 		totalIncidents > 0 ? Math.round((resolvedIncidents / totalIncidents) * 100) : 0
 	);
@@ -1836,12 +1854,44 @@
 
 <div class="flex-1 flex flex-col bg-warm-50 text-warm-900 overflow-hidden">
 	<header class="border-b border-warm-200 bg-white/80 px-4 py-3 backdrop-blur flex-shrink-0">
-		<div class="flex w-full min-w-0 items-start gap-2">
-			<CourierTruckIcon />
-			<div class="min-w-0">
-				<h1 class="text-xl font-bold text-warm-800">Dashboard</h1>
-				<p class="mt-0.5 text-sm text-warm-500">Overview of incident tracking metrics</p>
+		<div class="flex w-full min-w-0 flex-wrap items-start justify-between gap-3">
+			<div class="flex min-w-0 items-start gap-2">
+				<CourierTruckIcon />
+				<div class="min-w-0">
+					<h1 class="text-xl font-bold text-warm-800">Dashboard</h1>
+					<p class="mt-0.5 text-sm text-warm-500">Overview of incident tracking metrics</p>
+				</div>
 			</div>
+			{#if !data.loadError && !incidentStore.isLoading && !incidentStore.error}
+				<div class="flex flex-wrap items-center gap-2 sm:pt-1">
+					<label class="flex items-center gap-2 text-sm text-warm-600">
+						<span class="font-medium text-warm-700">Period</span>
+						<select
+							bind:value={timeRange}
+							class="max-w-[16rem] rounded-lg border border-warm-200 bg-white px-2.5 py-1.5 text-sm text-warm-700 shadow-sm input-focus dark:bg-warm-200"
+							aria-controls="over-time-chart-canvas"
+							aria-label="Time period for dashboard summary and charts"
+							title="Relative period or a calendar month with incident data"
+						>
+							<optgroup label="Relative">
+								{#each TIME_RANGE_OPTIONS as opt (opt.value)}
+									<option value={opt.value}>{opt.label}</option>
+								{/each}
+							</optgroup>
+							{#if availableMonths.length > 0}
+								<optgroup label="Months with data">
+									{#each availableMonths as m (m.value)}
+										<option value={m.value}
+											>{formatMonthYearLabel(m.ym)} ({m.count})</option
+										>
+									{/each}
+								</optgroup>
+							{/if}
+						</select>
+					</label>
+					<span class="text-xs text-warm-500">{timeRangeLabel}</span>
+				</div>
+			{/if}
 		</div>
 	</header>
 
@@ -1893,8 +1943,8 @@
 	{:else}
 		<div class="flex-1 overflow-auto">
 			<div class="w-full px-3 py-3 sm:px-4">
-				<!-- Summary tiles & callouts (all-time — not driven by chart period filter) -->
-				<section class="dashboard-summary mb-3" aria-label="Incident summary">
+				<!-- Summary tiles & callouts (honour header period picker) -->
+				<section class="dashboard-summary mb-3" aria-label="Incident summary for {timeRangeLabel}">
 					<div class="mb-2 grid grid-cols-3 gap-1.5">
 						<div class="rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm">
 							<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">
@@ -1903,7 +1953,7 @@
 							<p class="mt-0.5 text-xl font-semibold tabular-nums text-accent-600">
 								{totalIncidents}
 							</p>
-							<p class="mt-0.5 text-[10px] leading-tight text-warm-400">All records</p>
+							<p class="mt-0.5 text-[10px] leading-tight text-warm-400">{timeRangeLabel}</p>
 						</div>
 						<div class="rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm">
 							<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">
@@ -1912,7 +1962,9 @@
 							<p class="mt-0.5 text-xl font-semibold tabular-nums text-warm-800">
 								{incidentsThisMonth}
 							</p>
-							<p class="mt-0.5 text-[10px] leading-tight text-warm-400">Calendar month</p>
+							<p class="mt-0.5 text-[10px] leading-tight text-warm-400">
+								In period · calendar month
+							</p>
 						</div>
 						<div class="rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm">
 							<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">
@@ -1921,7 +1973,9 @@
 							<p class="mt-0.5 text-xl font-semibold tabular-nums text-warm-700">
 								{incidentsThisWeek}
 							</p>
-							<p class="mt-0.5 text-[10px] leading-tight text-warm-400">Last 7 days</p>
+							<p class="mt-0.5 text-[10px] leading-tight text-warm-400">
+								In period · last 7 days
+							</p>
 						</div>
 					</div>
 
@@ -1950,7 +2004,7 @@
 										<span class="font-semibold">Resolved</span>, or responded date is missing
 										{#if totalIncidents > 0}
 											<span class="mt-0.5 block font-medium"
-												>{unresolvedPct}% of all incidents</span
+												>{unresolvedPct}% of period</span
 											>
 										{/if}
 									</p>
@@ -1997,7 +2051,7 @@
 										date is set
 										{#if totalIncidents > 0}
 											<span class="mt-0.5 block font-medium"
-												>{resolvedPct}% of all incidents</span
+												>{resolvedPct}% of period</span
 											>
 										{/if}
 									</p>
@@ -2029,12 +2083,15 @@
 							aria-labelledby="action-status-bar-title"
 							aria-describedby="action-status-bar-summary"
 						>
-							<h2
-								id="action-status-bar-title"
-								class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-warm-700"
-							>
-								Incidents by Resolution Status
-							</h2>
+							<div class="mb-1.5 flex flex-wrap items-baseline justify-between gap-2">
+								<h2
+									id="action-status-bar-title"
+									class="text-xs font-semibold uppercase tracking-wide text-warm-700"
+								>
+									Incidents by Resolution Status
+								</h2>
+								<p class="text-[10px] text-warm-500">{timeRangeLabel}</p>
+							</div>
 							<p id="action-status-bar-summary" class="sr-only">{actionStatusAriaLabel}</p>
 							<div
 								class="w-full overflow-visible"
@@ -2077,37 +2134,8 @@
 					aria-hidden="true"
 				/>
 
-				<!-- Charts & tables (period filter applies here) -->
+				<!-- Charts & tables (same period as header picker) -->
 				<section class="dashboard-charts" aria-label="Incident charts">
-					<div class="mb-2 flex flex-wrap items-center justify-start gap-2">
-						<label class="flex items-center gap-2 text-sm text-warm-600">
-							<span class="font-medium text-warm-700">Period</span>
-							<select
-								bind:value={timeRange}
-								class="max-w-[16rem] rounded-lg border border-warm-200 bg-white px-2.5 py-1.5 text-sm text-warm-700 shadow-sm input-focus dark:bg-warm-200"
-								aria-controls="over-time-chart-canvas"
-								aria-label="Time period for charts and period tables"
-								title="Relative period or a calendar month with incident data"
-							>
-								<optgroup label="Relative">
-									{#each TIME_RANGE_OPTIONS as opt (opt.value)}
-										<option value={opt.value}>{opt.label}</option>
-									{/each}
-								</optgroup>
-								{#if availableMonths.length > 0}
-									<optgroup label="Months with data">
-										{#each availableMonths as m (m.value)}
-											<option value={m.value}
-												>{formatMonthYearLabel(m.ym)} ({m.count})</option
-											>
-										{/each}
-									</optgroup>
-								{/if}
-							</select>
-						</label>
-						<span class="text-xs text-warm-500">{timeRangeLabel}</span>
-					</div>
-
 				<!-- Three equal cards: shared header/plot/footer heights so the row lines up. -->
 				<div class="dashboard-chart-row grid grid-cols-1 gap-2 lg:grid-cols-3 lg:items-stretch">
 					<section
