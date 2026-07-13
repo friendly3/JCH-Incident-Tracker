@@ -792,33 +792,34 @@
 		>
 			<table class="w-full table-fixed text-left text-sm min-w-[1480px]">
 				<colgroup>
-					<col style="width: 10rem" />
-					<col style="width: 8rem" />
-					<col style="width: 7%" />
-					<col style="width: 6.5%" />
-					<col style="width: 8%" />
-					<col style="width: 12%" />
-					<col style="width: 13%" />
-					<col style="width: 7%" />
+					<!-- Narrower ref / date / resolution / priority; extra space → email subject -->
+					<col style="width: 6.75rem" />
+					<col style="width: 7.25rem" />
+					<col style="width: 5.5%" />
+					<col style="width: 5%" />
+					<col style="width: 7.5%" />
 					<col style="width: 10%" />
-					<col style="width: 8%" />
-					<col style="width: 8%" />
+					<col style="width: 22%" />
+					<col style="width: 6.5%" />
+					<col style="width: 9%" />
+					<col style="width: 7.5%" />
+					<col style="width: 7.5%" />
 				</colgroup>
 				<thead class="border-b border-warm-200 bg-warm-50 sticky top-0 z-10">
 					<tr>
-						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap w-[10rem]">Ref No.</th>
-						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap w-[8rem]">
+						<th class="px-2 py-3 font-medium text-warm-500 whitespace-nowrap">Ref No.</th>
+						<th class="px-2 py-3 font-medium text-warm-500 whitespace-nowrap">
 							Date Received
 						</th>
-						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Resolution Status</th>
-						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Priority</th>
-						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Type</th>
-						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Email Sender</th>
-						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Email Subject</th>
-						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Driver</th>
-						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Response</th>
-						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Responded</th>
-						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap text-right">Record Actions</th>
+						<th class="px-2 py-3 font-medium text-warm-500 whitespace-nowrap">Resolution Status</th>
+						<th class="px-2 py-3 font-medium text-warm-500 whitespace-nowrap">Priority</th>
+						<th class="px-3 py-3 font-medium text-warm-500 whitespace-nowrap">Type</th>
+						<th class="px-3 py-3 font-medium text-warm-500 whitespace-nowrap">Email Sender</th>
+						<th class="px-3 py-3 font-medium text-warm-500">Email Subject</th>
+						<th class="px-3 py-3 font-medium text-warm-500 whitespace-nowrap">Driver</th>
+						<th class="px-3 py-3 font-medium text-warm-500 whitespace-nowrap">Response</th>
+						<th class="px-3 py-3 font-medium text-warm-500 whitespace-nowrap">Responded</th>
+						<th class="px-3 py-3 font-medium text-warm-500 whitespace-nowrap text-right">Record Actions</th>
 					</tr>
 				</thead>
 				<tbody class="[&_td]:align-top">
@@ -861,7 +862,7 @@
 									id={index === 0 ? `month-group-${group.key}` : undefined}
 									class="border-b border-warm-100 last:border-0 {index % 2 === 1 ? 'bg-warm-100/60 dark:bg-warm-200' : 'bg-white'} hover:bg-warm-200/50 dark:hover:bg-warm-300/50"
 								>
-									<td class="px-4 py-3 font-mono text-xs max-w-0 overflow-hidden">
+									<td class="px-2 py-3 font-mono text-xs max-w-0 overflow-hidden">
 										{#if incident.referenceNo?.trim()}
 											<button
 												type="button"
@@ -885,45 +886,53 @@
 										{/if}
 									</td>
 									<td
-										class="px-4 py-3 whitespace-nowrap overflow-hidden {!incident.referenceNo?.trim()
+										class="px-2 py-3 text-xs whitespace-nowrap overflow-hidden text-ellipsis {!incident.referenceNo?.trim()
 											? 'text-amber-600 dark:text-amber-400'
 											: 'text-warm-700'}"
+										title={formatDateTimeFields(incident.dateReceived, incident.time) ||
+											formatDate(incident.dateReceived)}
 									>
 										{formatDateTimeFields(incident.dateReceived, incident.time) ||
 											formatDate(incident.dateReceived)}
 									</td>
-									<td class="px-4 py-3 max-w-[10rem]">
+									<td class="px-2 py-3 max-w-0 overflow-hidden">
 										{#if incident.action}
-											<span class="inline-block max-w-full break-words whitespace-normal rounded-full px-3 py-0.5 text-xs font-medium border uppercase {getActionPillClass(incident.action)}">
+											<span
+												class="inline-block max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase {getActionPillClass(
+													incident.action
+												)}"
+												title={incident.action}
+											>
 												{incident.action}
 											</span>
 										{:else}
 											<span class="text-warm-300">-</span>
 										{/if}
 									</td>
-									<td class="px-4 py-3 whitespace-nowrap">
+									<td class="px-2 py-3 whitespace-nowrap overflow-hidden">
 										<span
-											class="inline-block rounded-full border px-3 py-0.5 text-xs font-medium uppercase {getPriorityPillClass(
+											class="inline-block max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase {getPriorityPillClass(
 												incident.marked
 											)}"
+											title={normalizePriority(incident.marked)}
 										>
 											{normalizePriority(incident.marked)}
 										</span>
 									</td>
-									<td class="px-4 py-3 max-w-[12rem]">
-										<span class="inline-block max-w-full break-words whitespace-normal rounded-full px-3 py-0.5 text-xs font-medium border uppercase {getTypePillClass(incident.type ?? '')}">
+									<td class="px-3 py-3 max-w-0 overflow-hidden">
+										<span class="inline-block max-w-full break-words whitespace-normal rounded-full px-2.5 py-0.5 text-xs font-medium border uppercase {getTypePillClass(incident.type ?? '')}">
 											{incident.type ?? ''}
 										</span>
 									</td>
 									<td
-										class="px-4 py-3 whitespace-normal break-all text-xs min-w-[10rem] max-w-[14rem] {!incident.referenceNo?.trim()
+										class="px-3 py-3 whitespace-normal break-all text-xs {!incident.referenceNo?.trim()
 											? 'text-amber-600 dark:text-amber-400'
 											: 'text-warm-600'}"
 									>
 										{incident.emailSender || ''}
 									</td>
 									<td
-										class="px-4 py-3 whitespace-normal break-words text-xs min-w-[12rem] max-w-sm {!incident.referenceNo?.trim()
+										class="px-3 py-3 whitespace-normal break-words text-xs {!incident.referenceNo?.trim()
 											? 'text-amber-600 dark:text-amber-400'
 											: 'text-warm-600'}"
 									>
