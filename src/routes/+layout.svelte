@@ -86,7 +86,8 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" href={favicon} type="image/svg+xml" />
+	<link rel="apple-touch-icon" href={favicon} />
 </svelte:head>
 
 <div class="flex h-screen overflow-hidden bg-warm-50">
