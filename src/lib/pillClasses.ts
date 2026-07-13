@@ -2,20 +2,69 @@
  * Pill class helpers for incident tables.
  *
  * Normalization convention:
- * - getTypePillClass: lowercase substring matching for free-text type names
+ * - getTypePillClass: most-specific phrase match first (each known type has a unique palette)
  * - getActionPillClass: uppercase exact match for enum-like action values (DB enforces UPPER(name))
  */
 
-/** Tailwind color classes for incident type pills (bg, text, border). */
+/** Collapse whitespace and uppercase for stable type name matching. */
+function normalizeTypeKey(type: string): string {
+	return type.trim().toUpperCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Tailwind color classes for incident type pills (bg, text, border).
+ * Each known type gets a distinct hue so e.g. Delivery Complaint ≠ Disputed Delivery.
+ */
 export function getTypePillClass(type: string): string {
-	const lower = type.toLowerCase();
-	if (lower.includes('delivery') || lower.includes('redelivery')) return 'bg-blue-100 text-blue-700 border-blue-200';
-	if (lower.includes('complaint') || lower.includes('disputed')) return 'bg-orange-100 text-orange-700 border-orange-200';
-	if (lower.includes('feedback')) return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-	if (lower.includes('incident') || lower.includes('report')) return 'bg-purple-100 text-purple-700 border-purple-200';
-	if (lower.includes('investigation')) return 'bg-amber-100 text-amber-700 border-amber-200';
-	if (lower.includes('missing')) return 'bg-rose-100 text-rose-700 border-rose-200';
-	if (lower.includes('stop') || lower.includes('carding')) return 'bg-red-100 text-red-700 border-red-200';
+	const key = normalizeTypeKey(type);
+	if (!key) return 'bg-warm-100 text-warm-700 border-warm-200';
+
+	// Exact / primary known types (unique colours)
+	if (key === 'DELIVERY COMPLAINT' || key.includes('DELIVERY COMPLAINT')) {
+		return 'bg-blue-100 text-blue-800 border-blue-200';
+	}
+	if (key === 'DISPUTED DELIVERY' || key.includes('DISPUTED')) {
+		return 'bg-orange-100 text-orange-800 border-orange-200';
+	}
+	if (key === 'REDELIVERY REQUEST' || key.includes('REDELIVERY')) {
+		return 'bg-sky-100 text-sky-800 border-sky-200';
+	}
+	if (key === 'DELIVERY REQUEST' || (key.includes('DELIVERY REQUEST') && !key.includes('RE'))) {
+		return 'bg-indigo-100 text-indigo-800 border-indigo-200';
+	}
+	if (key === 'INCORRECT DELIVERY' || key.includes('INCORRECT')) {
+		return 'bg-violet-100 text-violet-800 border-violet-200';
+	}
+	if (key === 'STOP DELIVERY' || (key.includes('STOP') && key.includes('DELIVERY'))) {
+		return 'bg-red-100 text-red-800 border-red-200';
+	}
+	if (key === 'CARDING ISSUE' || key.includes('CARDING')) {
+		return 'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200';
+	}
+	if (key === 'MISSING ITEM' || key.includes('MISSING')) {
+		return 'bg-rose-100 text-rose-800 border-rose-200';
+	}
+	if (key === 'INVESTIGATION' || key.includes('INVESTIGATION')) {
+		return 'bg-amber-100 text-amber-800 border-amber-200';
+	}
+	if (key === 'INCIDENT REPORT' || key.includes('INCIDENT REPORT') || key === 'INCIDENT') {
+		return 'bg-purple-100 text-purple-800 border-purple-200';
+	}
+	if (key === 'FEEDBACK' || key.includes('FEEDBACK')) {
+		return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+	}
+
+	// Fallback: remaining “delivery” wording that didn’t match a specific type
+	if (key.includes('DELIVERY')) {
+		return 'bg-cyan-100 text-cyan-800 border-cyan-200';
+	}
+	if (key.includes('REPORT')) {
+		return 'bg-purple-100 text-purple-800 border-purple-200';
+	}
+	if (key.includes('COMPLAINT')) {
+		return 'bg-blue-100 text-blue-800 border-blue-200';
+	}
+
 	return 'bg-warm-100 text-warm-700 border-warm-200';
 }
 
