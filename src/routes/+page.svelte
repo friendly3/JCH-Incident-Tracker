@@ -988,7 +988,7 @@
 			<div
 				class={isFormExpanded
 					? 'flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-white'
-					: 'pointer-events-auto flex max-h-[92vh] w-full max-w-4xl min-h-0 flex-col overflow-hidden rounded-lg border border-warm-200 bg-white shadow-2xl'}
+					: 'pointer-events-auto flex h-[min(92vh,48rem)] max-h-[92vh] w-full max-w-4xl min-h-0 flex-col overflow-hidden rounded-lg border border-warm-200 bg-white shadow-2xl'}
 				onclick={(e) => {
 					if (!isFormExpanded) e.stopPropagation();
 				}}

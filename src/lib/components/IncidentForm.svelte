@@ -778,11 +778,15 @@
 				</button>
 			</div>
 
+			<!-- Stack panels in one grid cell so modal height stays the max of both tabs. -->
+			<div class="incident-form-panels">
 			<div
 				id="incident-panel-details"
 				role="tabpanel"
 				aria-labelledby="incident-tab-details"
-				hidden={formTab !== 'details'}
+				aria-hidden={formTab !== 'details'}
+				inert={formTab !== 'details' ? true : undefined}
+				class="incident-form-panel {formTab === 'details' ? 'is-active' : ''}"
 			>
 				<section class="mb-8" aria-labelledby="section-details-heading">
 					<h3 id="section-details-heading" class="sn-section-title">Details</h3>
@@ -1145,7 +1149,9 @@
 				id="incident-panel-map"
 				role="tabpanel"
 				aria-labelledby="incident-tab-map"
-				hidden={formTab !== 'map'}
+				aria-hidden={formTab !== 'map'}
+				inert={formTab !== 'map' ? true : undefined}
+				class="incident-form-panel {formTab === 'map' ? 'is-active' : ''}"
 			>
 				<section class="mb-8" aria-labelledby="section-subject-detect-heading">
 					<h3 id="section-subject-detect-heading" class="sn-section-title">
@@ -1310,6 +1316,7 @@
 					</div>
 				</section>
 			</div>
+			</div>
 		</div>
 	</div>
 
@@ -1405,5 +1412,24 @@
 	.incident-form-tab:focus-visible {
 		outline: 2px solid var(--color-accent-500, #0d9488);
 		outline-offset: 2px;
+	}
+
+	/* Both panels share one cell → height = taller tab; inactive stays in layout. */
+	.incident-form-panels {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: minmax(0, auto);
+	}
+	.incident-form-panel {
+		grid-column: 1;
+		grid-row: 1;
+		visibility: hidden;
+		pointer-events: none;
+		z-index: 0;
+	}
+	.incident-form-panel.is-active {
+		visibility: visible;
+		pointer-events: auto;
+		z-index: 1;
 	}
 </style>
