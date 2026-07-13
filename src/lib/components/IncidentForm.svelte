@@ -8,6 +8,7 @@
 	import type { Driver, TeamLeader } from '$lib/data/team';
 	import {
 		formatDateTimeFields,
+		formatTimestampLocal,
 		isValidDateOnly,
 		normalizeDateOnly,
 		normalizeTimeField
@@ -93,7 +94,10 @@
 			typeId: normalizeFkId(source.typeId),
 			driverId: normalizeFkId(source.driverId),
 			teamLeaderId: normalizeFkId(source.teamLeaderId),
-			actionId: normalizeFkId(source.actionId)
+			actionId: normalizeFkId(source.actionId),
+			updatedAt: source.updatedAt ?? '',
+			updatedBy: source.updatedBy ?? null,
+			updatedByName: source.updatedByName?.trim() ?? ''
 		};
 	}
 
@@ -117,7 +121,10 @@
 			response: '',
 			dateResponse: '',
 			timeResponse: '',
-			actionId: null
+			actionId: null,
+			updatedAt: '',
+			updatedBy: null,
+			updatedByName: ''
 		};
 	}
 
@@ -188,8 +195,14 @@
 		response: '',
 		dateResponse: '',
 		timeResponse: '',
-		actionId: null
+		actionId: null,
+		updatedAt: '',
+		updatedBy: null,
+		updatedByName: ''
 	});
+
+	const lastUpdatedLabel = $derived(formatTimestampLocal(form.updatedAt));
+	const lastUpdatedByLabel = $derived(form.updatedByName?.trim() ?? '');
 
 	let baselineSnapshot = $state('');
 
@@ -690,6 +703,23 @@
 				<h2 id="incident-form-title" class="mb-6 text-xl font-semibold text-warm-800">
 					{isEdit ? 'Edit Incident' : 'New Incident'}
 				</h2>
+			{/if}
+
+			{#if showTitle && isEdit && (lastUpdatedLabel || lastUpdatedByLabel)}
+				<p
+					class="mb-5 rounded-md border border-warm-200 bg-warm-50 px-3 py-2 text-xs text-warm-600 dark:bg-warm-200/40"
+					role="status"
+				>
+					<span class="font-semibold text-warm-700">Last updated</span>
+					{#if lastUpdatedLabel}
+						<span class="tabular-nums"> {lastUpdatedLabel}</span>
+					{/if}
+					{#if lastUpdatedByLabel}
+						<span> · by {lastUpdatedByLabel}</span>
+					{:else if lastUpdatedLabel}
+						<span class="text-warm-500"> · editor unknown</span>
+					{/if}
+				</p>
 			{/if}
 
 			<section class="mb-8" aria-labelledby="section-details-heading">

@@ -58,6 +58,12 @@ export interface Incident {
     actionId: string | null;
     /** Resolved name for display (joined from incident_actions) */
     action?: string;
+    /** ISO timestamp of last DB write (updated_at). */
+    updatedAt?: string;
+    /** auth user id of last editor when known. */
+    updatedBy?: string | null;
+    /** Display name / email of last editor (denormalised). */
+    updatedByName?: string;
 }
 
 // Data is now stored in Supabase.

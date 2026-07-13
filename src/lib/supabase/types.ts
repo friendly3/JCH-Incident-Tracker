@@ -137,6 +137,8 @@ export interface Database {
           user_id?: string | null
           created_at?: string
           updated_at?: string
+          updated_by?: string | null
+          updated_by_name?: string | null
         }
         Insert: {
           id?: string
@@ -161,6 +163,9 @@ export interface Database {
           date_response?: string | null
           time_response?: string | null
           user_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          updated_by_name?: string | null
         }
         Update: {
           id?: string
@@ -184,6 +189,8 @@ export interface Database {
           date_response?: string | null
           time_response?: string | null
           updated_at?: string
+          updated_by?: string | null
+          updated_by_name?: string | null
         }
       }
     }

@@ -46,10 +46,14 @@ export const incidentStore = {
 			_isLoading = false;
 		}
 	},
-	async add(incident: Incident, userId?: string) {
+	async add(
+		incident: Incident,
+		userId?: string,
+		audit?: { userId?: string | null; userName?: string | null }
+	) {
 		if (!_db) return false;
 		try {
-			const success = await _db.addIncident(incident, userId);
+			const success = await _db.addIncident(incident, userId, audit);
 			if (success) {
 				// userId is for insert ownership only; main page shows all incidents
 				await this.reload();
@@ -64,11 +68,15 @@ export const incidentStore = {
 	clearError() {
 		_error = null;
 	},
-	async update(id: string, updated: Incident) {
+	async update(
+		id: string,
+		updated: Incident,
+		audit?: { userId?: string | null; userName?: string | null }
+	) {
 		if (!_db) return false;
 		_error = null;
 		try {
-			const success = await _db.updateIncident(id, updated);
+			const success = await _db.updateIncident(id, updated, audit);
 			if (success) {
 				await this.reload();
 			}

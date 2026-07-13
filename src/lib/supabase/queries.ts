@@ -23,8 +23,32 @@ export const INCIDENT_NORMALIZATION_MIGRATION = 'normalise_incidents_lookup_tabl
 export const INCIDENT_LOCATION_MIGRATION = 'add_incident_location_fields.sql'
 export const RESPONDED_BY_MIGRATION = 'add_responded_by_lookup.sql'
 export const EMAIL_RECEIVED_TIME_MIGRATION = 'add_email_received_time.sql'
+export const INCIDENT_UPDATED_BY_MIGRATION = 'add_incident_updated_by.sql'
 /** @deprecated Use INCIDENT_SENDER_MIGRATION or INCIDENT_NORMALIZATION_MIGRATION */
 export const INCIDENT_SCHEMA_MIGRATION = INCIDENT_SENDER_MIGRATION
+
+/** Display name for audit fields (full name → name → email). */
+export function userDisplayName(
+	user:
+		| {
+				email?: string | null
+				user_metadata?: Record<string, unknown> | null
+		  }
+		| null
+		| undefined
+): string {
+	if (!user) return ''
+	const meta = user.user_metadata ?? {}
+	const full =
+		typeof meta.full_name === 'string' ? meta.full_name.trim() : ''
+	const name = typeof meta.name === 'string' ? meta.name.trim() : ''
+	return full || name || user.email?.trim() || 'Unknown user'
+}
+
+export type IncidentAudit = {
+	userId?: string | null
+	userName?: string | null
+}
 
 function normalizeIncidentSource(value: string | null | undefined): IncidentSource {
 	return value?.trim().toLowerCase() === 'ui' ? 'ui' : 'import'
@@ -44,6 +68,7 @@ const NORMALIZATION_SCHEMA_MARKERS = [
 const SENDER_SCHEMA_MARKERS = ['sender', 'marked', 'source'] as const
 const LOCATION_SCHEMA_MARKERS = ['location_street', 'location_suburb'] as const
 const EMAIL_RECEIVED_TIME_MARKERS = ['email_received_time'] as const
+const UPDATED_BY_SCHEMA_MARKERS = ['updated_by', 'updated_by_name'] as const
 
 function escapeRegExp(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -89,7 +114,11 @@ function getIncidentSchemaErrorMessage(error: { message?: string; code?: string 
 		return `Database migration required. Please apply ${EMAIL_RECEIVED_TIME_MIGRATION}.`
 	}
 
-	return `Database schema mismatch. Please apply pending migrations: ${INCIDENT_NORMALIZATION_MIGRATION}, ${INCIDENT_SENDER_MIGRATION}, ${INCIDENT_LOCATION_MIGRATION}, and ${EMAIL_RECEIVED_TIME_MIGRATION}.`
+	if (messageMentionsAny(msg, UPDATED_BY_SCHEMA_MARKERS)) {
+		return `Database migration required. Please apply ${INCIDENT_UPDATED_BY_MIGRATION}.`
+	}
+
+	return `Database schema mismatch. Please apply pending migrations: ${INCIDENT_NORMALIZATION_MIGRATION}, ${INCIDENT_SENDER_MIGRATION}, ${INCIDENT_LOCATION_MIGRATION}, ${EMAIL_RECEIVED_TIME_MIGRATION}, and ${INCIDENT_UPDATED_BY_MIGRATION}.`
 }
 
 // Convert Supabase row to our app's Facility type
@@ -121,8 +150,15 @@ export function toFacility(row: SupabaseFacility): Facility {
 }
 
 // Convert app Incident to Supabase format
-export function toIncidentInsert(incident: Incident, userId?: string): any {
+export function toIncidentInsert(
+	incident: Incident,
+	userId?: string,
+	audit?: IncidentAudit
+): any {
 	const receivedTime = normalizeTimeField(incident.time) || incident.time?.trim() || ''
+	const now = new Date().toISOString()
+	const editorId = audit?.userId ?? userId ?? null
+	const editorName = audit?.userName?.trim() || null
 	return {
 		id: incident.id,
 		reference_no: incident.referenceNo,
@@ -146,16 +182,25 @@ export function toIncidentInsert(incident: Incident, userId?: string): any {
 		marked: incident.marked?.trim() ?? '',
 		source: 'ui',
 		status: 'Open',
-		user_id: userId || null
+		user_id: userId || null,
+		updated_at: now,
+		updated_by: editorId,
+		updated_by_name: editorName
 	}
 }
 
 // Convert partial Incident (camelCase) to Supabase update payload (snake_case only).
 // existingSource is read from the database — email fields are omitted for imports.
-export function toIncidentUpdate(updates: Partial<Incident>, existingSource: IncidentSource): any {
+export function toIncidentUpdate(
+	updates: Partial<Incident>,
+	existingSource: IncidentSource,
+	audit?: IncidentAudit
+): any {
 	const payload: any = {
 		updated_at: new Date().toISOString()
 	};
+	if (audit?.userId) payload.updated_by = audit.userId;
+	if (audit?.userName?.trim()) payload.updated_by_name = audit.userName.trim();
 	const allowEmailUpdate = existingSource === 'ui';
 
 	if (updates.referenceNo !== undefined) payload.reference_no = updates.referenceNo;
@@ -514,15 +559,23 @@ export function createDb(supabase: SupabaseClient) {
 					dateResponse: row.date_response || '',
 					timeResponse: normalizeTimeField(row.time_response || ''),
 					actionId: row.action_id || null,
-					action: row.incident_actions?.name || 'NEW'
+					action: row.incident_actions?.name || 'NEW',
+					updatedAt: row.updated_at || row.created_at || '',
+					updatedBy: row.updated_by ?? null,
+					updatedByName: row.updated_by_name?.trim() || ''
 				};
 			})
 		},
 
-		async addIncident(incident: Incident, userId?: string) {
+		async addIncident(incident: Incident, userId?: string, audit?: IncidentAudit) {
 			const { error } = await supabase
 				.from('incidents')
-				.insert(toIncidentInsert(incident, userId))
+				.insert(
+					toIncidentInsert(incident, userId, {
+						userId: audit?.userId ?? userId,
+						userName: audit?.userName
+					})
+				)
 
 			if (error) {
 				const schemaMessage = getIncidentSchemaErrorMessage(error)
@@ -535,7 +588,11 @@ export function createDb(supabase: SupabaseClient) {
 			return !error
 		},
 
-		async updateIncident(id: string, updates: Partial<Incident>) {
+		async updateIncident(
+			id: string,
+			updates: Partial<Incident>,
+			audit?: IncidentAudit
+		) {
 			const { data: existing, error: fetchError } = await supabase
 				.from('incidents')
 				.select('source')
@@ -555,7 +612,7 @@ export function createDb(supabase: SupabaseClient) {
 			const existingSource = normalizeIncidentSource(existing.source)
 			const { error } = await supabase
 				.from('incidents')
-				.update(toIncidentUpdate(updates, existingSource))
+				.update(toIncidentUpdate(updates, existingSource, audit))
 				.eq('id', id)
 
 			if (error) {

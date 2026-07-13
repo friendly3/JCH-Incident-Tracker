@@ -9,7 +9,14 @@
 		getTypePillClass,
 		normalizePriority
 	} from '$lib/pillClasses';
-	import { formatDate, formatDateTimeFields, formatMonthYear, getMonthKey } from '$lib/formatDate';
+	import {
+		formatDate,
+		formatDateTimeFields,
+		formatMonthYear,
+		formatTimestampLocal,
+		getMonthKey
+	} from '$lib/formatDate';
+	import { userDisplayName } from '$lib/supabase/queries';
 	import {
 		filterExpandedMonths,
 		loadExpandedMonths,
@@ -393,11 +400,15 @@
 	}
 
 	async function handleSubmit(incident: Incident) {
+		const audit = {
+			userId: data.user?.id ?? null,
+			userName: userDisplayName(data.user ?? data.session?.user)
+		};
 		let success = false;
 		if (mode === 'edit' && editingIncident) {
-			success = await incidentStore.update(editingIncident.id, incident);
+			success = await incidentStore.update(editingIncident.id, incident, audit);
 		} else {
-			success = await incidentStore.add(incident, data.user?.id);
+			success = await incidentStore.add(incident, data.user?.id, audit);
 		}
 		if (success) {
 			closeModal();
@@ -1000,6 +1011,23 @@
 						<p class="mt-0.5 text-xs text-warm-500">
 							{mode === 'edit' ? 'Update incident record' : 'Create a new incident record'}
 						</p>
+						{#if mode === 'edit' && editingIncident}
+							{@const lastUpdated = formatTimestampLocal(editingIncident.updatedAt)}
+							{@const lastBy = editingIncident.updatedByName?.trim()}
+							{#if lastUpdated || lastBy}
+								<p class="mt-1 text-xs text-warm-600" title="Last update recorded on this incident">
+									<span class="font-medium text-warm-700">Last updated</span>
+									{#if lastUpdated}
+										<span class="tabular-nums"> {lastUpdated}</span>
+									{/if}
+									{#if lastBy}
+										<span> · by {lastBy}</span>
+									{:else if lastUpdated}
+										<span class="text-warm-500"> · editor unknown</span>
+									{/if}
+								</p>
+							{/if}
+						{/if}
 					</div>
 					<div class="flex shrink-0 items-center gap-2">
 						{#if isFormExpanded}

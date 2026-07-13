@@ -166,6 +166,40 @@ export function formatDateTimeFields(date: string, time?: string): string {
 	return `${formattedDate} ${trimmedTime}`;
 }
 
+/**
+ * Format an ISO / DB timestamp for display in Australia/Sydney, e.g. "13-Jul-2026 16:42".
+ * Returns empty string when the input is missing or invalid.
+ */
+export function formatTimestampLocal(iso: string | undefined | null): string {
+	const raw = iso?.trim() ?? '';
+	if (!raw) return '';
+	const d = new Date(raw);
+	if (Number.isNaN(d.getTime())) return '';
+
+	try {
+		const fmt = new Intl.DateTimeFormat('en-AU', {
+			timeZone: 'Australia/Sydney',
+			day: '2-digit',
+			month: 'short',
+			year: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit',
+			hour12: false
+		});
+		const parts = Object.fromEntries(fmt.formatToParts(d).map((p) => [p.type, p.value]));
+		const day = parts.day ?? '';
+		const month = (parts.month ?? '').replace(/\./g, '');
+		const year = parts.year ?? '';
+		let hour = parts.hour ?? '';
+		if (hour === '24') hour = '00';
+		const minute = parts.minute ?? '';
+		if (!day || !month || !year) return d.toLocaleString('en-AU');
+		return `${day}-${month}-${year} ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+	} catch {
+		return d.toLocaleString('en-AU');
+	}
+}
+
 /** Returns YYYY-MM month key, or 'unknown' for invalid/missing dates. */
 export function getMonthKey(dateStr: string): string {
 	if (!dateStr) return 'unknown';
