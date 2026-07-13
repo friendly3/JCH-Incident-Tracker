@@ -2036,7 +2036,7 @@
 	{:else}
 		<div class="flex-1 overflow-auto">
 			<div class="w-full px-3 py-3 sm:px-4">
-				<!-- Summary row: compact KPIs + status chart (plot 3.15rem × 1.65 ≈ 5.2rem) -->
+				<!-- Summary row: KPIs + status chart (plot 5.2rem × 1.25 ≈ 6.5rem) -->
 				<section
 					class="dashboard-summary mb-2"
 					aria-label="Incident summary for {timeRangeLabel}"
@@ -2048,7 +2048,7 @@
 					>
 						<!-- Total KPI -->
 						<section
-							class="flex items-center gap-2 rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm dark:bg-warm-100 lg:col-span-2"
+							class="flex items-center gap-2 rounded-md border border-warm-200 bg-white px-2.5 py-2.5 shadow-sm dark:bg-warm-100 lg:col-span-2"
 							aria-labelledby="total-incidents-title"
 							title="Incidents in period · {timeRangeLabel} · {resolvedPct}% resolved · {unresolvedPct}% open"
 						>
@@ -2084,7 +2084,7 @@
 
 						<!-- Unresolved -->
 						<section
-							class="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-2"
+							class="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2.5 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-2"
 							aria-labelledby="unresolved-callout-title"
 							title="Not fully closed (status ≠ Resolved or no Date Responded)"
 						>
@@ -2110,7 +2110,7 @@
 
 						<!-- Resolved -->
 						<section
-							class="flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-2 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-2"
+							class="flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-2.5 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-2"
 							aria-labelledby="resolved-callout-title"
 							title="Status is Resolved and Date Responded is set"
 						>
@@ -2136,9 +2136,9 @@
 							</div>
 						</section>
 
-						<!-- Resolution status chart (3.15rem + 65% ≈ 5.2rem) -->
+						<!-- Resolution status chart (5.2rem + 25% ≈ 6.5rem) -->
 						<section
-							class="col-span-2 flex min-h-0 flex-col rounded-md border border-warm-200 bg-white px-2 py-1.5 shadow-sm dark:bg-warm-100 lg:col-span-6"
+							class="col-span-2 flex min-h-0 flex-col rounded-md border border-warm-200 bg-white px-2 py-2 shadow-sm dark:bg-warm-100 lg:col-span-6"
 							aria-labelledby="action-status-bar-title"
 							aria-describedby="action-status-bar-summary"
 						>
@@ -2154,7 +2154,7 @@
 							<p id="action-status-bar-summary" class="sr-only">{actionStatusAriaLabel}</p>
 							<div
 								class="w-full min-h-0 overflow-visible"
-								style="position: relative; height: 5.2rem; min-height: 5.2rem;"
+								style="position: relative; height: 6.5rem; min-height: 6.5rem;"
 							>
 								{#if !hasActionStatusData}
 									<div class="flex h-full items-center justify-center">
