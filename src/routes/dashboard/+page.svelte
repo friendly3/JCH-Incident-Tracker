@@ -841,8 +841,8 @@
 			maintainAspectRatio: false,
 			// Default indexAxis 'x' → vertical columns
 			layout: {
-				// Summary-row plot (~5.2rem): room for labels without excess height
-				padding: { top: 12, right: 4, left: 2, bottom: 2 }
+				// Summary-row plot (~7.15rem)
+				padding: { top: 14, right: 4, left: 2, bottom: 2 }
 			},
 			plugins: {
 				legend: {
@@ -880,7 +880,7 @@
 					formatter: (value: unknown) =>
 						typeof value === 'number' && Number.isFinite(value) ? String(value) : '',
 					color: colors.legend,
-					font: { size: 10, weight: 'bold' },
+					font: { size: 11, weight: 'bold' },
 					textStrokeColor: isDarkMode() ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.9)',
 					textStrokeWidth: 2
 				}
@@ -2036,7 +2036,7 @@
 	{:else}
 		<div class="flex-1 overflow-auto">
 			<div class="w-full px-3 py-3 sm:px-4">
-				<!-- Summary row: KPIs + status chart (plot 5.2rem × 1.25 ≈ 6.5rem) -->
+				<!-- Summary row: KPIs + status chart (plot 6.5rem × 1.1 ≈ 7.15rem) -->
 				<section
 					class="dashboard-summary mb-2"
 					aria-label="Incident summary for {timeRangeLabel}"
@@ -2048,24 +2048,24 @@
 					>
 						<!-- Total KPI -->
 						<section
-							class="flex items-center gap-2 rounded-md border border-warm-200 bg-white px-2.5 py-2.5 shadow-sm dark:bg-warm-100 lg:col-span-2"
+							class="flex items-center gap-2.5 rounded-md border border-warm-200 bg-white px-3 py-3 shadow-sm dark:bg-warm-100 lg:col-span-2"
 							aria-labelledby="total-incidents-title"
 							title="Incidents in period · {timeRangeLabel} · {resolvedPct}% resolved · {unresolvedPct}% open"
 						>
 							<div class="min-w-0 flex-1">
 								<p
 									id="total-incidents-title"
-									class="text-[10px] font-semibold uppercase tracking-wide text-warm-500"
+									class="text-[11px] font-semibold uppercase tracking-wide text-warm-500"
 								>
 									Total
 								</p>
-								<p class="text-2xl font-bold leading-none tabular-nums text-accent-600">
+								<p class="text-3xl font-bold leading-none tabular-nums text-accent-600">
 									{totalIncidents}
 								</p>
-								<p class="mt-0.5 truncate text-[10px] text-warm-500">{timeRangeLabel}</p>
+								<p class="mt-1 truncate text-[11px] text-warm-500">{timeRangeLabel}</p>
 							</div>
 							{#if totalIncidents > 0}
-								<div class="hidden w-14 shrink-0 sm:block">
+								<div class="hidden w-16 shrink-0 sm:block">
 									<div
 										class="h-1.5 w-full overflow-hidden rounded-full bg-warm-100 dark:bg-warm-200"
 										role="presentation"
@@ -2084,24 +2084,24 @@
 
 						<!-- Unresolved -->
 						<section
-							class="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2.5 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-2"
+							class="flex items-center gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-3 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-2"
 							aria-labelledby="unresolved-callout-title"
 							title="Not fully closed (status ≠ Resolved or no Date Responded)"
 						>
 							<div class="min-w-0 flex-1">
 								<p
 									id="unresolved-callout-title"
-									class="text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
+									class="text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
 								>
 									Unresolved
 								</p>
 								<p
-									class="text-2xl font-bold leading-none tabular-nums text-amber-900 dark:text-amber-100"
+									class="text-3xl font-bold leading-none tabular-nums text-amber-900 dark:text-amber-100"
 								>
 									{unresolvedIncidents}
 								</p>
 								{#if totalIncidents > 0}
-									<p class="mt-0.5 text-[10px] font-medium text-amber-800/90 dark:text-amber-200/90">
+									<p class="mt-1 text-[11px] font-medium text-amber-800/90 dark:text-amber-200/90">
 										{unresolvedPct}% of period
 									</p>
 								{/if}
@@ -2110,25 +2110,25 @@
 
 						<!-- Resolved -->
 						<section
-							class="flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-2.5 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-2"
+							class="flex items-center gap-2.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-3 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-2"
 							aria-labelledby="resolved-callout-title"
 							title="Status is Resolved and Date Responded is set"
 						>
 							<div class="min-w-0 flex-1">
 								<p
 									id="resolved-callout-title"
-									class="text-[10px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200"
+									class="text-[11px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200"
 								>
 									Resolved
 								</p>
 								<p
-									class="text-2xl font-bold leading-none tabular-nums text-emerald-900 dark:text-emerald-100"
+									class="text-3xl font-bold leading-none tabular-nums text-emerald-900 dark:text-emerald-100"
 								>
 									{resolvedIncidents}
 								</p>
 								{#if totalIncidents > 0}
 									<p
-										class="mt-0.5 text-[10px] font-medium text-emerald-800/90 dark:text-emerald-200/90"
+										class="mt-1 text-[11px] font-medium text-emerald-800/90 dark:text-emerald-200/90"
 									>
 										{resolvedPct}% of period
 									</p>
@@ -2136,25 +2136,25 @@
 							</div>
 						</section>
 
-						<!-- Resolution status chart (5.2rem + 25% ≈ 6.5rem) -->
+						<!-- Resolution status chart (6.5rem + 10% ≈ 7.15rem) -->
 						<section
-							class="col-span-2 flex min-h-0 flex-col rounded-md border border-warm-200 bg-white px-2 py-2 shadow-sm dark:bg-warm-100 lg:col-span-6"
+							class="col-span-2 flex min-h-0 flex-col rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm dark:bg-warm-100 lg:col-span-6"
 							aria-labelledby="action-status-bar-title"
 							aria-describedby="action-status-bar-summary"
 						>
 							<div class="mb-0.5 flex flex-wrap items-baseline justify-between gap-1">
 								<h2
 									id="action-status-bar-title"
-									class="text-[10px] font-semibold uppercase tracking-wide text-warm-700"
+									class="text-[11px] font-semibold uppercase tracking-wide text-warm-700"
 								>
 									By Resolution Status
 								</h2>
-								<p class="text-[9px] text-warm-500">{timeRangeLabel}</p>
+								<p class="text-[10px] text-warm-500">{timeRangeLabel}</p>
 							</div>
 							<p id="action-status-bar-summary" class="sr-only">{actionStatusAriaLabel}</p>
 							<div
 								class="w-full min-h-0 overflow-visible"
-								style="position: relative; height: 6.5rem; min-height: 6.5rem;"
+								style="position: relative; height: 7.15rem; min-height: 7.15rem;"
 							>
 								{#if !hasActionStatusData}
 									<div class="flex h-full items-center justify-center">

@@ -32,6 +32,7 @@
 		backfillIncidentsFromSubjects,
 		type SubjectBackfillResult
 	} from '$lib/parseSubjectsBackfill';
+	import { resolveIncidentLocation } from '$lib/parseEmailSubjectLocation';
 
 	let { data } = $props();
 
@@ -936,7 +937,17 @@
 											? 'text-amber-600 dark:text-amber-400'
 											: 'text-warm-600'}"
 									>
-										{incident.emailSubject || ''}
+										<span class="inline-flex max-w-full items-start gap-1.5">
+											<span class="min-w-0 flex-1 break-words">{incident.emailSubject || ''}</span>
+											{#if !resolveIncidentLocation(incident)}
+												<span
+													class="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-accent-500"
+													title="Map location could not be detected (no suburb/street for geocoding)"
+													aria-label="Map location could not be detected"
+													role="img"
+												></span>
+											{/if}
+										</span>
 									</td>
 									<td class="px-4 py-3 whitespace-nowrap font-mono text-xs text-warm-700">{incident.driver}</td>
 									<td class="px-4 py-3 whitespace-normal break-words text-warm-600 min-w-[8rem] max-w-xs">{incident.response}</td>
