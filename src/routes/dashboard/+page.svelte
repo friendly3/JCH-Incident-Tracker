@@ -1889,144 +1889,169 @@
 	{:else}
 		<div class="flex-1 overflow-auto">
 			<div class="w-full px-3 py-3 sm:px-4">
-				<!-- Secondary stats (compact — less important than resolution callouts) -->
-				<div class="mb-2 grid grid-cols-3 gap-1.5">
-					<div class="rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm">
-						<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">Total Incidents</p>
-						<p class="mt-0.5 text-xl font-semibold tabular-nums text-accent-600">{totalIncidents}</p>
-						<p class="mt-0.5 text-[10px] leading-tight text-warm-400">All records</p>
-					</div>
-					<div class="rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm">
-						<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">This Month</p>
-						<p class="mt-0.5 text-xl font-semibold tabular-nums text-warm-800">{incidentsThisMonth}</p>
-						<p class="mt-0.5 text-[10px] leading-tight text-warm-400">Calendar month</p>
-					</div>
-					<div class="rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm">
-						<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">This Week</p>
-						<p class="mt-0.5 text-xl font-semibold tabular-nums text-warm-700">{incidentsThisWeek}</p>
-						<p class="mt-0.5 text-[10px] leading-tight text-warm-400">Last 7 days</p>
-					</div>
-				</div>
-
-				<!-- Resolution callouts + action status bar -->
-				<div
-					class="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-12"
-					role="group"
-					aria-label="Incident resolution and action status summary"
-				>
-					<section
-						class="rounded-lg border-2 border-amber-300 bg-amber-50 p-3 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-3"
-						aria-labelledby="unresolved-callout-title"
-					>
-						<div class="flex items-start justify-between gap-2">
-							<div>
-								<p
-									id="unresolved-callout-title"
-									class="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
-								>
-									Unresolved
-								</p>
-								<p class="mt-1 text-3xl font-bold tabular-nums text-amber-900 dark:text-amber-100">
-									{unresolvedIncidents}
-								</p>
-								<p class="mt-1 text-xs leading-snug text-amber-800/90 dark:text-amber-200/90">
-									Not fully closed — action status is not <span class="font-semibold">Resolved</span>,
-									or responded date is missing
-									{#if totalIncidents > 0}
-										<span class="mt-0.5 block font-medium">{unresolvedPct}% of all incidents</span>
-									{/if}
-								</p>
-							</div>
-							<span
-								class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100"
-								aria-hidden="true"
-							>
-								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-								</svg>
-							</span>
+				<!-- Summary tiles & callouts (all-time — not driven by chart period filter) -->
+				<section class="dashboard-summary mb-4" aria-label="Incident summary">
+					<div class="mb-2 grid grid-cols-3 gap-1.5">
+						<div class="rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm">
+							<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">
+								Total Incidents
+							</p>
+							<p class="mt-0.5 text-xl font-semibold tabular-nums text-accent-600">
+								{totalIncidents}
+							</p>
+							<p class="mt-0.5 text-[10px] leading-tight text-warm-400">All records</p>
 						</div>
-					</section>
-
-					<section
-						class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-3 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-3"
-						aria-labelledby="resolved-callout-title"
-					>
-						<div class="flex items-start justify-between gap-2">
-							<div>
-								<p
-									id="resolved-callout-title"
-									class="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200"
-								>
-									Resolved
-								</p>
-								<p class="mt-1 text-3xl font-bold tabular-nums text-emerald-900 dark:text-emerald-100">
-									{resolvedIncidents}
-								</p>
-								<p class="mt-1 text-xs leading-snug text-emerald-800/90 dark:text-emerald-200/90">
-									Action status is <span class="font-semibold">Resolved</span> and a responded date is set
-									{#if totalIncidents > 0}
-										<span class="mt-0.5 block font-medium">{resolvedPct}% of all incidents</span>
-									{/if}
-								</p>
-							</div>
-							<span
-								class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100"
-								aria-hidden="true"
-							>
-								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-								</svg>
-							</span>
+						<div class="rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm">
+							<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">
+								This Month
+							</p>
+							<p class="mt-0.5 text-xl font-semibold tabular-nums text-warm-800">
+								{incidentsThisMonth}
+							</p>
+							<p class="mt-0.5 text-[10px] leading-tight text-warm-400">Calendar month</p>
 						</div>
-					</section>
+						<div class="rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm">
+							<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">
+								This Week
+							</p>
+							<p class="mt-0.5 text-xl font-semibold tabular-nums text-warm-700">
+								{incidentsThisWeek}
+							</p>
+							<p class="mt-0.5 text-[10px] leading-tight text-warm-400">Last 7 days</p>
+						</div>
+					</div>
 
-					<section
-						class="rounded-lg border border-warm-200 bg-white p-3 shadow-sm dark:bg-warm-100 lg:col-span-6"
-						aria-labelledby="action-status-bar-title"
-						aria-describedby="action-status-bar-summary"
+					<div
+						class="grid grid-cols-1 gap-2 sm:grid-cols-2"
+						role="group"
+						aria-label="Incident resolution summary"
 					>
-						<h2
-							id="action-status-bar-title"
-							class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-warm-700"
+						<section
+							class="rounded-lg border-2 border-amber-300 bg-amber-50 p-3 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30"
+							aria-labelledby="unresolved-callout-title"
 						>
-							Incidents by Action Status
-						</h2>
-						<p id="action-status-bar-summary" class="sr-only">{actionStatusAriaLabel}</p>
-						<div
-							class="w-full overflow-visible"
-							style="position: relative; height: {Math.max(140, incidentsByActionStatus.length * 36 + 48)}px; min-height: 140px;"
-						>
-							{#if !hasActionStatusData}
-								<div class="flex h-full items-center justify-center">
-									<p class="text-sm text-warm-500">No action status data available.</p>
+							<div class="flex items-start justify-between gap-2">
+								<div>
+									<p
+										id="unresolved-callout-title"
+										class="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
+									>
+										Unresolved
+									</p>
+									<p class="mt-1 text-3xl font-bold tabular-nums text-amber-900 dark:text-amber-100">
+										{unresolvedIncidents}
+									</p>
+									<p class="mt-1 text-xs leading-snug text-amber-800/90 dark:text-amber-200/90">
+										Not fully closed — action status is not
+										<span class="font-semibold">Resolved</span>, or responded date is missing
+										{#if totalIncidents > 0}
+											<span class="mt-0.5 block font-medium"
+												>{unresolvedPct}% of all incidents</span
+											>
+										{/if}
+									</p>
 								</div>
-							{/if}
-							<canvas
-								bind:this={actionStatusCanvas}
-								class={!hasActionStatusData ? 'hidden' : 'block h-full w-full'}
-								style="max-height: 100%;"
-								aria-hidden="true"
-							></canvas>
-							<table class="sr-only" aria-labelledby="action-status-bar-title">
-								<thead>
-									<tr>
-										<th scope="col">Action status</th>
-										<th scope="col">Incidents</th>
-									</tr>
-								</thead>
-								<tbody>
-									{#each incidentsByActionStatus as [label, count] (label)}
-										<tr>
-											<td>{label}</td>
-											<td>{count}</td>
-										</tr>
+								<span
+									class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100"
+									aria-hidden="true"
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										class="h-4 w-4"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke="currentColor"
+										stroke-width="2"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+										/>
+									</svg>
+								</span>
+							</div>
+						</section>
+
+						<section
+							class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-3 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30"
+							aria-labelledby="resolved-callout-title"
+						>
+							<div class="flex items-start justify-between gap-2">
+								<div>
+									<p
+										id="resolved-callout-title"
+										class="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200"
+									>
+										Resolved
+									</p>
+									<p class="mt-1 text-3xl font-bold tabular-nums text-emerald-900 dark:text-emerald-100">
+										{resolvedIncidents}
+									</p>
+									<p class="mt-1 text-xs leading-snug text-emerald-800/90 dark:text-emerald-200/90">
+										Action status is <span class="font-semibold">Resolved</span> and a responded
+										date is set
+										{#if totalIncidents > 0}
+											<span class="mt-0.5 block font-medium"
+												>{resolvedPct}% of all incidents</span
+											>
+										{/if}
+									</p>
+								</div>
+								<span
+									class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100"
+									aria-hidden="true"
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										class="h-4 w-4"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke="currentColor"
+										stroke-width="2"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+										/>
+									</svg>
+								</span>
+							</div>
+						</section>
+					</div>
+				</section>
+
+				<!-- Charts & tables (period filter applies here) -->
+				<section class="dashboard-charts" aria-label="Incident charts">
+					<div class="mb-2 flex flex-wrap items-center justify-start gap-2">
+						<label class="flex items-center gap-2 text-sm text-warm-600">
+							<span class="font-medium text-warm-700">Period</span>
+							<select
+								bind:value={timeRange}
+								class="max-w-[16rem] rounded-lg border border-warm-200 bg-white px-2.5 py-1.5 text-sm text-warm-700 shadow-sm input-focus dark:bg-warm-200"
+								aria-controls="over-time-chart-canvas"
+								aria-label="Time period for charts and period tables"
+								title="Relative period or a calendar month with incident data"
+							>
+								<optgroup label="Relative">
+									{#each TIME_RANGE_OPTIONS as opt (opt.value)}
+										<option value={opt.value}>{opt.label}</option>
 									{/each}
-								</tbody>
-							</table>
-						</div>
-					</section>
-				</div>
+								</optgroup>
+								{#if availableMonths.length > 0}
+									<optgroup label="Months with data">
+										{#each availableMonths as m (m.value)}
+											<option value={m.value}
+												>{formatMonthYearLabel(m.ym)} ({m.count})</option
+											>
+										{/each}
+									</optgroup>
+								{/if}
+							</select>
+						</label>
+						<span class="text-xs text-warm-500">{timeRangeLabel}</span>
+					</div>
 
 				<!-- Three equal cards: shared header/plot/footer heights so the row lines up. -->
 				<div class="dashboard-chart-row grid grid-cols-1 gap-2 lg:grid-cols-3 lg:items-stretch">
@@ -2035,35 +2060,9 @@
 						aria-labelledby="over-time-chart-title"
 					>
 						<div class="dashboard-chart-header">
-							<div class="flex flex-wrap items-center justify-between gap-2">
-								<h2 class="text-sm font-semibold text-warm-800" id="over-time-chart-title">
-									Incidents Over Time
-								</h2>
-								<label class="flex items-center gap-2 text-sm text-warm-600">
-									<span class="sr-only">Time period for incidents over time</span>
-									<select
-										bind:value={timeRange}
-										class="max-w-[14rem] rounded-lg border border-warm-200 bg-warm-50 px-2.5 py-1 text-sm text-warm-700 input-focus dark:bg-warm-200"
-										aria-controls="over-time-chart-canvas"
-										title="Relative period or a calendar month with incident data"
-									>
-										<optgroup label="Relative">
-											{#each TIME_RANGE_OPTIONS as opt (opt.value)}
-												<option value={opt.value}>{opt.label}</option>
-											{/each}
-										</optgroup>
-										{#if availableMonths.length > 0}
-											<optgroup label="Months with data">
-												{#each availableMonths as m (m.value)}
-													<option value={m.value}
-														>{formatMonthYearLabel(m.ym)} ({m.count})</option
-													>
-												{/each}
-											</optgroup>
-										{/if}
-									</select>
-								</label>
-							</div>
+							<h2 class="text-sm font-semibold text-warm-800" id="over-time-chart-title">
+								Incidents Over Time
+							</h2>
 							<p class="dashboard-chart-meta text-xs text-warm-500">{timeRangeLabel}</p>
 						</div>
 						<div class="dashboard-chart-plot relative w-full">
@@ -2226,6 +2225,52 @@
 					</section>
 				</div>
 
+				<section
+					class="mt-2 w-full min-w-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm dark:bg-warm-100"
+					aria-labelledby="action-status-bar-title"
+					aria-describedby="action-status-bar-summary"
+				>
+					<h2
+						id="action-status-bar-title"
+						class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-warm-700"
+					>
+						Incidents by Action Status
+					</h2>
+					<p id="action-status-bar-summary" class="sr-only">{actionStatusAriaLabel}</p>
+					<div
+						class="w-full overflow-visible"
+						style="position: relative; height: {Math.max(140, incidentsByActionStatus.length * 36 + 48)}px; min-height: 140px;"
+					>
+						{#if !hasActionStatusData}
+							<div class="flex h-full items-center justify-center">
+								<p class="text-sm text-warm-500">No action status data available.</p>
+							</div>
+						{/if}
+						<canvas
+							bind:this={actionStatusCanvas}
+							class={!hasActionStatusData ? 'hidden' : 'block h-full w-full'}
+							style="max-height: 100%;"
+							aria-hidden="true"
+						></canvas>
+						<table class="sr-only" aria-labelledby="action-status-bar-title">
+							<thead>
+								<tr>
+									<th scope="col">Action status</th>
+									<th scope="col">Incidents</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each incidentsByActionStatus as [label, count] (label)}
+									<tr>
+										<td>{label}</td>
+										<td>{count}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				</section>
+
 				<!-- Driver × month tally (same time window as charts above) -->
 				<section
 					class="mt-2 w-full min-w-0 col-span-full rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4 dark:bg-warm-100"
@@ -2330,6 +2375,7 @@
 				<div class="mt-2 w-full min-w-0 col-span-full">
 					<NswIncidentMap {incidents} />
 				</div>
+				</section>
 			</div>
 		</div>
 	{/if}
