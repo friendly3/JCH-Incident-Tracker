@@ -832,7 +832,7 @@
 		chart.update('none');
 	}
 
-	/** Horizontal bar: incidents per action status. */
+	/** Horizontal bar: incidents per resolution status. */
 	function buildActionStatusBarOptions(
 		colors: ReturnType<typeof getChartTheme>
 	): ChartOptions<'bar'> {
@@ -1429,7 +1429,7 @@
 		return `Incidents by type over time (${timeRangeLabel}) for ${dateKeys.length} days. Types: ${typeNames}${more}.`;
 	});
 
-	/** Counts by action status (New, Resolved, LIT, …) — sorted high → low. */
+	/** Counts by resolution status (New, Resolved, LIT, …) — sorted high → low. */
 	const incidentsByActionStatus = $derived.by(() => {
 		const grouped = new Map<string, { label: string; count: number }>();
 		for (const incident of incidents) {
@@ -1458,7 +1458,7 @@
 
 	const hasActionStatusData = $derived(incidentsByActionStatus.length > 0);
 	const actionStatusAriaLabel = $derived(
-		buildChartAriaLabel('Incidents by Action Status', incidentsByActionStatus)
+		buildChartAriaLabel('Incidents by Resolution Status', incidentsByActionStatus)
 	);
 
 	/**
@@ -1806,7 +1806,7 @@
 	);
 
 	/**
-	 * Resolved = action status is "Resolved" AND a responded date is set.
+	 * Resolved = resolution status is "Resolved" AND a responded date is set.
 	 * Unresolved = anything that does not meet both conditions.
 	 */
 	function isIncidentResolved(incident: Incident): boolean {
@@ -1924,7 +1924,7 @@
 					<div
 						class="grid grid-cols-1 gap-2 lg:grid-cols-12"
 						role="group"
-						aria-label="Incident resolution and action status summary"
+						aria-label="Incident resolution and resolution status summary"
 					>
 						<section
 							class="rounded-lg border-2 border-amber-300 bg-amber-50 p-3 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-3"
@@ -1942,7 +1942,7 @@
 										{unresolvedIncidents}
 									</p>
 									<p class="mt-1 text-xs leading-snug text-amber-800/90 dark:text-amber-200/90">
-										Not fully closed — action status is not
+										Not fully closed — resolution status is not
 										<span class="font-semibold">Resolved</span>, or responded date is missing
 										{#if totalIncidents > 0}
 											<span class="mt-0.5 block font-medium"
@@ -1989,7 +1989,7 @@
 										{resolvedIncidents}
 									</p>
 									<p class="mt-1 text-xs leading-snug text-emerald-800/90 dark:text-emerald-200/90">
-										Action status is <span class="font-semibold">Resolved</span> and a responded
+										Resolution status is <span class="font-semibold">Resolved</span> and a responded
 										date is set
 										{#if totalIncidents > 0}
 											<span class="mt-0.5 block font-medium"
@@ -2029,7 +2029,7 @@
 								id="action-status-bar-title"
 								class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-warm-700"
 							>
-								Incidents by Action Status
+								Incidents by Resolution Status
 							</h2>
 							<p id="action-status-bar-summary" class="sr-only">{actionStatusAriaLabel}</p>
 							<div
@@ -2038,7 +2038,7 @@
 							>
 								{#if !hasActionStatusData}
 									<div class="flex h-full items-center justify-center">
-										<p class="text-sm text-warm-500">No action status data available.</p>
+										<p class="text-sm text-warm-500">No resolution status data available.</p>
 									</div>
 								{/if}
 								<canvas
@@ -2050,7 +2050,7 @@
 								<table class="sr-only" aria-labelledby="action-status-bar-title">
 									<thead>
 										<tr>
-											<th scope="col">Action status</th>
+											<th scope="col">Resolution status</th>
 											<th scope="col">Incidents</th>
 										</tr>
 									</thead>

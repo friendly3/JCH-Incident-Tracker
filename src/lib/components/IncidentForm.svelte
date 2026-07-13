@@ -298,7 +298,7 @@
 
 		const actionId = normalizeFkId(form.actionId);
 		if (!actionId) {
-			submitError = 'Action Status is required — please select a status.';
+			submitError = 'Resolution Status is required — please select a status.';
 			submitErrorField = 'action';
 			formTab = 'details';
 			return;
@@ -932,7 +932,7 @@
 					<h3 id="section-classification-heading" class="sn-section-title">Classification</h3>
 					<div class="sn-field-row">
 						<label for="action" class="sn-field-label">
-							Action Status <span class="text-red-600">*</span>
+							Resolution Status <span class="text-red-600">*</span>
 						</label>
 						<div class="sn-field-control">
 							<select
@@ -945,10 +945,10 @@
 								class="{inputClass} uppercase"
 							>
 								<option value={FK_EMPTY} disabled hidden={!!form.actionId}>
-									— Select action status —
+									— Select resolution status —
 								</option>
 								{#if form.actionId && !fkInList(form.actionId, incidentActions)}
-									<option value={form.actionId}>{incident?.action ?? 'Current action status'}</option>
+									<option value={form.actionId}>{incident?.action ?? 'Current resolution status'}</option>
 								{/if}
 								{#each incidentActions as a}<option value={a.id} class="uppercase">{a.name}</option>{/each}
 							</select>

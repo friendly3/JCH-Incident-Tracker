@@ -47,7 +47,7 @@
 
 	function tabLabel(tab: Tab): string {
 		if (tab === 'types') return 'Type';
-		if (tab === 'actions') return 'Action Status';
+		if (tab === 'actions') return 'Resolution Status';
 		return 'Responded By';
 	}
 
@@ -97,7 +97,7 @@
 			} else if (currentTab === 'actions') {
 				const created = await db.addIncidentAction(name);
 				if (!created) {
-					formError = 'Could not add action status (it may already exist).';
+					formError = 'Could not add resolution status (it may already exist).';
 					return;
 				}
 			} else {
@@ -134,7 +134,7 @@
 			} else if (currentTab === 'actions') {
 				const ok = await db.updateIncidentAction(editingId, name);
 				if (!ok) {
-					formError = 'Could not update action status.';
+					formError = 'Could not update resolution status.';
 					return;
 				}
 			} else {
@@ -165,7 +165,7 @@
 			} else if (currentTab === 'actions') {
 				const ok = await db.deleteIncidentAction(id);
 				if (!ok) {
-					formError = 'Could not delete action status.';
+					formError = 'Could not delete resolution status.';
 					return;
 				}
 			} else {
@@ -204,7 +204,7 @@
 			<p class="text-sm text-warm-500">Configuration</p>
 			<h1 class="text-3xl font-bold text-warm-800">Manage Dropdown Values</h1>
 			<p class="mt-1 text-sm text-warm-500">
-				Incident Types, Action Statuses, and Responded By options used on the incident form.
+				Incident Types, Resolution Statuses, and Responded By options used on the incident form.
 			</p>
 		</div>
 
@@ -238,7 +238,7 @@
 					class="tab {currentTab === 'actions' ? 'active' : ''}"
 					onclick={() => switchTab('actions')}
 				>
-					Action Statuses
+					Resolution Statuses
 				</button>
 				<button
 					type="button"
@@ -418,7 +418,7 @@
 					{#if currentTab === 'types'}
 						No incident types found.
 					{:else if currentTab === 'actions'}
-						No action statuses found.
+						No resolution statuses found.
 					{:else}
 						No Responded By values yet. Add one, or use <strong>Sync from team leaders</strong>.
 					{/if}

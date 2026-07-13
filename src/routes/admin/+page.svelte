@@ -96,7 +96,7 @@
 							<th class="px-4 py-3 font-medium text-warm-500">Type</th>
 							<th class="px-4 py-3 font-medium text-warm-500">Ref No.</th>
 							<th class="px-4 py-3 font-medium text-warm-500">Driver</th>
-							<th class="px-4 py-3 font-medium text-warm-500">Action Status</th>
+							<th class="px-4 py-3 font-medium text-warm-500">Resolution Status</th>
 							<th class="px-4 py-3 font-medium text-warm-500 text-right">Actions</th>
 						</tr>
 					</thead>

@@ -82,8 +82,8 @@
 				</div>
 
 				<div class="rounded-lg border border-warm-200 bg-white p-5 shadow-sm">
-					<h2 class="text-sm font-medium text-warm-500">Action Status</h2>
-					<p class="mt-1 text-warm-800">{incident.action || 'No action status recorded'}</p>
+					<h2 class="text-sm font-medium text-warm-500">Resolution Status</h2>
+					<p class="mt-1 text-warm-800">{incident.action || 'No resolution status recorded'}</p>
 				</div>
 			</div>
 		</main>

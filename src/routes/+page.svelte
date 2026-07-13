@@ -606,7 +606,7 @@
 					{#each data.teamLeaders ?? [] as tl}<option value={tl.name} class="uppercase">{tl.name}</option>{/each}
 				</select>
 				<select bind:value={filterAction} class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus uppercase">
-					<option value="" class="normal-case">All Action Statuses</option>
+					<option value="" class="normal-case">All Resolution Statuses</option>
 					{#each data.incidentActions ?? [] as a}<option value={a.name} class="uppercase">{a.name}</option>{/each}
 				</select>
 				<!-- Date Received hierarchy: Year → Month → Day (filters results) -->
@@ -810,7 +810,7 @@
 						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap w-[8rem]">
 							Date Received
 						</th>
-						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Action Status</th>
+						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Resolution Status</th>
 						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Priority</th>
 						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Type</th>
 						<th class="px-4 py-3 font-medium text-warm-500 whitespace-nowrap">Email Sender</th>
