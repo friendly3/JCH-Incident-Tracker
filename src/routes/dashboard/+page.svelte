@@ -2050,7 +2050,6 @@
 						<section
 							class="flex items-center gap-2.5 rounded-md border border-warm-200 bg-white px-3 py-3 shadow-sm dark:bg-warm-100 lg:col-span-2"
 							aria-labelledby="total-incidents-title"
-							title="Incidents in period · {timeRangeLabel} · {resolvedPct}% resolved · {unresolvedPct}% open"
 						>
 							<div class="min-w-0 flex-1">
 								<p
@@ -2065,7 +2064,11 @@
 								<p class="mt-1 truncate text-[11px] text-warm-500">{timeRangeLabel}</p>
 							</div>
 							{#if totalIncidents > 0}
-								<div class="hidden w-16 shrink-0 sm:block">
+								<div
+									class="group relative hidden w-[4.25rem] shrink-0 cursor-help sm:block"
+									title="{resolvedPct}% of incidents in this period are resolved (status Resolved + Date Responded set). {unresolvedPct}% remain open."
+									aria-label="{resolvedPct} percent resolved in period"
+								>
 									<div
 										class="h-1.5 w-full overflow-hidden rounded-full bg-warm-100 dark:bg-warm-200"
 										role="presentation"
@@ -2075,9 +2078,26 @@
 											style="width: {resolvedPct}%"
 										></div>
 									</div>
-									<p class="mt-0.5 text-center text-[10px] tabular-nums text-warm-500">
-										{resolvedPct}%
+									<p
+										class="mt-0.5 text-center text-[10px] leading-tight tabular-nums text-warm-600"
+									>
+										<span class="font-semibold text-emerald-700 dark:text-emerald-300"
+											>{resolvedPct}%</span
+										>
+										<span class="block text-[9px] font-medium text-warm-500">resolved</span>
 									</p>
+									<!-- Visible hover tip -->
+									<span
+										class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 w-36 -translate-x-1/2 rounded-md border border-warm-200 bg-warm-900 px-2 py-1.5 text-center text-[10px] leading-snug text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 dark:border-warm-600 dark:bg-warm-200 dark:text-warm-900"
+										role="tooltip"
+									>
+										Share of period that is <strong class="font-semibold">resolved</strong>
+										(status Resolved + Date Responded).
+										<span
+											class="absolute left-1/2 top-full -mt-px h-0 w-0 -translate-x-1/2 border-x-[5px] border-t-[5px] border-x-transparent border-t-warm-900 dark:border-t-warm-200"
+											aria-hidden="true"
+										></span>
+									</span>
 								</div>
 							{/if}
 						</section>
