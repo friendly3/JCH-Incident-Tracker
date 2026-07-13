@@ -2417,12 +2417,12 @@
 		line-height: 1.1rem;
 	}
 
-	/* 17.55rem + 20% = 21.06rem */
+	/* Plot height: 21.06rem + 10% = 23.166rem */
 	:global(.dashboard-chart-plot) {
-		flex: 0 0 21.06rem;
-		height: 21.06rem;
-		min-height: 21.06rem;
-		max-height: 21.06rem;
+		flex: 0 0 23.17rem;
+		height: 23.17rem;
+		min-height: 23.17rem;
+		max-height: 23.17rem;
 		position: relative;
 		overflow: hidden;
 		width: 100%;
@@ -2431,7 +2431,7 @@
 	:global(.dashboard-chart-plot canvas) {
 		width: 100% !important;
 		height: 100% !important;
-		max-height: 21.06rem !important;
+		max-height: 23.17rem !important;
 	}
 
 	:global(.dashboard-chart-footer) {
