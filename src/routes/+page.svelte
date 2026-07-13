@@ -812,9 +812,13 @@
 						<th class="px-2 py-3 font-medium text-warm-500 whitespace-nowrap">
 							Date Received
 						</th>
-						<th class="px-2 py-3 font-medium text-warm-500 whitespace-nowrap">Resolution Status</th>
-						<th class="px-2 py-3 font-medium text-warm-500 whitespace-nowrap">Priority</th>
-						<th class="px-3 py-3 font-medium text-warm-500 whitespace-nowrap">Type</th>
+						<th class="px-2 py-3 text-center font-medium text-warm-500 whitespace-nowrap">
+							Resolution Status
+						</th>
+						<th class="px-2 py-3 text-center font-medium text-warm-500 whitespace-nowrap">
+							Priority
+						</th>
+						<th class="px-3 py-3 text-center font-medium text-warm-500 whitespace-nowrap">Type</th>
 						<th class="px-3 py-3 font-medium text-warm-500 whitespace-nowrap">Email Sender</th>
 						<th class="px-3 py-3 font-medium text-warm-500">Email Subject</th>
 						<th class="px-3 py-3 font-medium text-warm-500 whitespace-nowrap">Driver</th>
@@ -896,7 +900,7 @@
 										{formatDateTimeFields(incident.dateReceived, incident.time) ||
 											formatDate(incident.dateReceived)}
 									</td>
-									<td class="px-2 py-3 max-w-0 overflow-hidden">
+									<td class="px-2 py-3 text-center max-w-0 overflow-hidden">
 										{#if incident.action}
 											<span
 												class="inline-block max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase {getActionPillClass(
@@ -910,7 +914,7 @@
 											<span class="text-warm-300">-</span>
 										{/if}
 									</td>
-									<td class="px-2 py-3 whitespace-nowrap overflow-hidden">
+									<td class="px-2 py-3 text-center whitespace-nowrap overflow-hidden">
 										<span
 											class="inline-block max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase {getPriorityPillClass(
 												incident.marked
@@ -920,8 +924,12 @@
 											{normalizePriority(incident.marked)}
 										</span>
 									</td>
-									<td class="px-3 py-3 max-w-0 overflow-hidden">
-										<span class="inline-block max-w-full break-words whitespace-normal rounded-full px-2.5 py-0.5 text-xs font-medium border uppercase {getTypePillClass(incident.type ?? '')}">
+									<td class="px-3 py-3 text-center max-w-0 overflow-hidden">
+										<span
+											class="inline-block max-w-full break-words whitespace-normal rounded-full px-2.5 py-0.5 text-xs font-medium border uppercase {getTypePillClass(
+												incident.type ?? ''
+											)}"
+										>
 											{incident.type ?? ''}
 										</span>
 									</td>
@@ -1219,8 +1227,8 @@
 
 <style>
 	/*
-	 * Column separators on header only — solid warm-300 so they read clearly
-	 * on the sticky header (color-mix / soft borders were hard to see).
+	 * Column separators on header only — short vertical ticks that do not
+	 * touch the top/bottom horizontal header edges.
 	 */
 	:global(table.incidents-table) {
 		border-collapse: separate;
@@ -1228,15 +1236,19 @@
 	}
 	:global(table.incidents-table thead th) {
 		position: relative;
-		border-right: 1px solid #bbbfc0; /* Vichy warm-300 */
 	}
-	:global(table.incidents-table thead th:last-child) {
-		border-right: none;
+	:global(table.incidents-table thead th:not(:last-child)::after) {
+		content: '';
+		position: absolute;
+		/* Inset from top/bottom so the rule doesn’t meet horizontal borders */
+		top: 22%;
+		bottom: 22%;
+		right: 0;
+		width: 1px;
+		background-color: #bbbfc0; /* Vichy warm-300 */
+		pointer-events: none;
 	}
-	:global(.dark table.incidents-table thead th) {
-		border-right-color: #5a5c5e;
-	}
-	:global(.dark table.incidents-table thead th:last-child) {
-		border-right: none;
+	:global(.dark table.incidents-table thead th:not(:last-child)::after) {
+		background-color: #5a5c5e;
 	}
 </style>
