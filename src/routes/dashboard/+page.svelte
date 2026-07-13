@@ -1890,7 +1890,7 @@
 		<div class="flex-1 overflow-auto">
 			<div class="w-full px-3 py-3 sm:px-4">
 				<!-- Summary tiles & callouts (all-time — not driven by chart period filter) -->
-				<section class="dashboard-summary mb-4" aria-label="Incident summary">
+				<section class="dashboard-summary mb-3" aria-label="Incident summary">
 					<div class="mb-2 grid grid-cols-3 gap-1.5">
 						<div class="rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm">
 							<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">
@@ -1922,12 +1922,12 @@
 					</div>
 
 					<div
-						class="grid grid-cols-1 gap-2 sm:grid-cols-2"
+						class="grid grid-cols-1 gap-2 lg:grid-cols-12"
 						role="group"
-						aria-label="Incident resolution summary"
+						aria-label="Incident resolution and action status summary"
 					>
 						<section
-							class="rounded-lg border-2 border-amber-300 bg-amber-50 p-3 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30"
+							class="rounded-lg border-2 border-amber-300 bg-amber-50 p-3 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-3"
 							aria-labelledby="unresolved-callout-title"
 						>
 							<div class="flex items-start justify-between gap-2">
@@ -1974,7 +1974,7 @@
 						</section>
 
 						<section
-							class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-3 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30"
+							class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-3 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-3"
 							aria-labelledby="resolved-callout-title"
 						>
 							<div class="flex items-start justify-between gap-2">
@@ -2019,8 +2019,59 @@
 								</span>
 							</div>
 						</section>
+
+						<section
+							class="rounded-lg border border-warm-200 bg-white p-3 shadow-sm dark:bg-warm-100 lg:col-span-6"
+							aria-labelledby="action-status-bar-title"
+							aria-describedby="action-status-bar-summary"
+						>
+							<h2
+								id="action-status-bar-title"
+								class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-warm-700"
+							>
+								Incidents by Action Status
+							</h2>
+							<p id="action-status-bar-summary" class="sr-only">{actionStatusAriaLabel}</p>
+							<div
+								class="w-full overflow-visible"
+								style="position: relative; height: {Math.max(140, incidentsByActionStatus.length * 36 + 48)}px; min-height: 140px;"
+							>
+								{#if !hasActionStatusData}
+									<div class="flex h-full items-center justify-center">
+										<p class="text-sm text-warm-500">No action status data available.</p>
+									</div>
+								{/if}
+								<canvas
+									bind:this={actionStatusCanvas}
+									class={!hasActionStatusData ? 'hidden' : 'block h-full w-full'}
+									style="max-height: 100%;"
+									aria-hidden="true"
+								></canvas>
+								<table class="sr-only" aria-labelledby="action-status-bar-title">
+									<thead>
+										<tr>
+											<th scope="col">Action status</th>
+											<th scope="col">Incidents</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each incidentsByActionStatus as [label, count] (label)}
+											<tr>
+												<td>{label}</td>
+												<td>{count}</td>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+						</section>
 					</div>
 				</section>
+
+				<hr
+					class="mb-3 border-0 border-t border-warm-200/70 dark:border-warm-300/40"
+					aria-hidden="true"
+				/>
 
 				<!-- Charts & tables (period filter applies here) -->
 				<section class="dashboard-charts" aria-label="Incident charts">
@@ -2224,52 +2275,6 @@
 						</div>
 					</section>
 				</div>
-
-				<section
-					class="mt-2 w-full min-w-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm dark:bg-warm-100"
-					aria-labelledby="action-status-bar-title"
-					aria-describedby="action-status-bar-summary"
-				>
-					<h2
-						id="action-status-bar-title"
-						class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-warm-700"
-					>
-						Incidents by Action Status
-					</h2>
-					<p id="action-status-bar-summary" class="sr-only">{actionStatusAriaLabel}</p>
-					<div
-						class="w-full overflow-visible"
-						style="position: relative; height: {Math.max(140, incidentsByActionStatus.length * 36 + 48)}px; min-height: 140px;"
-					>
-						{#if !hasActionStatusData}
-							<div class="flex h-full items-center justify-center">
-								<p class="text-sm text-warm-500">No action status data available.</p>
-							</div>
-						{/if}
-						<canvas
-							bind:this={actionStatusCanvas}
-							class={!hasActionStatusData ? 'hidden' : 'block h-full w-full'}
-							style="max-height: 100%;"
-							aria-hidden="true"
-						></canvas>
-						<table class="sr-only" aria-labelledby="action-status-bar-title">
-							<thead>
-								<tr>
-									<th scope="col">Action status</th>
-									<th scope="col">Incidents</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each incidentsByActionStatus as [label, count] (label)}
-									<tr>
-										<td>{label}</td>
-										<td>{count}</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				</section>
 
 				<!-- Driver × month tally (same time window as charts above) -->
 				<section
