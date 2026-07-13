@@ -1615,6 +1615,8 @@
 	});
 
 	const hasDriverMonthTally = $derived(driverMonthTally.rows.length > 0);
+	/** Row/footer Total column only when the view spans more than one month. */
+	const showDriverMonthTotals = $derived(driverMonthTally.months.length > 1);
 
 	const driverMonthTallyAriaLabel = $derived.by(() => {
 		const { rows, months, grandTotal, periodLabel } = driverMonthTally;
@@ -2263,12 +2265,14 @@
 												{label}
 											</th>
 										{/each}
-										<th
-											scope="col"
-											class="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-700"
-										>
-											Total
-										</th>
+										{#if showDriverMonthTotals}
+											<th
+												scope="col"
+												class="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-700"
+											>
+												Total
+											</th>
+										{/if}
 									</tr>
 								</thead>
 								<tbody class="divide-y divide-warm-100">
@@ -2289,9 +2293,11 @@
 													{count === 0 ? '—' : count}
 												</td>
 											{/each}
-											<td class="px-3 py-1.5 text-center font-semibold tabular-nums text-warm-900">
-												{row.total}
-											</td>
+											{#if showDriverMonthTotals}
+												<td class="px-3 py-1.5 text-center font-semibold tabular-nums text-warm-900">
+													{row.total}
+												</td>
+											{/if}
 										</tr>
 									{/each}
 								</tbody>
@@ -2308,9 +2314,11 @@
 												{total === 0 ? '—' : total}
 											</td>
 										{/each}
-										<td class="px-3 py-2 text-center text-sm font-bold tabular-nums text-warm-900">
-											{driverMonthTally.grandTotal}
-										</td>
+										{#if showDriverMonthTotals}
+											<td class="px-3 py-2 text-center text-sm font-bold tabular-nums text-warm-900">
+												{driverMonthTally.grandTotal}
+											</td>
+										{/if}
 									</tr>
 								</tfoot>
 							</table>

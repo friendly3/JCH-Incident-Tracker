@@ -587,8 +587,11 @@
 
 		if (fitBounds && placedMarkers.length > 0) {
 			const group = L.featureGroup(placedMarkers.map((p) => p.marker));
+			// Cap suburb overview below street-detail zoom so the default view
+			// never flips into street pins after fitBounds.
+			const suburbMaxZoom = STREET_DETAIL_MIN_ZOOM - 1;
 			map.fitBounds(group.getBounds().pad(0.22), {
-				maxZoom: viewMode === 'street' ? 15 : 13,
+				maxZoom: viewMode === 'street' ? 15 : suburbMaxZoom,
 				animate: false,
 				padding: [28, 28]
 			});
@@ -693,14 +696,18 @@
 			return;
 		}
 
-		// Start in suburb mode for overview, then user zooms for streets
-		if (map.getZoom() >= STREET_DETAIL_MIN_ZOOM) {
-			// drop to suburb overview first for initial fit
-			map.setZoom(Math.min(map.getZoom(), STREET_DETAIL_MIN_ZOOM - 1), {
-				animate: false
-			});
+		// Default load: suburb overview only (street detail requires user zoom-in)
+		const suburbMaxZoom = STREET_DETAIL_MIN_ZOOM - 1;
+		if (map.getZoom() > suburbMaxZoom) {
+			map.setZoom(Math.min(SYDNEY_DEFAULT_ZOOM, suburbMaxZoom), { animate: false });
 		}
 		renderMarkersForMode(true);
+		// Hard clamp: initial fit must not leave the map in street mode
+		if (map.getZoom() >= STREET_DETAIL_MIN_ZOOM) {
+			map.setZoom(suburbMaxZoom, { animate: false });
+			viewMode = 'suburb';
+			renderMarkersForMode(false);
+		}
 		initialFitDone = true;
 	}
 
