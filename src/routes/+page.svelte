@@ -1218,14 +1218,25 @@
 </div>
 
 <style>
-	/* Faint vertical rules only on header cells (column boundaries) */
-	:global(.incidents-table thead th) {
-		border-right: 1px solid color-mix(in srgb, var(--color-warm-300, #d6d3d1) 55%, transparent);
+	/*
+	 * Column separators on header only — solid warm-300 so they read clearly
+	 * on the sticky header (color-mix / soft borders were hard to see).
+	 */
+	:global(table.incidents-table) {
+		border-collapse: separate;
+		border-spacing: 0;
 	}
-	:global(.incidents-table thead th:last-child) {
+	:global(table.incidents-table thead th) {
+		position: relative;
+		border-right: 1px solid #bbbfc0; /* Vichy warm-300 */
+	}
+	:global(table.incidents-table thead th:last-child) {
 		border-right: none;
 	}
-	:global(.dark .incidents-table thead th) {
-		border-right-color: color-mix(in srgb, var(--color-warm-400, #a8a29e) 35%, transparent);
+	:global(.dark table.incidents-table thead th) {
+		border-right-color: #5a5c5e;
+	}
+	:global(.dark table.incidents-table thead th:last-child) {
+		border-right: none;
 	}
 </style>
