@@ -59,6 +59,9 @@
 	let submitError = $state<string | null>(null);
 	type SubmitErrorField = 'dateReceived' | 'dateResponse' | 'type' | 'action' | 'location';
 	let submitErrorField = $state<SubmitErrorField | null>(null);
+	/** Main form tabs: details (default) vs map + subject detect. */
+	type FormTab = 'details' | 'map';
+	let formTab = $state<FormTab>('details');
 	const FK_EMPTY = '';
 
 	function normalizeFkId(value: string | null | undefined): string | null {
@@ -219,6 +222,14 @@
 	let openTimePickerField = $state<TimePickerField | null>(null);
 	let openDatePickerField = $state<DatePickerField | null>(null);
 
+	function switchFormTab(tab: FormTab) {
+		if (formTab === tab) return;
+		formTab = tab;
+		// Nested popovers are portaled; close when leaving a panel
+		openTimePickerField = null;
+		openDatePickerField = null;
+	}
+
 	/** Synchronous dirty check for parent dismiss handlers (backdrop/Escape). */
 	export function getHasUnsavedChanges(): boolean {
 		return computeHasUnsavedChanges();
@@ -242,6 +253,7 @@
 		showConfirm = false;
 		submitError = null;
 		submitErrorField = null;
+		formTab = 'details';
 		openTimePickerField = null;
 		openDatePickerField = null;
 		const source = incident;
@@ -261,22 +273,26 @@
 		if (!form.dateReceived?.trim()) {
 			submitError = 'Date Received is required.';
 			submitErrorField = 'dateReceived';
+			formTab = 'details';
 			return;
 		}
 		if (!dateReceived) {
 			submitError = 'Date Received must be a valid date (yyyy-mm-dd).';
 			submitErrorField = 'dateReceived';
+			formTab = 'details';
 			return;
 		}
 		// Optional responded date: empty is fine; non-empty must be a real calendar day.
 		if (form.dateResponse?.trim() && !dateResponse) {
 			submitError = 'Responded date must be a valid date (yyyy-mm-dd).';
 			submitErrorField = 'dateResponse';
+			formTab = 'details';
 			return;
 		}
 		if (!typeId) {
 			submitError = 'Type is required — please select an incident type.';
 			submitErrorField = 'type';
+			formTab = 'details';
 			return;
 		}
 
@@ -284,6 +300,7 @@
 		if (!actionId) {
 			submitError = 'Action Status is required — please select a status.';
 			submitErrorField = 'action';
+			formTab = 'details';
 			return;
 		}
 
@@ -293,6 +310,7 @@
 		if (locationStreet && !locationSuburb) {
 			submitError = 'Suburb is required when a street is set (for the NSW map).';
 			submitErrorField = 'location';
+			formTab = 'map';
 			return;
 		}
 
@@ -722,139 +740,505 @@
 				</p>
 			{/if}
 
-			<section class="mb-8" aria-labelledby="section-details-heading">
-				<h3 id="section-details-heading" class="sn-section-title">Details</h3>
-				<div class="sn-field-row">
-					<label for="referenceNo" class="sn-field-label">Reference No.</label>
-					<div class="sn-field-control">
-						<input
-							id="referenceNo"
-							type="text"
-							bind:value={form.referenceNo}
-							class="{inputClass} text-accent-600"
-						/>
-					</div>
-				</div>
-				<div class="sn-field-row">
-					{#if emailFieldsEditable}
-						<label for="emailSender" class="sn-field-label">Email Sender</label>
-						<div class="sn-field-control">
-							<input
-								id="emailSender"
-								type="text"
-								bind:value={form.emailSender}
-								class={inputClass}
-							/>
-						</div>
-					{:else}
-						<span class="sn-field-label" id="emailSender-ro-label">Email Sender</span>
-						<div class="sn-field-control" role="group" aria-labelledby="emailSender-ro-label">
-							{#if form.emailSender?.trim()}
-								<p class={readonlyValueClass}>{form.emailSender}</p>
-							{:else}
-								<p class={readonlyEmptyClass}>Not set</p>
-							{/if}
-						</div>
+			<div
+				class="incident-form-tabs mb-5 flex flex-wrap gap-0 border-b border-warm-200"
+				role="tablist"
+				aria-label="Incident form sections"
+			>
+				<button
+					type="button"
+					role="tab"
+					id="incident-tab-details"
+					aria-selected={formTab === 'details'}
+					aria-controls="incident-panel-details"
+					tabindex={formTab === 'details' ? 0 : -1}
+					class="incident-form-tab {formTab === 'details' ? 'active' : ''}"
+					onclick={() => switchFormTab('details')}
+				>
+					Details
+				</button>
+				<button
+					type="button"
+					role="tab"
+					id="incident-tab-map"
+					aria-selected={formTab === 'map'}
+					aria-controls="incident-panel-map"
+					tabindex={formTab === 'map' ? 0 : -1}
+					class="incident-form-tab {formTab === 'map' ? 'active' : ''}"
+					onclick={() => switchFormTab('map')}
+				>
+					Map &amp; subject
+					{#if subjectDetectSummary || hasManualLocation}
+						<span
+							class="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-accent-500 align-middle"
+							aria-hidden="true"
+							title="Has map location or subject matches"
+						></span>
 					{/if}
-				</div>
-				<div class="sn-field-row">
-					{#if emailFieldsEditable}
-						<label for="emailSubject" class="sn-field-label">Email Subject</label>
-						<div class="sn-field-control">
-							<input
-								id="emailSubject"
-								type="text"
-								bind:value={form.emailSubject}
-								class={inputClass}
-								placeholder="SOD Disputed Delivery: 72956318 N22226 Menai DRIVER - Street"
-							/>
-						</div>
-					{:else}
-						<span class="sn-field-label" id="emailSubject-ro-label">Email Subject</span>
-						<div class="sn-field-control" role="group" aria-labelledby="emailSubject-ro-label">
-							{#if form.emailSubject?.trim()}
-								<p class={readonlyValueClass}>{form.emailSubject}</p>
-							{:else}
-								<p class={readonlyEmptyClass}>Not set</p>
-							{/if}
-						</div>
-					{/if}
-				</div>
+				</button>
+			</div>
 
-				{#if subjectDetectSummary}
-					<div
-						class="mb-4 mt-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs text-sky-950 dark:border-sky-700/50 dark:bg-sky-950/40 dark:text-sky-100"
-						role="status"
-					>
-						<p class="font-semibold text-sky-900 dark:text-sky-100">Detected from email subject</p>
-						<p class="mt-1 leading-snug opacity-95">{subjectDetectSummary}</p>
-						<div class="mt-2 flex flex-wrap gap-1.5">
-							<button
-								type="button"
-								class="rounded-md border border-sky-300 bg-white px-2.5 py-1 text-xs font-medium text-sky-900 hover:bg-sky-100 {footerBtnFocus} dark:border-sky-600 dark:bg-sky-900 dark:text-sky-50"
-								onclick={applyAllFromSubject}
+			<div
+				id="incident-panel-details"
+				role="tabpanel"
+				aria-labelledby="incident-tab-details"
+				hidden={formTab !== 'details'}
+			>
+				<section class="mb-8" aria-labelledby="section-details-heading">
+					<h3 id="section-details-heading" class="sn-section-title">Details</h3>
+					<div class="sn-field-row">
+						<label for="referenceNo" class="sn-field-label">Reference No.</label>
+						<div class="sn-field-control">
+							<input
+								id="referenceNo"
+								type="text"
+								bind:value={form.referenceNo}
+								class="{inputClass} text-accent-600"
+							/>
+						</div>
+					</div>
+					<div class="sn-field-row">
+						{#if emailFieldsEditable}
+							<label for="emailSender" class="sn-field-label">Email Sender</label>
+							<div class="sn-field-control">
+								<input
+									id="emailSender"
+									type="text"
+									bind:value={form.emailSender}
+									class={inputClass}
+								/>
+							</div>
+						{:else}
+							<span class="sn-field-label" id="emailSender-ro-label">Email Sender</span>
+							<div class="sn-field-control" role="group" aria-labelledby="emailSender-ro-label">
+								{#if form.emailSender?.trim()}
+									<p class={readonlyValueClass}>{form.emailSender}</p>
+								{:else}
+									<p class={readonlyEmptyClass}>Not set</p>
+								{/if}
+							</div>
+						{/if}
+					</div>
+					<div class="sn-field-row">
+						{#if emailFieldsEditable}
+							<label for="emailSubject" class="sn-field-label">Email Subject</label>
+							<div class="sn-field-control">
+								<input
+									id="emailSubject"
+									type="text"
+									bind:value={form.emailSubject}
+									class={inputClass}
+									placeholder="SOD Disputed Delivery: 72956318 N22226 Menai DRIVER - Street"
+								/>
+							</div>
+						{:else}
+							<span class="sn-field-label" id="emailSubject-ro-label">Email Subject</span>
+							<div class="sn-field-control" role="group" aria-labelledby="emailSubject-ro-label">
+								{#if form.emailSubject?.trim()}
+									<p class={readonlyValueClass}>{form.emailSubject}</p>
+								{:else}
+									<p class={readonlyEmptyClass}>Not set</p>
+								{/if}
+							</div>
+						{/if}
+					</div>
+
+					<div class="sn-field-row">
+						<span id="receivedAt-label" class="sn-field-label">
+							Email received <span class="text-red-600">*</span>
+						</span>
+						<div class="sn-field-control">
+							<span id="receivedAt-desc" class="sr-only">{receivedAtDesc}</span>
+							<p class="mb-1.5 text-xs text-warm-500" id="receivedAt-help">
+								Date and time the email was received (stored as date + time on the incident).
+							</p>
+							<div
+								class={dateTimeControlClass}
+								role="group"
+								aria-labelledby="receivedAt-label"
+								aria-describedby="receivedAt-help {receivedAtDescribedBy}"
 							>
-								Apply all matched fields
-							</button>
-							{#if subjectParsed?.referenceNo}
+								<div
+									class={dateFieldWrapClass}
+									data-datetime-wrap
+									bind:this={dateReceivedWrapEl}
+								>
+									<input
+										id="receivedAt"
+										type="text"
+										placeholder="yyyy-mm-dd"
+										autocomplete="off"
+										spellcheck="false"
+										bind:value={form.dateReceived}
+										aria-labelledby="receivedAt-label receivedAt-date-hint"
+										aria-describedby={receivedAtDescribedBy}
+										aria-required="true"
+										aria-invalid={submitErrorField === 'dateReceived' ? 'true' : undefined}
+										class={dateTextClass}
+										onkeydown={(e) => onDateTextKeydown('dateReceived', e)}
+										onblur={() => onDateTextBlur('dateReceived')}
+									/>
+									{@render dateTimeCalendarButton(
+										'dateReceived',
+										'Open date picker for email received date'
+									)}
+									<DatePickerPopover
+										open={openDatePickerField === 'dateReceived'}
+										value={form.dateReceived}
+										title="Email received date"
+										idPrefix="receivedAt-date-picker"
+										anchorEl={dateReceivedWrapEl}
+										onApply={(d) => applyDatePicker('dateReceived', d)}
+										onClose={closeDatePicker}
+									/>
+								</div>
+								<span id="receivedAt-date-hint" class="sr-only">Date</span>
+								<div
+									class={timeFieldWrapClass}
+									data-datetime-wrap
+									bind:this={timeReceivedWrapEl}
+								>
+									<input
+										id="receivedAt-time"
+										type="time"
+										bind:value={form.time}
+										aria-labelledby="receivedAt-label receivedAt-time-hint"
+										aria-describedby="receivedAt-desc receivedAt-help"
+										class={nativeTimeClass}
+										onclick={(e) => openTimePicker('time', e)}
+									/>
+									{@render dateTimeClockButton('time', 'Open time picker for email received time')}
+									<TimePickerPopover
+										open={openTimePickerField === 'time'}
+										value={form.time}
+										title="Email received time"
+										idPrefix="receivedAt-time-picker"
+										anchorEl={timeReceivedWrapEl}
+										onApply={(t) => applyTimePicker('time', t)}
+										onClose={closeTimePicker}
+									/>
+								</div>
+								<span id="receivedAt-time-hint" class="sr-only">Time (email received)</span>
+							</div>
+						</div>
+					</div>
+				</section>
+
+				<section class="mb-8" aria-labelledby="section-classification-heading">
+					<h3 id="section-classification-heading" class="sn-section-title">Classification</h3>
+					<div class="sn-field-row">
+						<label for="action" class="sn-field-label">
+							Action Status <span class="text-red-600">*</span>
+						</label>
+						<div class="sn-field-control">
+							<select
+								id="action"
+								value={form.actionId ?? FK_EMPTY}
+								onchange={(e) => setFkField('actionId', e.currentTarget.value)}
+								aria-required="true"
+								aria-invalid={submitErrorField === 'action' ? 'true' : undefined}
+								aria-describedby={submitErrorField === 'action' ? 'incident-submit-error' : undefined}
+								class="{inputClass} uppercase"
+							>
+								<option value={FK_EMPTY} disabled hidden={!!form.actionId}>
+									— Select action status —
+								</option>
+								{#if form.actionId && !fkInList(form.actionId, incidentActions)}
+									<option value={form.actionId}>{incident?.action ?? 'Current action status'}</option>
+								{/if}
+								{#each incidentActions as a}<option value={a.id} class="uppercase">{a.name}</option>{/each}
+							</select>
+						</div>
+					</div>
+					<div class="sn-field-row">
+						<label for="type" class="sn-field-label">Type <span class="text-red-600">*</span></label>
+						<div class="sn-field-control">
+							<select
+								id="type"
+								value={form.typeId ?? FK_EMPTY}
+								onchange={(e) => setFkField('typeId', e.currentTarget.value)}
+								aria-required="true"
+								aria-invalid={submitErrorField === 'type' ? 'true' : undefined}
+								aria-describedby={submitErrorField === 'type' ? 'incident-submit-error' : undefined}
+								class="{inputClass} uppercase"
+							>
+								<option value={FK_EMPTY} disabled hidden={!!form.typeId}>
+									— Select type —
+								</option>
+								{#if form.typeId && !fkInList(form.typeId, incidentTypes)}
+									<option value={form.typeId}>{incident?.type ?? 'Current type'}</option>
+								{/if}
+								{#each incidentTypes as t}<option value={t.id} class="uppercase">{t.name}</option>{/each}
+							</select>
+						</div>
+					</div>
+					<div class="sn-field-row">
+						<span class="sn-field-label" id="priority-label">Priority</span>
+						<div
+							class="sn-field-control flex flex-wrap gap-2"
+							role="radiogroup"
+							aria-labelledby="priority-label"
+						>
+							{#each INCIDENT_PRIORITIES as p (p)}
+								<label
+									class="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium uppercase transition {form.marked ===
+									p
+										? `${getPriorityPillClass(p)} ring-2 ring-accent-500 ring-offset-1`
+										: 'border-warm-200 bg-white text-warm-700 hover:bg-warm-50 dark:bg-warm-200'}"
+								>
+									<input
+										type="radio"
+										name="incident-priority"
+										value={p}
+										checked={form.marked === p}
+										class="h-3.5 w-3.5 shrink-0 accent-accent-600"
+										onchange={() => {
+											form.marked = p;
+										}}
+									/>
+									<span>{p}</span>
+								</label>
+							{/each}
+						</div>
+					</div>
+				</section>
+
+				<section class="mb-8" aria-labelledby="section-assignment-heading">
+					<h3 id="section-assignment-heading" class="sn-section-title">Assignment</h3>
+					<div class="sn-field-row">
+						<label for="sender" class="sn-field-label">Sender</label>
+						<div class="sn-field-control">
+							<input id="sender" type="text" bind:value={form.sender} class={inputClass} />
+						</div>
+					</div>
+					<div class="sn-field-row">
+						<label for="teamLeader" class="sn-field-label">Team Leader</label>
+						<div class="sn-field-control">
+							<select
+								id="teamLeader"
+								value={form.teamLeaderId ?? FK_EMPTY}
+								onchange={(e) => setFkField('teamLeaderId', e.currentTarget.value)}
+								class={inputClass}
+							>
+								<option value={FK_EMPTY}>— None —</option>
+								{#if form.teamLeaderId && !fkInList(form.teamLeaderId, teamLeaders)}
+									<option value={form.teamLeaderId}>{incident?.teamLeader ?? 'Current team leader'}</option>
+								{/if}
+								{#each teamLeaders as tl}<option value={tl.id}>{tl.name}</option>{/each}
+							</select>
+						</div>
+					</div>
+					<div class="sn-field-row">
+						<label for="driver" class="sn-field-label">Driver</label>
+						<div class="sn-field-control">
+							<select
+								id="driver"
+								value={form.driverId ?? FK_EMPTY}
+								onchange={(e) => setFkField('driverId', e.currentTarget.value)}
+								class={inputClass}
+							>
+								<option value={FK_EMPTY}>— None —</option>
+								{#if form.driverId && !fkInList(form.driverId, drivers)}
+									<option value={form.driverId}>{incident?.driver ?? 'Current driver'}</option>
+								{/if}
+								{#each drivers as d}<option value={d.id}>{d.username}</option>{/each}
+							</select>
+						</div>
+					</div>
+				</section>
+
+				<section class="mb-2" aria-labelledby="section-response-heading">
+					<h3 id="section-response-heading" class="sn-section-title">Response</h3>
+					<div class="sn-field-row">
+						<label for="response" class="sn-field-label">Responded By</label>
+						<div class="sn-field-control">
+							<select
+								id="response"
+								value={form.response || FK_EMPTY}
+								onchange={(e) => {
+									form.response = e.currentTarget.value;
+								}}
+								class={inputClass}
+							>
+								<option value={FK_EMPTY}>— Select —</option>
+								{#if form.response && !respondedByOptions.some((o) => o.name === form.response)}
+									<option value={form.response}>{form.response}</option>
+								{/if}
+								{#each respondedByOptions as opt (opt.id)}
+									<option value={opt.name}>{opt.name}</option>
+								{/each}
+							</select>
+						</div>
+					</div>
+					<div class="sn-field-row">
+						<span id="respondedAt-label" class="sn-field-label">Responded</span>
+						<div class="sn-field-control">
+							<span id="respondedAt-desc" class="sr-only">{respondedAtDesc}</span>
+							<div class={dateTimeControlClass} role="group" aria-labelledby="respondedAt-label">
+								<div
+									class={dateFieldWrapClass}
+									data-datetime-wrap
+									bind:this={dateResponseWrapEl}
+								>
+									<input
+										id="respondedAt"
+										type="text"
+										placeholder="yyyy-mm-dd"
+										autocomplete="off"
+										spellcheck="false"
+										bind:value={form.dateResponse}
+										aria-labelledby="respondedAt-label respondedAt-date-hint"
+										aria-describedby={respondedAtDescribedBy}
+										aria-invalid={submitErrorField === 'dateResponse' ? 'true' : undefined}
+										class={dateTextClass}
+										onkeydown={(e) => onDateTextKeydown('dateResponse', e)}
+										onblur={() => onDateTextBlur('dateResponse')}
+									/>
+									{@render dateTimeCalendarButton(
+										'dateResponse',
+										'Open date picker for responded'
+									)}
+									<DatePickerPopover
+										open={openDatePickerField === 'dateResponse'}
+										value={form.dateResponse}
+										title="Date responded"
+										idPrefix="respondedAt-date-picker"
+										anchorEl={dateResponseWrapEl}
+										onApply={(d) => applyDatePicker('dateResponse', d)}
+										onClose={closeDatePicker}
+									/>
+								</div>
+								<span id="respondedAt-date-hint" class="sr-only">Date</span>
+								<div
+									class={timeFieldWrapClass}
+									data-datetime-wrap
+									bind:this={timeResponseWrapEl}
+								>
+									<input
+										id="respondedAt-time"
+										type="time"
+										bind:value={form.timeResponse}
+										aria-labelledby="respondedAt-label respondedAt-time-hint"
+										aria-describedby="respondedAt-desc"
+										class={nativeTimeClass}
+										onclick={(e) => openTimePicker('timeResponse', e)}
+									/>
+									{@render dateTimeClockButton('timeResponse', 'Open time picker for responded')}
+									<TimePickerPopover
+										open={openTimePickerField === 'timeResponse'}
+										value={form.timeResponse}
+										title="Time responded"
+										idPrefix="respondedAt-time-picker"
+										anchorEl={timeResponseWrapEl}
+										onApply={(t) => applyTimePicker('timeResponse', t)}
+										onClose={closeTimePicker}
+									/>
+								</div>
+								<span id="respondedAt-time-hint" class="sr-only">Time</span>
+							</div>
+						</div>
+					</div>
+				</section>
+			</div>
+
+			<div
+				id="incident-panel-map"
+				role="tabpanel"
+				aria-labelledby="incident-tab-map"
+				hidden={formTab !== 'map'}
+			>
+				<section class="mb-8" aria-labelledby="section-subject-detect-heading">
+					<h3 id="section-subject-detect-heading" class="sn-section-title">
+						Detected from email subject
+					</h3>
+					<p class="mb-3 text-xs leading-snug text-warm-500">
+						Parsed from the Email Subject on the Details tab. Use the buttons below to apply
+						matched reference, type, driver, or location into the form.
+					</p>
+					{#if subjectDetectSummary}
+						<div
+							class="rounded-md border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs text-sky-950 dark:border-sky-700/50 dark:bg-sky-950/40 dark:text-sky-100"
+							role="status"
+						>
+							<p class="font-semibold text-sky-900 dark:text-sky-100">Matched fields</p>
+							<p class="mt-1 leading-snug opacity-95">{subjectDetectSummary}</p>
+							<div class="mt-2 flex flex-wrap gap-1.5">
 								<button
 									type="button"
-									class="rounded-md border border-sky-200 bg-white/80 px-2 py-1 text-xs text-sky-900 hover:bg-sky-100 {footerBtnFocus} dark:border-sky-700 dark:bg-sky-900/80 dark:text-sky-100"
-									onclick={applySubjectReference}
+									class="rounded-md border border-sky-300 bg-white px-2.5 py-1 text-xs font-medium text-sky-900 hover:bg-sky-100 {footerBtnFocus} dark:border-sky-600 dark:bg-sky-900 dark:text-sky-50"
+									onclick={applyAllFromSubject}
 								>
-									Ref
+									Apply all matched fields
 								</button>
+								{#if subjectParsed?.referenceNo}
+									<button
+										type="button"
+										class="rounded-md border border-sky-200 bg-white/80 px-2 py-1 text-xs text-sky-900 hover:bg-sky-100 {footerBtnFocus} dark:border-sky-700 dark:bg-sky-900/80 dark:text-sky-100"
+										onclick={applySubjectReference}
+									>
+										Ref
+									</button>
+								{/if}
+								{#if subjectMatchedType}
+									<button
+										type="button"
+										class="rounded-md border border-sky-200 bg-white/80 px-2 py-1 text-xs text-sky-900 hover:bg-sky-100 {footerBtnFocus} dark:border-sky-700 dark:bg-sky-900/80 dark:text-sky-100"
+										onclick={applySubjectType}
+									>
+										Type
+									</button>
+								{/if}
+								{#if subjectMatchedDriver}
+									<button
+										type="button"
+										class="rounded-md border border-sky-200 bg-white/80 px-2 py-1 text-xs text-sky-900 hover:bg-sky-100 {footerBtnFocus} dark:border-sky-700 dark:bg-sky-900/80 dark:text-sky-100"
+										onclick={applySubjectDriver}
+									>
+										Driver
+									</button>
+								{/if}
+								{#if subjectParsed?.suburb}
+									<button
+										type="button"
+										class="rounded-md border border-sky-200 bg-white/80 px-2 py-1 text-xs text-sky-900 hover:bg-sky-100 {footerBtnFocus} dark:border-sky-700 dark:bg-sky-900/80 dark:text-sky-100"
+										onclick={applySubjectLocation}
+									>
+										Location
+									</button>
+								{/if}
+							</div>
+							{#if subjectParsed?.typeName && !subjectMatchedType}
+								<p class="mt-1.5 text-[11px] text-amber-800 dark:text-amber-200">
+									Type “{subjectParsed.typeName}” is not in the type list — pick the closest
+									manually or add it under Admin.
+								</p>
 							{/if}
-							{#if subjectMatchedType}
-								<button
-									type="button"
-									class="rounded-md border border-sky-200 bg-white/80 px-2 py-1 text-xs text-sky-900 hover:bg-sky-100 {footerBtnFocus} dark:border-sky-700 dark:bg-sky-900/80 dark:text-sky-100"
-									onclick={applySubjectType}
-								>
-									Type
-								</button>
-							{/if}
-							{#if subjectMatchedDriver}
-								<button
-									type="button"
-									class="rounded-md border border-sky-200 bg-white/80 px-2 py-1 text-xs text-sky-900 hover:bg-sky-100 {footerBtnFocus} dark:border-sky-700 dark:bg-sky-900/80 dark:text-sky-100"
-									onclick={applySubjectDriver}
-								>
-									Driver
-								</button>
-							{/if}
-							{#if subjectParsed?.suburb}
-								<button
-									type="button"
-									class="rounded-md border border-sky-200 bg-white/80 px-2 py-1 text-xs text-sky-900 hover:bg-sky-100 {footerBtnFocus} dark:border-sky-700 dark:bg-sky-900/80 dark:text-sky-100"
-									onclick={applySubjectLocation}
-								>
-									Location
-								</button>
+							{#if subjectParsed?.driver && !subjectMatchedDriver}
+								<p class="mt-1 text-[11px] text-amber-800 dark:text-amber-200">
+									Driver “{subjectParsed.driver}” is not in the team list — add them under Team
+									or assign manually.
+								</p>
 							{/if}
 						</div>
-						{#if subjectParsed?.typeName && !subjectMatchedType}
-							<p class="mt-1.5 text-[11px] text-amber-800 dark:text-amber-200">
-								Type “{subjectParsed.typeName}” is not in the type list — pick the closest
-								manually or add it under Admin.
-							</p>
-						{/if}
-						{#if subjectParsed?.driver && !subjectMatchedDriver}
-							<p class="mt-1 text-[11px] text-amber-800 dark:text-amber-200">
-								Driver “{subjectParsed.driver}” is not in the team list — add them under Team
-								or assign manually.
-							</p>
-						{/if}
-					</div>
-				{/if}
+					{:else}
+						<p
+							class="rounded-md border border-warm-200 bg-warm-50 px-3 py-2.5 text-xs text-warm-600 dark:bg-warm-200/40"
+						>
+							No parseable matches yet. Set or edit the email subject on the Details tab (when
+							editable), then return here to apply detected reference, type, driver, or location.
+						</p>
+					{/if}
+				</section>
 
-				<div class="mb-2 mt-6" role="group" aria-labelledby="section-location-heading">
+				<section class="mb-2" aria-labelledby="section-location-heading">
 					<h3 id="section-location-heading" class="sn-section-title">Map location (NSW)</h3>
 					<p class="mb-3 text-xs leading-snug text-warm-500" id="location-status">
 						{locationStatusText}
 					</p>
 					{#if subjectParsedLocation && !hasManualLocation}
-						<p class="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-700/50 dark:bg-sky-950/40 dark:text-sky-100">
+						<p
+							class="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-700/50 dark:bg-sky-950/40 dark:text-sky-100"
+						>
 							Detected from email subject:
 							<strong>
 								{subjectParsedLocation.street
@@ -864,7 +1248,9 @@
 							— use <em>Apply</em> above or edit the fields below.
 						</p>
 					{:else if !subjectParsedLocation && !hasManualLocation}
-						<p class="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-100">
+						<p
+							class="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-100"
+						>
 							Location undetermined from the email subject. Enter a suburb (street optional)
 							so this incident appears on the dashboard map.
 						</p>
@@ -922,304 +1308,8 @@
 							{/if}
 						</div>
 					</div>
-				</div>
-
-				<div class="sn-field-row">
-					<span id="receivedAt-label" class="sn-field-label">
-						Email received <span class="text-red-600">*</span>
-					</span>
-					<div class="sn-field-control">
-						<span id="receivedAt-desc" class="sr-only">{receivedAtDesc}</span>
-						<p class="mb-1.5 text-xs text-warm-500" id="receivedAt-help">
-							Date and time the email was received (stored as date + time on the incident).
-						</p>
-						<div
-							class={dateTimeControlClass}
-							role="group"
-							aria-labelledby="receivedAt-label"
-							aria-describedby="receivedAt-help {receivedAtDescribedBy}"
-						>
-							<div
-								class={dateFieldWrapClass}
-								data-datetime-wrap
-								bind:this={dateReceivedWrapEl}
-							>
-								<input
-									id="receivedAt"
-									type="text"
-									placeholder="yyyy-mm-dd"
-									autocomplete="off"
-									spellcheck="false"
-									bind:value={form.dateReceived}
-									aria-labelledby="receivedAt-label receivedAt-date-hint"
-									aria-describedby={receivedAtDescribedBy}
-									aria-required="true"
-									aria-invalid={submitErrorField === 'dateReceived' ? 'true' : undefined}
-									class={dateTextClass}
-									onkeydown={(e) => onDateTextKeydown('dateReceived', e)}
-									onblur={() => onDateTextBlur('dateReceived')}
-								/>
-								{@render dateTimeCalendarButton(
-									'dateReceived',
-									'Open date picker for email received date'
-								)}
-								<DatePickerPopover
-									open={openDatePickerField === 'dateReceived'}
-									value={form.dateReceived}
-									title="Email received date"
-									idPrefix="receivedAt-date-picker"
-									anchorEl={dateReceivedWrapEl}
-									onApply={(d) => applyDatePicker('dateReceived', d)}
-									onClose={closeDatePicker}
-								/>
-							</div>
-							<span id="receivedAt-date-hint" class="sr-only">Date</span>
-							<div
-								class={timeFieldWrapClass}
-								data-datetime-wrap
-								bind:this={timeReceivedWrapEl}
-							>
-								<input
-									id="receivedAt-time"
-									type="time"
-									bind:value={form.time}
-									aria-labelledby="receivedAt-label receivedAt-time-hint"
-									aria-describedby="receivedAt-desc receivedAt-help"
-									class={nativeTimeClass}
-									onclick={(e) => openTimePicker('time', e)}
-								/>
-								{@render dateTimeClockButton('time', 'Open time picker for email received time')}
-								<TimePickerPopover
-									open={openTimePickerField === 'time'}
-									value={form.time}
-									title="Email received time"
-									idPrefix="receivedAt-time-picker"
-									anchorEl={timeReceivedWrapEl}
-									onApply={(t) => applyTimePicker('time', t)}
-									onClose={closeTimePicker}
-								/>
-							</div>
-							<span id="receivedAt-time-hint" class="sr-only">Time (email received)</span>
-						</div>
-					</div>
-				</div>
-			</section>
-
-			<section class="mb-8" aria-labelledby="section-classification-heading">
-				<h3 id="section-classification-heading" class="sn-section-title">Classification</h3>
-				<div class="sn-field-row">
-					<label for="action" class="sn-field-label">
-						Action Status <span class="text-red-600">*</span>
-					</label>
-					<div class="sn-field-control">
-						<select
-							id="action"
-							value={form.actionId ?? FK_EMPTY}
-							onchange={(e) => setFkField('actionId', e.currentTarget.value)}
-							aria-required="true"
-							aria-invalid={submitErrorField === 'action' ? 'true' : undefined}
-							aria-describedby={submitErrorField === 'action' ? 'incident-submit-error' : undefined}
-							class="{inputClass} uppercase"
-						>
-							<option value={FK_EMPTY} disabled hidden={!!form.actionId}>
-								— Select action status —
-							</option>
-							{#if form.actionId && !fkInList(form.actionId, incidentActions)}
-								<option value={form.actionId}>{incident?.action ?? 'Current action status'}</option>
-							{/if}
-							{#each incidentActions as a}<option value={a.id} class="uppercase">{a.name}</option>{/each}
-						</select>
-					</div>
-				</div>
-				<div class="sn-field-row">
-					<label for="type" class="sn-field-label">Type <span class="text-red-600">*</span></label>
-					<div class="sn-field-control">
-						<select
-							id="type"
-							value={form.typeId ?? FK_EMPTY}
-							onchange={(e) => setFkField('typeId', e.currentTarget.value)}
-							aria-required="true"
-							aria-invalid={submitErrorField === 'type' ? 'true' : undefined}
-							aria-describedby={submitErrorField === 'type' ? 'incident-submit-error' : undefined}
-							class="{inputClass} uppercase"
-						>
-							<option value={FK_EMPTY} disabled hidden={!!form.typeId}>
-								— Select type —
-							</option>
-							{#if form.typeId && !fkInList(form.typeId, incidentTypes)}
-								<option value={form.typeId}>{incident?.type ?? 'Current type'}</option>
-							{/if}
-							{#each incidentTypes as t}<option value={t.id} class="uppercase">{t.name}</option>{/each}
-						</select>
-					</div>
-				</div>
-				<div class="sn-field-row">
-					<span class="sn-field-label" id="priority-label">Priority</span>
-					<div
-						class="sn-field-control flex flex-wrap gap-2"
-						role="radiogroup"
-						aria-labelledby="priority-label"
-					>
-						{#each INCIDENT_PRIORITIES as p (p)}
-							<label
-								class="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium uppercase transition {form.marked ===
-								p
-									? `${getPriorityPillClass(p)} ring-2 ring-accent-500 ring-offset-1`
-									: 'border-warm-200 bg-white text-warm-700 hover:bg-warm-50 dark:bg-warm-200'}"
-							>
-								<input
-									type="radio"
-									name="incident-priority"
-									value={p}
-									checked={form.marked === p}
-									class="h-3.5 w-3.5 shrink-0 accent-accent-600"
-									onchange={() => {
-										form.marked = p;
-									}}
-								/>
-								<span>{p}</span>
-							</label>
-						{/each}
-					</div>
-				</div>
-			</section>
-
-			<section class="mb-8" aria-labelledby="section-assignment-heading">
-				<h3 id="section-assignment-heading" class="sn-section-title">Assignment</h3>
-				<div class="sn-field-row">
-					<label for="sender" class="sn-field-label">Sender</label>
-					<div class="sn-field-control">
-						<input id="sender" type="text" bind:value={form.sender} class={inputClass} />
-					</div>
-				</div>
-				<div class="sn-field-row">
-					<label for="teamLeader" class="sn-field-label">Team Leader</label>
-					<div class="sn-field-control">
-						<select
-							id="teamLeader"
-							value={form.teamLeaderId ?? FK_EMPTY}
-							onchange={(e) => setFkField('teamLeaderId', e.currentTarget.value)}
-							class={inputClass}
-						>
-							<option value={FK_EMPTY}>— None —</option>
-							{#if form.teamLeaderId && !fkInList(form.teamLeaderId, teamLeaders)}
-								<option value={form.teamLeaderId}>{incident?.teamLeader ?? 'Current team leader'}</option>
-							{/if}
-							{#each teamLeaders as tl}<option value={tl.id}>{tl.name}</option>{/each}
-						</select>
-					</div>
-				</div>
-				<div class="sn-field-row">
-					<label for="driver" class="sn-field-label">Driver</label>
-					<div class="sn-field-control">
-						<select
-							id="driver"
-							value={form.driverId ?? FK_EMPTY}
-							onchange={(e) => setFkField('driverId', e.currentTarget.value)}
-							class={inputClass}
-						>
-							<option value={FK_EMPTY}>— None —</option>
-							{#if form.driverId && !fkInList(form.driverId, drivers)}
-								<option value={form.driverId}>{incident?.driver ?? 'Current driver'}</option>
-							{/if}
-							{#each drivers as d}<option value={d.id}>{d.username}</option>{/each}
-						</select>
-					</div>
-				</div>
-			</section>
-
-			<section class="mb-2" aria-labelledby="section-response-heading">
-				<h3 id="section-response-heading" class="sn-section-title">Response</h3>
-				<div class="sn-field-row">
-					<label for="response" class="sn-field-label">Responded By</label>
-					<div class="sn-field-control">
-						<select
-							id="response"
-							value={form.response || FK_EMPTY}
-							onchange={(e) => {
-								form.response = e.currentTarget.value;
-							}}
-							class={inputClass}
-						>
-							<option value={FK_EMPTY}>— Select —</option>
-							{#if form.response && !respondedByOptions.some((o) => o.name === form.response)}
-								<option value={form.response}>{form.response}</option>
-							{/if}
-							{#each respondedByOptions as opt (opt.id)}
-								<option value={opt.name}>{opt.name}</option>
-							{/each}
-						</select>
-					</div>
-				</div>
-				<div class="sn-field-row">
-					<span id="respondedAt-label" class="sn-field-label">Responded</span>
-					<div class="sn-field-control">
-						<span id="respondedAt-desc" class="sr-only">{respondedAtDesc}</span>
-						<div class={dateTimeControlClass} role="group" aria-labelledby="respondedAt-label">
-							<div
-								class={dateFieldWrapClass}
-								data-datetime-wrap
-								bind:this={dateResponseWrapEl}
-							>
-								<input
-									id="respondedAt"
-									type="text"
-									placeholder="yyyy-mm-dd"
-									autocomplete="off"
-									spellcheck="false"
-									bind:value={form.dateResponse}
-									aria-labelledby="respondedAt-label respondedAt-date-hint"
-									aria-describedby={respondedAtDescribedBy}
-									aria-invalid={submitErrorField === 'dateResponse' ? 'true' : undefined}
-									class={dateTextClass}
-									onkeydown={(e) => onDateTextKeydown('dateResponse', e)}
-									onblur={() => onDateTextBlur('dateResponse')}
-								/>
-								{@render dateTimeCalendarButton(
-									'dateResponse',
-									'Open date picker for responded'
-								)}
-								<DatePickerPopover
-									open={openDatePickerField === 'dateResponse'}
-									value={form.dateResponse}
-									title="Date responded"
-									idPrefix="respondedAt-date-picker"
-									anchorEl={dateResponseWrapEl}
-									onApply={(d) => applyDatePicker('dateResponse', d)}
-									onClose={closeDatePicker}
-								/>
-							</div>
-							<span id="respondedAt-date-hint" class="sr-only">Date</span>
-							<div
-								class={timeFieldWrapClass}
-								data-datetime-wrap
-								bind:this={timeResponseWrapEl}
-							>
-								<input
-									id="respondedAt-time"
-									type="time"
-									bind:value={form.timeResponse}
-									aria-labelledby="respondedAt-label respondedAt-time-hint"
-									aria-describedby="respondedAt-desc"
-									class={nativeTimeClass}
-									onclick={(e) => openTimePicker('timeResponse', e)}
-								/>
-								{@render dateTimeClockButton('timeResponse', 'Open time picker for responded')}
-								<TimePickerPopover
-									open={openTimePickerField === 'timeResponse'}
-									value={form.timeResponse}
-									title="Time responded"
-									idPrefix="respondedAt-time-picker"
-									anchorEl={timeResponseWrapEl}
-									onApply={(t) => applyTimePicker('timeResponse', t)}
-									onClose={closeTimePicker}
-								/>
-							</div>
-							<span id="respondedAt-time-hint" class="sr-only">Time</span>
-						</div>
-					</div>
-				</div>
-			</section>
+				</section>
+			</div>
 		</div>
 	</div>
 
@@ -1280,3 +1370,40 @@
 		</div>
 	</footer>
 </form>
+
+<style>
+	.incident-form-tab {
+		position: relative;
+		bottom: -1px;
+		padding: 0.55rem 1rem;
+		background: transparent;
+		border: 1px solid transparent;
+		border-bottom: none;
+		border-radius: 0.5rem 0.5rem 0 0;
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--color-warm-500, #78716c);
+		cursor: pointer;
+		transition:
+			color 0.15s,
+			background 0.15s,
+			border-color 0.15s;
+	}
+	.incident-form-tab:hover {
+		color: var(--color-warm-800, #292524);
+	}
+	.incident-form-tab.active {
+		color: var(--color-accent-600, #038676);
+		background: white;
+		border-color: var(--color-warm-200, #e7e5e4);
+		box-shadow: 0 -1px 2px rgb(0 0 0 / 0.04);
+	}
+	:global(.dark) .incident-form-tab.active {
+		background: var(--color-warm-100, #1c1917);
+		border-color: var(--color-warm-300, #44403c);
+	}
+	.incident-form-tab:focus-visible {
+		outline: 2px solid var(--color-accent-500, #0d9488);
+		outline-offset: 2px;
+	}
+</style>
