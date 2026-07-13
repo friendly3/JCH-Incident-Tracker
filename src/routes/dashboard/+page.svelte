@@ -832,16 +832,17 @@
 		chart.update('none');
 	}
 
-	/** Horizontal bar: incidents per resolution status. */
+	/** Vertical bar: incidents per resolution status. */
 	function buildActionStatusBarOptions(
 		colors: ReturnType<typeof getChartTheme>
 	): ChartOptions<'bar'> {
 		return {
 			responsive: true,
 			maintainAspectRatio: false,
-			indexAxis: 'y',
+			// Default indexAxis 'x' → vertical columns
 			layout: {
-				padding: { top: 4, right: 36, left: 4, bottom: 4 }
+				// Room above bars for value labels
+				padding: { top: 18, right: 8, left: 4, bottom: 4 }
 			},
 			plugins: {
 				legend: {
@@ -861,15 +862,15 @@
 					displayColors: true,
 					callbacks: {
 						label: (context) => {
-							const value = context.parsed.x ?? 0;
+							const value = context.parsed.y ?? 0;
 							return `${value} ${value === 1 ? 'incident' : 'incidents'}`;
 						}
 					}
 				},
 				datalabels: {
 					anchor: 'end',
-					align: 'right',
-					offset: 4,
+					align: 'top',
+					offset: 2,
 					clamp: false,
 					clip: false,
 					display: (context) => {
@@ -885,9 +886,9 @@
 				}
 			},
 			scales: {
-				x: {
+				y: {
 					beginAtZero: true,
-					grace: '12%',
+					grace: '18%',
 					ticks: {
 						color: colors.ticks,
 						stepSize: 1,
@@ -898,10 +899,13 @@
 						color: colors.grid
 					}
 				},
-				y: {
+				x: {
 					ticks: {
 						color: colors.ticks,
-						font: { size: 12, weight: 600 }
+						font: { size: 11, weight: 600 },
+						maxRotation: 40,
+						minRotation: 0,
+						autoSkip: false
 					},
 					grid: {
 						display: false
@@ -925,12 +929,12 @@
 				? getUnassignedChartColor(isDark)
 				: getActionStatusChartColor(label, isDark)
 		);
-		// 70% fill opacity; solid border keeps status colour readable
+		// 70% fill opacity; solid border keeps status colour readable (same palette as before)
 		dataset.backgroundColor = solid.map((c) => withAlpha(c, 0.7));
 		dataset.borderColor = solid;
 		dataset.borderWidth = 1.5;
 		dataset.borderRadius = 4;
-		dataset.barPercentage = 0.75;
+		dataset.barPercentage = 0.7;
 		dataset.categoryPercentage = 0.8;
 
 		if (chart.options?.plugins?.datalabels) {
@@ -944,14 +948,14 @@
 			chart.options.plugins.tooltip.titleColor = colors.tooltipTitle;
 			chart.options.plugins.tooltip.bodyColor = colors.tooltipTitle;
 		}
-		if (chart.options?.scales?.x?.ticks) {
-			chart.options.scales.x.ticks.color = colors.ticks;
-		}
-		if (chart.options?.scales?.x?.grid) {
-			chart.options.scales.x.grid.color = colors.grid;
-		}
 		if (chart.options?.scales?.y?.ticks) {
 			chart.options.scales.y.ticks.color = colors.ticks;
+		}
+		if (chart.options?.scales?.y?.grid) {
+			chart.options.scales.y.grid.color = colors.grid;
+		}
+		if (chart.options?.scales?.x?.ticks) {
+			chart.options.scales.x.ticks.color = colors.ticks;
 		}
 		chart.update('none');
 	}
@@ -2034,7 +2038,7 @@
 							<p id="action-status-bar-summary" class="sr-only">{actionStatusAriaLabel}</p>
 							<div
 								class="w-full overflow-visible"
-								style="position: relative; height: {Math.max(140, incidentsByActionStatus.length * 36 + 48)}px; min-height: 140px;"
+								style="position: relative; height: 11.5rem; min-height: 11.5rem;"
 							>
 								{#if !hasActionStatusData}
 									<div class="flex h-full items-center justify-center">
