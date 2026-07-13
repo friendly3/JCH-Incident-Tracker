@@ -841,8 +841,8 @@
 			maintainAspectRatio: false,
 			// Default indexAxis 'x' → vertical columns
 			layout: {
-				// Room above bars for value labels
-				padding: { top: 18, right: 8, left: 4, bottom: 4 }
+				// Compact plot (summary row is short)
+				padding: { top: 10, right: 4, left: 2, bottom: 0 }
 			},
 			plugins: {
 				legend: {
@@ -855,9 +855,9 @@
 					backgroundColor: colors.tooltipBg,
 					titleColor: colors.tooltipTitle,
 					bodyColor: colors.tooltipTitle,
-					titleFont: { size: 13, weight: 'bold' },
-					bodyFont: { size: 12 },
-					padding: 10,
+					titleFont: { size: 12, weight: 'bold' },
+					bodyFont: { size: 11 },
+					padding: 8,
 					cornerRadius: 8,
 					displayColors: true,
 					callbacks: {
@@ -870,7 +870,7 @@
 				datalabels: {
 					anchor: 'end',
 					align: 'top',
-					offset: 2,
+					offset: 0,
 					clamp: false,
 					clip: false,
 					display: (context) => {
@@ -880,20 +880,20 @@
 					formatter: (value: unknown) =>
 						typeof value === 'number' && Number.isFinite(value) ? String(value) : '',
 					color: colors.legend,
-					font: { size: 12, weight: 'bold' },
+					font: { size: 9, weight: 'bold' },
 					textStrokeColor: isDarkMode() ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.9)',
-					textStrokeWidth: 3
+					textStrokeWidth: 2
 				}
 			},
 			scales: {
 				y: {
 					beginAtZero: true,
-					grace: '18%',
+					grace: '12%',
 					ticks: {
 						color: colors.ticks,
 						stepSize: 1,
 						precision: 0,
-						font: { size: 11, weight: 500 }
+						font: { size: 9, weight: 500 }
 					},
 					grid: {
 						color: colors.grid
@@ -902,8 +902,8 @@
 				x: {
 					ticks: {
 						color: colors.ticks,
-						font: { size: 11, weight: 600 },
-						maxRotation: 40,
+						font: { size: 9, weight: 600 },
+						maxRotation: 35,
 						minRotation: 0,
 						autoSkip: false
 					},
@@ -2036,195 +2036,129 @@
 	{:else}
 		<div class="flex-1 overflow-auto">
 			<div class="w-full px-3 py-3 sm:px-4">
-				<!-- Summary: one tight row — Total | Unresolved | Resolved | Status chart -->
+				<!-- Summary row (~30% of prior height): compact KPIs + short status chart -->
 				<section
-					class="dashboard-summary mb-3"
+					class="dashboard-summary mb-2"
 					aria-label="Incident summary for {timeRangeLabel}"
 				>
 					<div
-						class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-12 lg:items-stretch"
+						class="grid grid-cols-2 gap-1.5 lg:grid-cols-12 lg:items-stretch"
 						role="group"
 						aria-label="Period KPIs and resolution breakdown"
 					>
 						<!-- Total KPI -->
 						<section
-							class="flex flex-col justify-between rounded-lg border border-warm-200 bg-white p-3 shadow-sm dark:bg-warm-100 sm:col-span-2 lg:col-span-2"
+							class="flex items-center gap-2 rounded-md border border-warm-200 bg-white px-2.5 py-1.5 shadow-sm dark:bg-warm-100 lg:col-span-2"
 							aria-labelledby="total-incidents-title"
+							title="Incidents in period · {timeRangeLabel} · {resolvedPct}% resolved · {unresolvedPct}% open"
 						>
-							<div class="flex items-start justify-between gap-2">
-								<div class="min-w-0">
-									<p
-										id="total-incidents-title"
-										class="text-[11px] font-semibold uppercase tracking-wide text-warm-500"
-									>
-										Total
-									</p>
-									<p class="mt-1 text-3xl font-bold tabular-nums text-accent-600">
-										{totalIncidents}
-									</p>
-									<p class="mt-1 text-xs leading-snug text-warm-500">
-										Incidents in period
-										<span class="mt-0.5 block font-medium text-warm-600">{timeRangeLabel}</span>
-									</p>
-								</div>
-								<span
-									class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-50 text-accent-700 dark:bg-accent-100/40 dark:text-accent-600"
-									aria-hidden="true"
+							<div class="min-w-0 flex-1">
+								<p
+									id="total-incidents-title"
+									class="text-[10px] font-semibold uppercase tracking-wide text-warm-500"
 								>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										class="h-4 w-4"
-										fill="none"
-										viewBox="0 0 24 24"
-										stroke="currentColor"
-										stroke-width="2"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-										/>
-									</svg>
-								</span>
+									Total
+								</p>
+								<p class="text-xl font-bold leading-none tabular-nums text-accent-600">
+									{totalIncidents}
+								</p>
+								<p class="mt-0.5 truncate text-[10px] text-warm-500">{timeRangeLabel}</p>
 							</div>
 							{#if totalIncidents > 0}
-								<div
-									class="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-warm-100 dark:bg-warm-200"
-									role="presentation"
-									title="Resolved {resolvedPct}% · Unresolved {unresolvedPct}%"
-								>
+								<div class="hidden w-12 shrink-0 sm:block">
 									<div
-										class="h-full rounded-full bg-emerald-500/90 transition-[width]"
-										style="width: {resolvedPct}%"
-									></div>
+										class="h-1 w-full overflow-hidden rounded-full bg-warm-100 dark:bg-warm-200"
+										role="presentation"
+									>
+										<div
+											class="h-full rounded-full bg-emerald-500/90"
+											style="width: {resolvedPct}%"
+										></div>
+									</div>
+									<p class="mt-0.5 text-center text-[9px] tabular-nums text-warm-500">
+										{resolvedPct}%
+									</p>
 								</div>
-								<p class="mt-1 text-[10px] text-warm-500">
-									<span class="font-medium text-emerald-700 dark:text-emerald-300"
-										>{resolvedPct}% resolved</span
-									>
-									·
-									<span class="font-medium text-amber-700 dark:text-amber-300"
-										>{unresolvedPct}% open</span
-									>
-								</p>
 							{/if}
 						</section>
 
 						<!-- Unresolved -->
 						<section
-							class="flex flex-col justify-between rounded-lg border-2 border-amber-300 bg-amber-50 p-3 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-2"
+							class="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-2"
 							aria-labelledby="unresolved-callout-title"
+							title="Not fully closed (status ≠ Resolved or no Date Responded)"
 						>
-							<div class="flex items-start justify-between gap-2">
-								<div class="min-w-0">
-									<p
-										id="unresolved-callout-title"
-										class="text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
-									>
-										Unresolved
-									</p>
-									<p class="mt-1 text-3xl font-bold tabular-nums text-amber-900 dark:text-amber-100">
-										{unresolvedIncidents}
-									</p>
-								</div>
-								<span
-									class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100"
-									aria-hidden="true"
+							<div class="min-w-0 flex-1">
+								<p
+									id="unresolved-callout-title"
+									class="text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
 								>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										class="h-4 w-4"
-										fill="none"
-										viewBox="0 0 24 24"
-										stroke="currentColor"
-										stroke-width="2"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-										/>
-									</svg>
-								</span>
-							</div>
-							<p class="mt-2 text-xs leading-snug text-amber-800/90 dark:text-amber-200/90">
-								Not fully closed (status ≠ Resolved or no Date Responded)
+									Unresolved
+								</p>
+								<p
+									class="text-xl font-bold leading-none tabular-nums text-amber-900 dark:text-amber-100"
+								>
+									{unresolvedIncidents}
+								</p>
 								{#if totalIncidents > 0}
-									<span class="mt-0.5 block font-semibold">{unresolvedPct}% of period</span>
+									<p class="mt-0.5 text-[10px] font-medium text-amber-800/90 dark:text-amber-200/90">
+										{unresolvedPct}% of period
+									</p>
 								{/if}
-							</p>
+							</div>
 						</section>
 
 						<!-- Resolved -->
 						<section
-							class="flex flex-col justify-between rounded-lg border-2 border-emerald-300 bg-emerald-50 p-3 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-2"
+							class="flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-2"
 							aria-labelledby="resolved-callout-title"
+							title="Status is Resolved and Date Responded is set"
 						>
-							<div class="flex items-start justify-between gap-2">
-								<div class="min-w-0">
-									<p
-										id="resolved-callout-title"
-										class="text-[11px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200"
-									>
-										Resolved
-									</p>
-									<p
-										class="mt-1 text-3xl font-bold tabular-nums text-emerald-900 dark:text-emerald-100"
-									>
-										{resolvedIncidents}
-									</p>
-								</div>
-								<span
-									class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100"
-									aria-hidden="true"
+							<div class="min-w-0 flex-1">
+								<p
+									id="resolved-callout-title"
+									class="text-[10px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200"
 								>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										class="h-4 w-4"
-										fill="none"
-										viewBox="0 0 24 24"
-										stroke="currentColor"
-										stroke-width="2"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-										/>
-									</svg>
-								</span>
-							</div>
-							<p class="mt-2 text-xs leading-snug text-emerald-800/90 dark:text-emerald-200/90">
-								Status is Resolved and Date Responded is set
+									Resolved
+								</p>
+								<p
+									class="text-xl font-bold leading-none tabular-nums text-emerald-900 dark:text-emerald-100"
+								>
+									{resolvedIncidents}
+								</p>
 								{#if totalIncidents > 0}
-									<span class="mt-0.5 block font-semibold">{resolvedPct}% of period</span>
+									<p
+										class="mt-0.5 text-[10px] font-medium text-emerald-800/90 dark:text-emerald-200/90"
+									>
+										{resolvedPct}% of period
+									</p>
 								{/if}
-							</p>
+							</div>
 						</section>
 
-						<!-- Resolution status chart -->
+						<!-- Resolution status chart (~30% of prior 10.5rem plot) -->
 						<section
-							class="flex min-h-0 flex-col rounded-lg border border-warm-200 bg-white p-3 shadow-sm dark:bg-warm-100 sm:col-span-2 lg:col-span-6"
+							class="col-span-2 flex min-h-0 flex-col rounded-md border border-warm-200 bg-white px-2 py-1 shadow-sm dark:bg-warm-100 lg:col-span-6"
 							aria-labelledby="action-status-bar-title"
 							aria-describedby="action-status-bar-summary"
 						>
-							<div class="mb-1.5 flex flex-wrap items-baseline justify-between gap-2">
+							<div class="mb-0.5 flex flex-wrap items-baseline justify-between gap-1">
 								<h2
 									id="action-status-bar-title"
-									class="text-[11px] font-semibold uppercase tracking-wide text-warm-700"
+									class="text-[10px] font-semibold uppercase tracking-wide text-warm-700"
 								>
 									By Resolution Status
 								</h2>
-								<p class="text-[10px] text-warm-500">{timeRangeLabel}</p>
+								<p class="text-[9px] text-warm-500">{timeRangeLabel}</p>
 							</div>
 							<p id="action-status-bar-summary" class="sr-only">{actionStatusAriaLabel}</p>
 							<div
-								class="w-full min-h-0 flex-1 overflow-visible"
-								style="position: relative; height: 10.5rem; min-height: 10.5rem;"
+								class="w-full min-h-0 overflow-visible"
+								style="position: relative; height: 3.15rem; min-height: 3.15rem;"
 							>
 								{#if !hasActionStatusData}
 									<div class="flex h-full items-center justify-center">
-										<p class="text-sm text-warm-500">No resolution status data available.</p>
+										<p class="text-[10px] text-warm-500">No resolution status data.</p>
 									</div>
 								{/if}
 								<canvas
