@@ -1211,6 +1211,31 @@
 
 	let timeRange = $state<TimeRangeKey>('all');
 
+	/**
+	 * Legend filters for multi-series charts (row 3): labels listed here are hidden.
+	 * Click legend items to toggle. Reassigned as new arrays for Svelte reactivity.
+	 */
+	let hiddenTypeOverTimeLabels = $state<string[]>([]);
+	let hiddenDriverTypeLabels = $state<string[]>([]);
+
+	function isLegendVisible(hidden: string[], label: string): boolean {
+		return !hidden.includes(label);
+	}
+
+	function toggleLegendLabel(hidden: string[], label: string): string[] {
+		return hidden.includes(label)
+			? hidden.filter((l) => l !== label)
+			: [...hidden, label];
+	}
+
+	function toggleTypeOverTimeLegend(label: string) {
+		hiddenTypeOverTimeLabels = toggleLegendLabel(hiddenTypeOverTimeLabels, label);
+	}
+
+	function toggleDriverTypeLegend(label: string) {
+		hiddenDriverTypeLabels = toggleLegendLabel(hiddenDriverTypeLabels, label);
+	}
+
 	/** Canonical YYYY-MM-DD from dateReceived (handles ISO datetimes). */
 	function dateReceivedKey(dateStr: string | undefined | null): string | null {
 		const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr?.trim() ?? '');
@@ -1547,6 +1572,29 @@
 
 	const hasDriverData = $derived(driverStackedBarData.labels.length > 0);
 
+	// Drop legend filters for series that no longer exist after period/data change
+	$effect(() => {
+		const typeLabels = new Set(typeOverTimeChartData.datasets.map((d) => d.label));
+		const next = hiddenTypeOverTimeLabels.filter((l) => typeLabels.has(l));
+		if (
+			next.length !== hiddenTypeOverTimeLabels.length ||
+			next.some((l, i) => l !== hiddenTypeOverTimeLabels[i])
+		) {
+			hiddenTypeOverTimeLabels = next;
+		}
+	});
+
+	$effect(() => {
+		const typeLabels = new Set(driverStackedBarData.datasets.map((d) => d.label));
+		const next = hiddenDriverTypeLabels.filter((l) => typeLabels.has(l));
+		if (
+			next.length !== hiddenDriverTypeLabels.length ||
+			next.some((l, i) => l !== hiddenDriverTypeLabels[i])
+		) {
+			hiddenDriverTypeLabels = next;
+		}
+	});
+
 	const driverChartAriaLabel = $derived.by(() => {
 		const { labels, datasets } = driverStackedBarData;
 		if (labels.length === 0) {
@@ -1683,10 +1731,16 @@
 		if (!canvas || !hasTypeOverTimeData) return;
 
 		const colors = untrack(() => getChartTheme(theme.isDark));
-		const initialData = untrack(() => ({
-			labels: typeOverTimeChartData.labels,
-			datasets: typeOverTimeChartData.datasets.map((ds) => ({ ...ds }))
-		}));
+		const initialData = untrack(() => {
+			const hidden = hiddenTypeOverTimeLabels;
+			return {
+				labels: typeOverTimeChartData.labels,
+				datasets: typeOverTimeChartData.datasets.map((ds) => ({
+					...ds,
+					hidden: hidden.includes(ds.label)
+				}))
+			};
+		});
 		const instance = new Chart(canvas, {
 			type: 'line',
 			data: initialData,
@@ -1728,10 +1782,16 @@
 		if (!canvas || !hasDriverData) return;
 
 		const colors = untrack(() => getChartTheme(theme.isDark));
-		const initialData = untrack(() => ({
-			labels: driverStackedBarData.labels,
-			datasets: driverStackedBarData.datasets.map((ds) => ({ ...ds }))
-		}));
+		const initialData = untrack(() => {
+			const hidden = hiddenDriverTypeLabels;
+			return {
+				labels: driverStackedBarData.labels,
+				datasets: driverStackedBarData.datasets.map((ds) => ({
+					...ds,
+					hidden: hidden.includes(ds.label)
+				}))
+			};
+		});
 		const instance = new Chart(canvas, {
 			type: 'bar',
 			data: initialData,
@@ -1758,9 +1818,13 @@
 		const instance = typeOverTimeChart;
 		if (!instance) return;
 		const next = typeOverTimeChartData;
+		const hidden = hiddenTypeOverTimeLabels;
 		instance.data.labels = next.labels;
-		// Rebuild datasets so type set can grow/shrink without stale series
-		instance.data.datasets = next.datasets.map((ds) => ({ ...ds }));
+		// Rebuild datasets so type set can grow/shrink; honour legend filter
+		instance.data.datasets = next.datasets.map((ds) => ({
+			...ds,
+			hidden: hidden.includes(ds.label)
+		}));
 		applyTypeOverTimeChartTheme(instance);
 	});
 
@@ -1777,9 +1841,13 @@
 		const instance = driverChart;
 		if (!instance) return;
 		const next = driverStackedBarData;
+		const hidden = hiddenDriverTypeLabels;
 		instance.data.labels = next.labels;
-		// Rebuild stacked type series when type set changes
-		instance.data.datasets = next.datasets.map((ds) => ({ ...ds }));
+		// Rebuild stacked type series; honour legend filter
+		instance.data.datasets = next.datasets.map((ds) => ({
+			...ds,
+			hidden: hidden.includes(ds.label)
+		}));
 		applyDriverBarTheme(instance);
 	});
 
@@ -2212,21 +2280,32 @@
 						<div class="dashboard-chart-footer">
 							{#if hasTypeOverTimeData}
 								<ul
-									class="flex flex-wrap gap-x-2.5 gap-y-1"
-									aria-label="Incident type legend for {typeOverTimeChartData.periodLabel}"
+									class="flex flex-wrap gap-x-1.5 gap-y-1"
+									aria-label="Incident type legend for {typeOverTimeChartData.periodLabel}. Click to show or hide a series."
 								>
 									{#each typeOverTimeChartData.datasets as ds (`${ds.label}-${ds.total}-${timeRange}`)}
-										<li class="flex items-center gap-1 text-[10px] leading-tight text-warm-600">
-											<span
-												class="inline-block h-2 w-2 shrink-0 rounded-full"
-												style="background: {typeof ds.borderColor === 'string'
-													? ds.borderColor
-													: '#666'}"
-												aria-hidden="true"
-											></span>
-											<span class="truncate"
-												>{ds.label} ({ds.total})</span
+										{@const visible = isLegendVisible(hiddenTypeOverTimeLabels, ds.label)}
+										<li>
+											<button
+												type="button"
+												class="dashboard-legend-btn flex max-w-full items-center gap-1 text-[10px] leading-tight text-warm-600 {visible
+													? ''
+													: 'opacity-40 line-through'}"
+												aria-pressed={visible}
+												title={visible
+													? `Hide ${ds.label} on chart`
+													: `Show ${ds.label} on chart`}
+												onclick={() => toggleTypeOverTimeLegend(ds.label)}
 											>
+												<span
+													class="inline-block h-2 w-2 shrink-0 rounded-full"
+													style="background: {typeof ds.borderColor === 'string'
+														? ds.borderColor
+														: '#666'}"
+													aria-hidden="true"
+												></span>
+												<span class="truncate">{ds.label} ({ds.total})</span>
+											</button>
 										</li>
 									{/each}
 								</ul>
@@ -2285,21 +2364,32 @@
 						<div class="dashboard-chart-footer">
 							{#if hasDriverData}
 								<ul
-									class="flex flex-wrap gap-x-2.5 gap-y-1"
-									aria-label="Incident type legend for {driverStackedBarData.periodLabel}"
+									class="flex flex-wrap gap-x-1.5 gap-y-1"
+									aria-label="Incident type legend for {driverStackedBarData.periodLabel}. Click to show or hide a series."
 								>
 									{#each driverStackedBarData.datasets as ds (`${ds.label}-${ds.total}-${timeRange}`)}
-										<li class="flex items-center gap-1 text-[10px] leading-tight text-warm-600">
-											<span
-												class="inline-block h-2 w-2 shrink-0 rounded-full"
-												style="background: {typeof ds.borderColor === 'string'
-													? ds.borderColor
-													: '#666'}"
-												aria-hidden="true"
-											></span>
-											<span class="truncate"
-												>{ds.label} ({ds.total})</span
+										{@const visible = isLegendVisible(hiddenDriverTypeLabels, ds.label)}
+										<li>
+											<button
+												type="button"
+												class="dashboard-legend-btn flex max-w-full items-center gap-1 text-[10px] leading-tight text-warm-600 {visible
+													? ''
+													: 'opacity-40 line-through'}"
+												aria-pressed={visible}
+												title={visible
+													? `Hide ${ds.label} on chart`
+													: `Show ${ds.label} on chart`}
+												onclick={() => toggleDriverTypeLegend(ds.label)}
 											>
+												<span
+													class="inline-block h-2 w-2 shrink-0 rounded-full"
+													style="background: {typeof ds.borderColor === 'string'
+														? ds.borderColor
+														: '#666'}"
+													aria-hidden="true"
+												></span>
+												<span class="truncate">{ds.label} ({ds.total})</span>
+											</button>
 										</li>
 									{/each}
 								</ul>
@@ -2489,5 +2579,19 @@
 		max-height: 2.5rem;
 		margin-top: 0.35rem;
 		overflow: hidden;
+	}
+
+	:global(.dashboard-legend-btn) {
+		border-radius: 0.25rem;
+		padding: 0.05rem 0.2rem;
+		cursor: pointer;
+		transition: opacity 0.12s ease, background-color 0.12s ease;
+	}
+	:global(.dashboard-legend-btn:hover) {
+		background: color-mix(in srgb, var(--color-warm-200, #e7e5e4) 55%, transparent);
+	}
+	:global(.dashboard-legend-btn:focus-visible) {
+		outline: 2px solid var(--color-accent-500, #0d9488);
+		outline-offset: 1px;
 	}
 </style>
