@@ -961,6 +961,41 @@
 	}
 
 	/**
+	 * Sum only visible (legend-shown) stack segments for a driver bar index.
+	 * Hidden datasets from legend clicks must not count toward end totals.
+	 */
+	function sumVisibleDriverStack(
+		chart: {
+			data: { datasets: { data?: unknown[]; hidden?: boolean }[] };
+			isDatasetVisible?: (index: number) => boolean;
+		},
+		dataIndex: number
+	): number {
+		let sum = 0;
+		chart.data.datasets.forEach((ds, i) => {
+			if (ds.hidden) return;
+			if (typeof chart.isDatasetVisible === 'function' && !chart.isDatasetVisible(i)) return;
+			const v = ds.data?.[dataIndex];
+			if (typeof v === 'number' && Number.isFinite(v)) sum += v;
+		});
+		return sum;
+	}
+
+	/** Last dataset index that is currently visible (draws the end total once). */
+	function lastVisibleDriverDatasetIndex(chart: {
+		data: { datasets: { hidden?: boolean }[] };
+		isDatasetVisible?: (index: number) => boolean;
+	}): number {
+		let last = -1;
+		chart.data.datasets.forEach((ds, i) => {
+			if (ds.hidden) return;
+			if (typeof chart.isDatasetVisible === 'function' && !chart.isDatasetVisible(i)) return;
+			last = i;
+		});
+		return last;
+	}
+
+	/**
 	 * Horizontal stacked bar: drivers on Y, segments = incident type.
 	 * Legend is HTML (footer) so plot height stays equal with siblings.
 	 */
@@ -987,6 +1022,15 @@
 					padding: 8,
 					cornerRadius: 8,
 					displayColors: true,
+					// Only list visible segments (legend-filtered types stay out)
+					filter: (item) => {
+						const chart = item.chart;
+						const idx = item.datasetIndex;
+						if (chart.data.datasets[idx]?.hidden) return false;
+						return typeof chart.isDatasetVisible === 'function'
+							? chart.isDatasetVisible(idx)
+							: true;
+					},
 					callbacks: {
 						// Title = driver; each line = type + count
 						title: (items) => {
@@ -1000,17 +1044,16 @@
 							return `${typeName}: ${value}`;
 						},
 						footer: (items) => {
-							const total = items.reduce((sum, item) => {
-								const v = item.parsed.x ?? 0;
-								return sum + (typeof v === 'number' ? v : 0);
-							}, 0);
+							const first = items[0];
+							if (!first) return '';
+							const total = sumVisibleDriverStack(first.chart, first.dataIndex);
 							return total > 0 ? `Total: ${total}` : '';
 						}
 					}
 				},
 				// Dual labels via chartjs-plugin-datalabels v2 `labels` map:
 				// - segment: type count inside each stack slice
-				// - total: driver total outside the right end of the full bar
+				// - total: visible-only driver total outside the right end of the bar
 				datalabels: {
 					labels: {
 						segment: {
@@ -1018,7 +1061,19 @@
 							align: 'center',
 							clamp: true,
 							clip: true,
-							display: (context: { dataset: { data: unknown[] }; dataIndex: number }) => {
+							display: (context: {
+								dataset: { data: unknown[]; hidden?: boolean };
+								dataIndex: number;
+								datasetIndex: number;
+								chart: { isDatasetVisible?: (i: number) => boolean };
+							}) => {
+								if (context.dataset.hidden) return false;
+								if (
+									typeof context.chart.isDatasetVisible === 'function' &&
+									!context.chart.isDatasetVisible(context.datasetIndex)
+								) {
+									return false;
+								}
 								const raw = context.dataset.data[context.dataIndex];
 								return typeof raw === 'number' && raw >= 1;
 							},
@@ -1032,35 +1087,30 @@
 							textStrokeWidth: 2
 						},
 						total: {
-							// Only the topmost stack dataset draws the end total (once per bar)
+							// Last *visible* stack dataset draws the end total (once per bar)
 							display: (context: {
 								datasetIndex: number;
-								chart: { data: { datasets: unknown[] } };
-								dataset: { data: unknown[] };
+								chart: {
+									data: { datasets: { data?: unknown[]; hidden?: boolean }[] };
+									isDatasetVisible?: (index: number) => boolean;
+								};
 								dataIndex: number;
 							}) => {
-								const last = context.chart.data.datasets.length - 1;
-								if (context.datasetIndex !== last) return false;
-								// Sum stack for this driver; hide if zero
-								let sum = 0;
-								for (const ds of context.chart.data.datasets as { data: unknown[] }[]) {
-									const v = ds.data[context.dataIndex];
-									if (typeof v === 'number' && Number.isFinite(v)) sum += v;
-								}
-								return sum > 0;
+								const lastVisible = lastVisibleDriverDatasetIndex(context.chart);
+								if (lastVisible < 0 || context.datasetIndex !== lastVisible) return false;
+								return sumVisibleDriverStack(context.chart, context.dataIndex) > 0;
 							},
 							formatter: (
 								_value: unknown,
 								context: {
 									dataIndex: number;
-									chart: { data: { datasets: { data: unknown[] }[] } };
+									chart: {
+										data: { datasets: { data?: unknown[]; hidden?: boolean }[] };
+										isDatasetVisible?: (index: number) => boolean;
+									};
 								}
 							) => {
-								let sum = 0;
-								for (const ds of context.chart.data.datasets) {
-									const v = ds.data[context.dataIndex];
-									if (typeof v === 'number' && Number.isFinite(v)) sum += v;
-								}
+								const sum = sumVisibleDriverStack(context.chart, context.dataIndex);
 								return sum > 0 ? String(sum) : '';
 							},
 							// Horizontal bar: end of bar = right side of stack
@@ -1869,31 +1919,6 @@
 
 	// Summary stats honour the selected period (header time picker)
 	const totalIncidents = $derived(periodIncidents.length);
-	const incidentsThisMonth = $derived.by(() => {
-		const now = new Date();
-		const y = now.getFullYear();
-		const m = now.getMonth();
-		return periodIncidents.filter((i) => {
-			const key = dateReceivedKey(i.dateReceived);
-			if (!key) return false;
-			const parts = key.split('-').map((n) => parseInt(n, 10));
-			return parts[0] === y && parts[1] === m + 1;
-		}).length;
-	});
-	const incidentsThisWeek = $derived.by(() => {
-		const now = new Date();
-		const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-		const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-		start.setDate(start.getDate() - 6);
-		start.setHours(0, 0, 0, 0);
-		return periodIncidents.filter((i) => {
-			const key = dateReceivedKey(i.dateReceived);
-			if (!key) return false;
-			const [yy, mm, dd] = key.split('-').map((n) => parseInt(n, 10));
-			const received = new Date(yy, mm - 1, dd);
-			return received >= start && received <= end;
-		}).length;
-	});
 
 	/**
 	 * Resolved = resolution status is "Resolved" AND a responded date is set.
@@ -2011,70 +2036,95 @@
 	{:else}
 		<div class="flex-1 overflow-auto">
 			<div class="w-full px-3 py-3 sm:px-4">
-				<!-- Summary tiles & callouts (honour header period picker) -->
-				<section class="dashboard-summary mb-3" aria-label="Incident summary for {timeRangeLabel}">
-					<div class="mb-2 grid grid-cols-3 gap-1.5">
-						<div class="rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm">
-							<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">
-								Total Incidents
-							</p>
-							<p class="mt-0.5 text-xl font-semibold tabular-nums text-accent-600">
-								{totalIncidents}
-							</p>
-							<p class="mt-0.5 text-[10px] leading-tight text-warm-400">{timeRangeLabel}</p>
-						</div>
-						<div class="rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm">
-							<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">
-								This Month
-							</p>
-							<p class="mt-0.5 text-xl font-semibold tabular-nums text-warm-800">
-								{incidentsThisMonth}
-							</p>
-							<p class="mt-0.5 text-[10px] leading-tight text-warm-400">
-								In period · calendar month
-							</p>
-						</div>
-						<div class="rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm">
-							<p class="text-[11px] font-medium uppercase tracking-wide text-warm-500">
-								This Week
-							</p>
-							<p class="mt-0.5 text-xl font-semibold tabular-nums text-warm-700">
-								{incidentsThisWeek}
-							</p>
-							<p class="mt-0.5 text-[10px] leading-tight text-warm-400">
-								In period · last 7 days
-							</p>
-						</div>
-					</div>
-
+				<!-- Summary: one tight row — Total | Unresolved | Resolved | Status chart -->
+				<section
+					class="dashboard-summary mb-3"
+					aria-label="Incident summary for {timeRangeLabel}"
+				>
 					<div
-						class="grid grid-cols-1 gap-2 lg:grid-cols-12"
+						class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-12 lg:items-stretch"
 						role="group"
-						aria-label="Incident resolution and resolution status summary"
+						aria-label="Period KPIs and resolution breakdown"
 					>
+						<!-- Total KPI -->
 						<section
-							class="rounded-lg border-2 border-amber-300 bg-amber-50 p-3 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-3"
+							class="flex flex-col justify-between rounded-lg border border-warm-200 bg-white p-3 shadow-sm dark:bg-warm-100 sm:col-span-2 lg:col-span-2"
+							aria-labelledby="total-incidents-title"
+						>
+							<div class="flex items-start justify-between gap-2">
+								<div class="min-w-0">
+									<p
+										id="total-incidents-title"
+										class="text-[11px] font-semibold uppercase tracking-wide text-warm-500"
+									>
+										Total
+									</p>
+									<p class="mt-1 text-3xl font-bold tabular-nums text-accent-600">
+										{totalIncidents}
+									</p>
+									<p class="mt-1 text-xs leading-snug text-warm-500">
+										Incidents in period
+										<span class="mt-0.5 block font-medium text-warm-600">{timeRangeLabel}</span>
+									</p>
+								</div>
+								<span
+									class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-50 text-accent-700 dark:bg-accent-100/40 dark:text-accent-600"
+									aria-hidden="true"
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										class="h-4 w-4"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke="currentColor"
+										stroke-width="2"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+										/>
+									</svg>
+								</span>
+							</div>
+							{#if totalIncidents > 0}
+								<div
+									class="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-warm-100 dark:bg-warm-200"
+									role="presentation"
+									title="Resolved {resolvedPct}% · Unresolved {unresolvedPct}%"
+								>
+									<div
+										class="h-full rounded-full bg-emerald-500/90 transition-[width]"
+										style="width: {resolvedPct}%"
+									></div>
+								</div>
+								<p class="mt-1 text-[10px] text-warm-500">
+									<span class="font-medium text-emerald-700 dark:text-emerald-300"
+										>{resolvedPct}% resolved</span
+									>
+									·
+									<span class="font-medium text-amber-700 dark:text-amber-300"
+										>{unresolvedPct}% open</span
+									>
+								</p>
+							{/if}
+						</section>
+
+						<!-- Unresolved -->
+						<section
+							class="flex flex-col justify-between rounded-lg border-2 border-amber-300 bg-amber-50 p-3 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-2"
 							aria-labelledby="unresolved-callout-title"
 						>
 							<div class="flex items-start justify-between gap-2">
-								<div>
+								<div class="min-w-0">
 									<p
 										id="unresolved-callout-title"
-										class="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
+										class="text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
 									>
 										Unresolved
 									</p>
 									<p class="mt-1 text-3xl font-bold tabular-nums text-amber-900 dark:text-amber-100">
 										{unresolvedIncidents}
-									</p>
-									<p class="mt-1 text-xs leading-snug text-amber-800/90 dark:text-amber-200/90">
-										Not fully closed — resolution status is not
-										<span class="font-semibold">Resolved</span>, or responded date is missing
-										{#if totalIncidents > 0}
-											<span class="mt-0.5 block font-medium"
-												>{unresolvedPct}% of period</span
-											>
-										{/if}
 									</p>
 								</div>
 								<span
@@ -2097,31 +2147,31 @@
 									</svg>
 								</span>
 							</div>
+							<p class="mt-2 text-xs leading-snug text-amber-800/90 dark:text-amber-200/90">
+								Not fully closed (status ≠ Resolved or no Date Responded)
+								{#if totalIncidents > 0}
+									<span class="mt-0.5 block font-semibold">{unresolvedPct}% of period</span>
+								{/if}
+							</p>
 						</section>
 
+						<!-- Resolved -->
 						<section
-							class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-3 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-3"
+							class="flex flex-col justify-between rounded-lg border-2 border-emerald-300 bg-emerald-50 p-3 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-2"
 							aria-labelledby="resolved-callout-title"
 						>
 							<div class="flex items-start justify-between gap-2">
-								<div>
+								<div class="min-w-0">
 									<p
 										id="resolved-callout-title"
-										class="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200"
+										class="text-[11px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200"
 									>
 										Resolved
 									</p>
-									<p class="mt-1 text-3xl font-bold tabular-nums text-emerald-900 dark:text-emerald-100">
+									<p
+										class="mt-1 text-3xl font-bold tabular-nums text-emerald-900 dark:text-emerald-100"
+									>
 										{resolvedIncidents}
-									</p>
-									<p class="mt-1 text-xs leading-snug text-emerald-800/90 dark:text-emerald-200/90">
-										Resolution status is <span class="font-semibold">Resolved</span> and a responded
-										date is set
-										{#if totalIncidents > 0}
-											<span class="mt-0.5 block font-medium"
-												>{resolvedPct}% of period</span
-											>
-										{/if}
 									</p>
 								</div>
 								<span
@@ -2144,26 +2194,33 @@
 									</svg>
 								</span>
 							</div>
+							<p class="mt-2 text-xs leading-snug text-emerald-800/90 dark:text-emerald-200/90">
+								Status is Resolved and Date Responded is set
+								{#if totalIncidents > 0}
+									<span class="mt-0.5 block font-semibold">{resolvedPct}% of period</span>
+								{/if}
+							</p>
 						</section>
 
+						<!-- Resolution status chart -->
 						<section
-							class="rounded-lg border border-warm-200 bg-white p-3 shadow-sm dark:bg-warm-100 lg:col-span-6"
+							class="flex min-h-0 flex-col rounded-lg border border-warm-200 bg-white p-3 shadow-sm dark:bg-warm-100 sm:col-span-2 lg:col-span-6"
 							aria-labelledby="action-status-bar-title"
 							aria-describedby="action-status-bar-summary"
 						>
 							<div class="mb-1.5 flex flex-wrap items-baseline justify-between gap-2">
 								<h2
 									id="action-status-bar-title"
-									class="text-xs font-semibold uppercase tracking-wide text-warm-700"
+									class="text-[11px] font-semibold uppercase tracking-wide text-warm-700"
 								>
-									Incidents by Resolution Status
+									By Resolution Status
 								</h2>
 								<p class="text-[10px] text-warm-500">{timeRangeLabel}</p>
 							</div>
 							<p id="action-status-bar-summary" class="sr-only">{actionStatusAriaLabel}</p>
 							<div
-								class="w-full overflow-visible"
-								style="position: relative; height: 11.5rem; min-height: 11.5rem;"
+								class="w-full min-h-0 flex-1 overflow-visible"
+								style="position: relative; height: 10.5rem; min-height: 10.5rem;"
 							>
 								{#if !hasActionStatusData}
 									<div class="flex h-full items-center justify-center">

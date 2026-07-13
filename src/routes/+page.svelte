@@ -790,7 +790,7 @@
 			class="incidents-table-scroll flex-1 overflow-auto rounded-lg border border-warm-200 bg-white shadow-sm"
 			style="max-height: calc(100vh - 280px);"
 		>
-			<table class="w-full table-fixed text-left text-sm min-w-[1480px]">
+			<table class="incidents-table w-full table-fixed text-left text-sm min-w-[1480px]">
 				<colgroup>
 					<!-- Narrower ref / date / resolution / priority; extra space → email subject -->
 					<col style="width: 6.75rem" />
@@ -817,8 +817,8 @@
 						<th class="px-3 py-3 font-medium text-warm-500 whitespace-nowrap">Email Sender</th>
 						<th class="px-3 py-3 font-medium text-warm-500">Email Subject</th>
 						<th class="px-3 py-3 font-medium text-warm-500 whitespace-nowrap">Driver</th>
-						<th class="px-3 py-3 font-medium text-warm-500 whitespace-nowrap">Response</th>
-						<th class="px-3 py-3 font-medium text-warm-500 whitespace-nowrap">Responded</th>
+						<th class="px-3 py-3 font-medium text-warm-500 whitespace-nowrap">Responded By</th>
+						<th class="px-3 py-3 font-medium text-warm-500 whitespace-nowrap">Date Responded</th>
 						<th class="px-3 py-3 font-medium text-warm-500 whitespace-nowrap text-right">Record Actions</th>
 					</tr>
 				</thead>
@@ -1205,3 +1205,16 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	/* Faint vertical rules only on header cells (column boundaries) */
+	:global(.incidents-table thead th) {
+		border-right: 1px solid color-mix(in srgb, var(--color-warm-300, #d6d3d1) 55%, transparent);
+	}
+	:global(.incidents-table thead th:last-child) {
+		border-right: none;
+	}
+	:global(.dark .incidents-table thead th) {
+		border-right-color: color-mix(in srgb, var(--color-warm-400, #a8a29e) 35%, transparent);
+	}
+</style>

@@ -284,7 +284,7 @@
 		}
 		// Optional responded date: empty is fine; non-empty must be a real calendar day.
 		if (form.dateResponse?.trim() && !dateResponse) {
-			submitError = 'Responded date must be a valid date (yyyy-mm-dd).';
+			submitError = 'Date Responded must be a valid date (yyyy-mm-dd).';
 			submitErrorField = 'dateResponse';
 			formTab = 'details';
 			return;
@@ -460,7 +460,7 @@
 
 		const raw = field === 'dateReceived' ? form.dateReceived : form.dateResponse;
 		const trimmed = raw?.trim() ?? '';
-		const label = field === 'dateReceived' ? 'Date Received' : 'Responded date';
+		const label = field === 'dateReceived' ? 'Date Received' : 'Date Responded';
 
 		if (!trimmed) {
 			if (field === 'dateReceived') form.dateReceived = '';
@@ -1075,7 +1075,7 @@
 						</div>
 					</div>
 					<div class="sn-field-row">
-						<span id="respondedAt-label" class="sn-field-label">Responded</span>
+						<span id="respondedAt-label" class="sn-field-label">Date Responded</span>
 						<div class="sn-field-control">
 							<span id="respondedAt-desc" class="sr-only">{respondedAtDesc}</span>
 							<div class={dateTimeControlClass} role="group" aria-labelledby="respondedAt-label">
@@ -1100,12 +1100,12 @@
 									/>
 									{@render dateTimeCalendarButton(
 										'dateResponse',
-										'Open date picker for responded'
+										'Open date picker for Date Responded'
 									)}
 									<DatePickerPopover
 										open={openDatePickerField === 'dateResponse'}
 										value={form.dateResponse}
-										title="Date responded"
+										title="Date Responded"
 										idPrefix="respondedAt-date-picker"
 										anchorEl={dateResponseWrapEl}
 										onApply={(d) => applyDatePicker('dateResponse', d)}
@@ -1127,7 +1127,10 @@
 										class={nativeTimeClass}
 										onclick={(e) => openTimePicker('timeResponse', e)}
 									/>
-									{@render dateTimeClockButton('timeResponse', 'Open time picker for responded')}
+									{@render dateTimeClockButton(
+										'timeResponse',
+										'Open time picker for Date Responded'
+									)}
 									<TimePickerPopover
 										open={openTimePickerField === 'timeResponse'}
 										value={form.timeResponse}
