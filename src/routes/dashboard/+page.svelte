@@ -841,8 +841,8 @@
 			maintainAspectRatio: false,
 			// Default indexAxis 'x' → vertical columns
 			layout: {
-				// Compact plot (summary row is short)
-				padding: { top: 10, right: 4, left: 2, bottom: 0 }
+				// Summary-row plot (~5.2rem): room for labels without excess height
+				padding: { top: 12, right: 4, left: 2, bottom: 2 }
 			},
 			plugins: {
 				legend: {
@@ -870,7 +870,7 @@
 				datalabels: {
 					anchor: 'end',
 					align: 'top',
-					offset: 0,
+					offset: 1,
 					clamp: false,
 					clip: false,
 					display: (context) => {
@@ -880,7 +880,7 @@
 					formatter: (value: unknown) =>
 						typeof value === 'number' && Number.isFinite(value) ? String(value) : '',
 					color: colors.legend,
-					font: { size: 9, weight: 'bold' },
+					font: { size: 10, weight: 'bold' },
 					textStrokeColor: isDarkMode() ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.9)',
 					textStrokeWidth: 2
 				}
@@ -888,12 +888,12 @@
 			scales: {
 				y: {
 					beginAtZero: true,
-					grace: '12%',
+					grace: '14%',
 					ticks: {
 						color: colors.ticks,
 						stepSize: 1,
 						precision: 0,
-						font: { size: 9, weight: 500 }
+						font: { size: 10, weight: 500 }
 					},
 					grid: {
 						color: colors.grid
@@ -902,7 +902,7 @@
 				x: {
 					ticks: {
 						color: colors.ticks,
-						font: { size: 9, weight: 600 },
+						font: { size: 10, weight: 600 },
 						maxRotation: 35,
 						minRotation: 0,
 						autoSkip: false
@@ -2036,7 +2036,7 @@
 	{:else}
 		<div class="flex-1 overflow-auto">
 			<div class="w-full px-3 py-3 sm:px-4">
-				<!-- Summary row (~30% of prior height): compact KPIs + short status chart -->
+				<!-- Summary row: compact KPIs + status chart (plot 3.15rem × 1.65 ≈ 5.2rem) -->
 				<section
 					class="dashboard-summary mb-2"
 					aria-label="Incident summary for {timeRangeLabel}"
@@ -2048,7 +2048,7 @@
 					>
 						<!-- Total KPI -->
 						<section
-							class="flex items-center gap-2 rounded-md border border-warm-200 bg-white px-2.5 py-1.5 shadow-sm dark:bg-warm-100 lg:col-span-2"
+							class="flex items-center gap-2 rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm dark:bg-warm-100 lg:col-span-2"
 							aria-labelledby="total-incidents-title"
 							title="Incidents in period · {timeRangeLabel} · {resolvedPct}% resolved · {unresolvedPct}% open"
 						>
@@ -2059,15 +2059,15 @@
 								>
 									Total
 								</p>
-								<p class="text-xl font-bold leading-none tabular-nums text-accent-600">
+								<p class="text-2xl font-bold leading-none tabular-nums text-accent-600">
 									{totalIncidents}
 								</p>
 								<p class="mt-0.5 truncate text-[10px] text-warm-500">{timeRangeLabel}</p>
 							</div>
 							{#if totalIncidents > 0}
-								<div class="hidden w-12 shrink-0 sm:block">
+								<div class="hidden w-14 shrink-0 sm:block">
 									<div
-										class="h-1 w-full overflow-hidden rounded-full bg-warm-100 dark:bg-warm-200"
+										class="h-1.5 w-full overflow-hidden rounded-full bg-warm-100 dark:bg-warm-200"
 										role="presentation"
 									>
 										<div
@@ -2075,7 +2075,7 @@
 											style="width: {resolvedPct}%"
 										></div>
 									</div>
-									<p class="mt-0.5 text-center text-[9px] tabular-nums text-warm-500">
+									<p class="mt-0.5 text-center text-[10px] tabular-nums text-warm-500">
 										{resolvedPct}%
 									</p>
 								</div>
@@ -2084,7 +2084,7 @@
 
 						<!-- Unresolved -->
 						<section
-							class="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-2"
+							class="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-2"
 							aria-labelledby="unresolved-callout-title"
 							title="Not fully closed (status ≠ Resolved or no Date Responded)"
 						>
@@ -2096,7 +2096,7 @@
 									Unresolved
 								</p>
 								<p
-									class="text-xl font-bold leading-none tabular-nums text-amber-900 dark:text-amber-100"
+									class="text-2xl font-bold leading-none tabular-nums text-amber-900 dark:text-amber-100"
 								>
 									{unresolvedIncidents}
 								</p>
@@ -2110,7 +2110,7 @@
 
 						<!-- Resolved -->
 						<section
-							class="flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-2"
+							class="flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-2 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-2"
 							aria-labelledby="resolved-callout-title"
 							title="Status is Resolved and Date Responded is set"
 						>
@@ -2122,7 +2122,7 @@
 									Resolved
 								</p>
 								<p
-									class="text-xl font-bold leading-none tabular-nums text-emerald-900 dark:text-emerald-100"
+									class="text-2xl font-bold leading-none tabular-nums text-emerald-900 dark:text-emerald-100"
 								>
 									{resolvedIncidents}
 								</p>
@@ -2136,9 +2136,9 @@
 							</div>
 						</section>
 
-						<!-- Resolution status chart (~30% of prior 10.5rem plot) -->
+						<!-- Resolution status chart (3.15rem + 65% ≈ 5.2rem) -->
 						<section
-							class="col-span-2 flex min-h-0 flex-col rounded-md border border-warm-200 bg-white px-2 py-1 shadow-sm dark:bg-warm-100 lg:col-span-6"
+							class="col-span-2 flex min-h-0 flex-col rounded-md border border-warm-200 bg-white px-2 py-1.5 shadow-sm dark:bg-warm-100 lg:col-span-6"
 							aria-labelledby="action-status-bar-title"
 							aria-describedby="action-status-bar-summary"
 						>
@@ -2154,7 +2154,7 @@
 							<p id="action-status-bar-summary" class="sr-only">{actionStatusAriaLabel}</p>
 							<div
 								class="w-full min-h-0 overflow-visible"
-								style="position: relative; height: 3.15rem; min-height: 3.15rem;"
+								style="position: relative; height: 5.2rem; min-height: 5.2rem;"
 							>
 								{#if !hasActionStatusData}
 									<div class="flex h-full items-center justify-center">
