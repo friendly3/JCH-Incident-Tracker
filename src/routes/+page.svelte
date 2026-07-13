@@ -25,10 +25,6 @@
 		backfillIncidentsFromSubjects,
 		type SubjectBackfillResult
 	} from '$lib/parseSubjectsBackfill';
-	import {
-		backfillEmailReceivedTimes,
-		type EmailTimeBackfillResult
-	} from '$lib/backfillEmailReceivedTime';
 
 	let { data } = $props();
 
@@ -45,9 +41,6 @@
 	let parseSubjectsError = $state<string | null>(null);
 	let parseSubjectsResult = $state<SubjectBackfillResult | null>(null);
 	let showParseConfirm = $state(false);
-	let isBackfillingTimes = $state(false);
-	let timeBackfillError = $state<string | null>(null);
-	let timeBackfillResult = $state<EmailTimeBackfillResult | null>(null);
 
 	async function handleRefresh() {
 		isRefreshing = true;
@@ -99,33 +92,6 @@
 			parseSubjectsError = err instanceof Error ? err.message : 'Subject parse failed';
 		} finally {
 			isParsingSubjects = false;
-		}
-	}
-
-	/**
-	 * One-off: recover email-received clock times from stored columns
-	 * (legacy `time`, or split datetime out of `date_received`) and write to
-	 * `email_received_time` (and legacy `time`).
-	 */
-	async function runEmailTimeBackfill() {
-		if (!data.supabase || isBackfillingTimes) return;
-		isBackfillingTimes = true;
-		timeBackfillError = null;
-		timeBackfillResult = null;
-		try {
-			const result = await backfillEmailReceivedTimes({
-				supabase: data.supabase,
-				incidents,
-				onlyBlankTime: true
-			});
-			timeBackfillResult = result;
-			await invalidateAll();
-			await incidentStore.reload();
-		} catch (err) {
-			timeBackfillError =
-				err instanceof Error ? err.message : 'Email time backfill failed';
-		} finally {
-			isBackfillingTimes = false;
 		}
 	}
 
@@ -697,33 +663,44 @@
 			>
 				+ Add Incident
 			</button>
-			<button
-				type="button"
-				onclick={openParseSubjectsConfirm}
-				disabled={isParsingSubjects || isBackfillingTimes || incidents.length === 0}
-				title="Parse email subjects and fill blank ref, type, driver, and map location. Creates missing types and drivers."
-				aria-label="Parse email subjects into incident fields"
-				class="rounded-lg border border-warm-200 bg-white px-3 py-2 text-sm font-medium text-warm-700 transition hover:bg-warm-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-40"
-			>
-				{isParsingSubjects ? 'Parsing subjects…' : 'Parse subjects → DB'}
-			</button>
-			<button
-				type="button"
-				onclick={runEmailTimeBackfill}
-				disabled={isBackfillingTimes || isParsingSubjects || incidents.length === 0}
-				title="One-off: fill blank email-received times from legacy time or datetime in date_received, writing email_received_time."
-				aria-label="Backfill email received times"
-				class="rounded-lg border border-warm-200 bg-white px-3 py-2 text-sm font-medium text-warm-700 transition hover:bg-warm-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-40"
-			>
-				{isBackfillingTimes ? 'Filling times…' : 'Backfill email times'}
-			</button>
+			<div class="group relative inline-flex">
+				<button
+					type="button"
+					onclick={openParseSubjectsConfirm}
+					disabled={isParsingSubjects || incidents.length === 0}
+					aria-label="Parse email subjects into incident fields"
+					aria-describedby="parse-subjects-tooltip"
+					class="rounded-lg border border-warm-200 bg-white px-3 py-2 text-sm font-medium text-warm-700 transition hover:bg-warm-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-40"
+				>
+					{isParsingSubjects ? 'Parsing subjects…' : 'Parse subjects → DB'}
+				</button>
+				<div
+					id="parse-subjects-tooltip"
+					role="tooltip"
+					class="pointer-events-none absolute left-1/2 top-full z-40 mt-2 w-72 -translate-x-1/2 rounded-lg border border-warm-200 bg-warm-900 px-3 py-2 text-left text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 dark:border-warm-600 dark:bg-warm-200 dark:text-warm-900"
+				>
+					<p class="font-semibold">Parse email subjects → database</p>
+					<p class="mt-1 opacity-95">
+						Reads each incident’s email subject and fills blank
+						<strong class="font-semibold"> reference</strong>,
+						<strong class="font-semibold"> type</strong>,
+						<strong class="font-semibold"> driver</strong>, and
+						<strong class="font-semibold"> map location</strong> fields.
+						Creates missing types and drivers. Existing values are not overwritten.
+					</p>
+					<span
+						class="absolute bottom-full left-1/2 -mb-px h-0 w-0 -translate-x-1/2 border-x-[6px] border-b-[6px] border-x-transparent border-b-warm-900 dark:border-b-warm-200"
+						aria-hidden="true"
+					></span>
+				</div>
+			</div>
 			<button
 				type="button"
 				onclick={handleRefresh}
 				title="Refresh data"
 				aria-label="Refresh incidents data"
 				class="rounded-lg border border-warm-200 bg-white p-2 text-warm-500 transition hover:border-warm-300 hover:text-warm-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-40"
-				disabled={isRefreshing || isParsingSubjects || isBackfillingTimes}
+				disabled={isRefreshing || isParsingSubjects}
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -788,53 +765,6 @@
 					type="button"
 					class="ml-2 text-xs underline"
 					onclick={() => (parseSubjectsError = null)}
-				>
-					Dismiss
-				</button>
-			</div>
-		{/if}
-		{#if timeBackfillResult}
-			<div
-				class="mx-6 mt-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950 dark:border-sky-700/40 dark:bg-sky-950/30 dark:text-sky-100"
-				role="status"
-			>
-				<p class="font-semibold">Email received times backfill</p>
-				<p class="mt-1 text-xs leading-relaxed opacity-90">
-					Scanned {timeBackfillResult.scanned} ·
-					<strong>updated {timeBackfillResult.updated}</strong>
-					· normalized {timeBackfillResult.normalizedTimeOnly}
-					· from date field {timeBackfillResult.splitFromDateReceived}
-					· already set {timeBackfillResult.skippedAlreadySet}
-					· no time source {timeBackfillResult.skippedNoTimeSource}
-				</p>
-				{#if timeBackfillResult.samples.length}
-					<ul class="mt-1.5 space-y-0.5 text-[11px] font-mono opacity-90">
-						{#each timeBackfillResult.samples as s (s.id)}
-							<li>{s.ref}: {s.date} {s.time} ({s.how})</li>
-						{/each}
-					</ul>
-				{/if}
-				{#if timeBackfillResult.errors.length}
-					<p class="mt-1 text-xs text-red-700 dark:text-red-300">
-						Errors: {timeBackfillResult.errors.slice(0, 5).join('; ')}
-					</p>
-				{/if}
-				<button
-					type="button"
-					class="mt-2 text-xs font-medium text-sky-800 underline hover:no-underline dark:text-sky-200"
-					onclick={() => (timeBackfillResult = null)}
-				>
-					Dismiss
-				</button>
-			</div>
-		{/if}
-		{#if timeBackfillError}
-			<div class="mx-6 mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-				{timeBackfillError}
-				<button
-					type="button"
-					class="ml-2 text-xs underline"
-					onclick={() => (timeBackfillError = null)}
 				>
 					Dismiss
 				</button>

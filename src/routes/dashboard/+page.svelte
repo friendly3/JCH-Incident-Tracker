@@ -1545,6 +1545,85 @@
 		return `Incidents by driver (${timeRangeLabel}), stacked by type. ${labels.length} drivers. Types: ${typeNames}${more}.`;
 	});
 
+	/** Short month header, e.g. "Mar 2026" */
+	function formatMonthShortLabel(ym: string): string {
+		const m = /^(\d{4})-(\d{2})$/.exec(ym);
+		if (!m) return ym;
+		const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, 1);
+		if (Number.isNaN(d.getTime())) return ym;
+		return d.toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });
+	}
+
+	/**
+	 * Pivot: each driver × calendar month count within the selected time window.
+	 * Same `timeRange` filter as over-time / driver charts.
+	 */
+	const driverMonthTally = $derived.by(() => {
+		const range = timeRange;
+		type DriverRow = {
+			key: string;
+			label: string;
+			byMonth: Map<string, number>;
+			total: number;
+		};
+		const byDriver = new Map<string, DriverRow>();
+		const monthSet = new Set<string>();
+
+		for (const incident of incidents) {
+			if (!isDateReceivedInTimeRange(incident.dateReceived, range)) continue;
+			const dateKey = dateReceivedKey(incident.dateReceived);
+			if (!dateKey) continue;
+			const ym = dateKey.slice(0, 7);
+			monthSet.add(ym);
+
+			const d = normalizeAggregationKey(incident.driver, 'Unassigned');
+			let row = byDriver.get(d.key);
+			if (!row) {
+				row = { key: d.key, label: d.label, byMonth: new Map(), total: 0 };
+				byDriver.set(d.key, row);
+			}
+			row.byMonth.set(ym, (row.byMonth.get(ym) ?? 0) + 1);
+			row.total += 1;
+		}
+
+		// Chronological month columns (oldest → newest)
+		const months = [...monthSet].sort((a, b) => a.localeCompare(b));
+		// Drivers by total desc, then name
+		const drivers = [...byDriver.values()].sort((a, b) => {
+			if (b.total !== a.total) return b.total - a.total;
+			return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+		});
+
+		const monthTotals = months.map((ym) =>
+			drivers.reduce((sum, row) => sum + (row.byMonth.get(ym) ?? 0), 0)
+		);
+		const grandTotal = drivers.reduce((sum, row) => sum + row.total, 0);
+
+		return {
+			periodLabel: timeRangeLabel,
+			months,
+			monthLabels: months.map(formatMonthShortLabel),
+			monthTotals,
+			grandTotal,
+			rows: drivers.map((row) => ({
+				key: row.key,
+				label: row.label,
+				total: row.total,
+				counts: months.map((ym) => row.byMonth.get(ym) ?? 0)
+			}))
+		};
+	});
+
+	const hasDriverMonthTally = $derived(driverMonthTally.rows.length > 0);
+
+	const driverMonthTallyAriaLabel = $derived.by(() => {
+		const { rows, months, grandTotal, periodLabel } = driverMonthTally;
+		if (rows.length === 0) {
+			return `Driver incidents by month (${periodLabel}): no incident data available`;
+		}
+		return `Driver incidents by month for ${periodLabel}. ${rows.length} drivers, ${months.length} months, ${grandTotal} total incidents.`;
+	});
+
 	onMount(() => {
 		resizeHandler = () => {
 			chartInstance?.resize();
@@ -2144,6 +2223,100 @@
 						</div>
 					</section>
 				</div>
+
+				<!-- Driver × month tally (same time window as charts above) -->
+				<section
+					class="mt-2 w-full min-w-0 col-span-full rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4 dark:bg-warm-100"
+					aria-labelledby="driver-month-tally-title"
+					aria-describedby="driver-month-tally-summary"
+				>
+					<div class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+						<h2
+							id="driver-month-tally-title"
+							class="text-sm font-semibold text-warm-800"
+						>
+							Incidents by Driver per Month
+						</h2>
+						<p class="text-xs text-warm-500">{driverMonthTally.periodLabel}</p>
+					</div>
+					<p id="driver-month-tally-summary" class="sr-only">{driverMonthTallyAriaLabel}</p>
+
+					{#if !hasDriverMonthTally}
+						<p class="py-6 text-center text-sm text-warm-500">No incidents in this period.</p>
+					{:else}
+						<div class="max-h-[min(28rem,60vh)] overflow-auto rounded-md border border-warm-200">
+							<table class="w-full min-w-[28rem] border-collapse text-left text-sm">
+								<thead class="sticky top-0 z-10 border-b border-warm-200 bg-warm-50 dark:bg-warm-200">
+									<tr>
+										<th
+											scope="col"
+											class="sticky left-0 z-20 bg-warm-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-warm-600 dark:bg-warm-200"
+										>
+											Driver
+										</th>
+										{#each driverMonthTally.monthLabels as label, i (driverMonthTally.months[i])}
+											<th
+												scope="col"
+												class="px-2 py-2 text-center text-xs font-semibold tabular-nums text-warm-600 whitespace-nowrap"
+												title={formatMonthYearLabel(driverMonthTally.months[i] ?? '')}
+											>
+												{label}
+											</th>
+										{/each}
+										<th
+											scope="col"
+											class="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-700"
+										>
+											Total
+										</th>
+									</tr>
+								</thead>
+								<tbody class="divide-y divide-warm-100">
+									{#each driverMonthTally.rows as row (row.key)}
+										<tr class="hover:bg-warm-50/80 dark:hover:bg-warm-200/40">
+											<th
+												scope="row"
+												class="sticky left-0 z-[1] bg-white px-3 py-1.5 font-medium text-warm-800 dark:bg-warm-100"
+											>
+												{row.label}
+											</th>
+											{#each row.counts as count, i (`${row.key}-${driverMonthTally.months[i] ?? i}`)}
+												<td
+													class="px-2 py-1.5 text-center tabular-nums {count === 0
+														? 'text-warm-400'
+														: 'font-medium text-warm-800'}"
+												>
+													{count === 0 ? '—' : count}
+												</td>
+											{/each}
+											<td class="px-3 py-1.5 text-center font-semibold tabular-nums text-warm-900">
+												{row.total}
+											</td>
+										</tr>
+									{/each}
+								</tbody>
+								<tfoot class="sticky bottom-0 border-t border-warm-200 bg-warm-50 dark:bg-warm-200">
+									<tr>
+										<th
+											scope="row"
+											class="sticky left-0 z-[1] bg-warm-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-warm-700 dark:bg-warm-200"
+										>
+											All drivers
+										</th>
+										{#each driverMonthTally.monthTotals as total, i (driverMonthTally.months[i])}
+											<td class="px-2 py-2 text-center text-xs font-semibold tabular-nums text-warm-800">
+												{total === 0 ? '—' : total}
+											</td>
+										{/each}
+										<td class="px-3 py-2 text-center text-sm font-bold tabular-nums text-warm-900">
+											{driverMonthTally.grandTotal}
+										</td>
+									</tr>
+								</tfoot>
+							</table>
+						</div>
+					{/if}
+				</section>
 
 				<!-- NSW map: full row, taller panel -->
 				<div class="mt-2 w-full min-w-0 col-span-full">
