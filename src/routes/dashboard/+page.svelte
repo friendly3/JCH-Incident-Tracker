@@ -1264,10 +1264,21 @@
 	 */
 	let timeRange = $state<TimeRangeKey>(dashboardPeriod.value);
 
-	// Persist whenever the selection changes (including initial hydration write)
-	$effect(() => {
-		dashboardPeriod.value = timeRange;
-	});
+	function setTimeRange(next: string) {
+		if (next !== 'all' && next !== '7' && next !== '30' && next !== '90' && !isMonthTimeRange(next)) {
+			return;
+		}
+		const value = next as TimeRangeKey;
+		if (timeRange === value) return;
+		timeRange = value;
+		dashboardPeriod.value = value;
+	}
+
+	function onPeriodSelectChange(event: Event) {
+		const el = event.currentTarget;
+		if (!(el instanceof HTMLSelectElement)) return;
+		setTimeRange(el.value);
+	}
 
 	/**
 	 * Legend filters for multi-series charts (row 3): labels listed here are hidden.
@@ -1377,12 +1388,16 @@
 		return received >= start;
 	}
 
-	// If selected month disappears after data reload, fall back to all time
+	// If selected month disappears after data reload, fall back to all time.
+	// Wait until months are known (or load finished) so we don't wipe a valid pick mid-load.
 	$effect(() => {
+		const loading = incidentStore.isLoading || Boolean(data.loadError);
 		const yms = availableMonths.map((m) => m.ym);
+		if (loading && yms.length === 0) return;
 		dashboardPeriod.resetIfMissingMonth(yms);
-		if (timeRange !== dashboardPeriod.value) {
-			timeRange = dashboardPeriod.value;
+		const stored = dashboardPeriod.value;
+		if (timeRange !== stored) {
+			timeRange = stored;
 		}
 	});
 
@@ -1880,6 +1895,7 @@
 			hidden: hidden.includes(ds.label)
 		}));
 		applyTypeOverTimeChartTheme(instance);
+		instance.update('none');
 	});
 
 	$effect(() => {
@@ -1889,6 +1905,7 @@
 		instance.data.labels = actionStatusBarData.labels;
 		dataset.data = actionStatusBarData.datasets[0].data;
 		applyActionStatusBarTheme(instance);
+		instance.update('none');
 	});
 
 	$effect(() => {
@@ -1903,6 +1920,7 @@
 			hidden: hidden.includes(ds.label)
 		}));
 		applyDriverBarTheme(instance);
+		instance.update('none');
 	});
 
 	$effect(() => {
@@ -1969,7 +1987,8 @@
 					<label class="flex items-center gap-2 text-[0.9625rem] text-warm-600">
 						<span class="font-medium text-warm-700">Period</span>
 						<select
-							bind:value={timeRange}
+							value={timeRange}
+							onchange={onPeriodSelectChange}
 							class="max-w-[17.6rem] rounded-lg border border-warm-200 bg-white px-[0.6875rem] py-[0.4125rem] text-[0.9625rem] text-warm-700 shadow-sm input-focus dark:bg-warm-200"
 							aria-controls="over-time-chart-canvas"
 							aria-label="Time period for dashboard summary and charts"

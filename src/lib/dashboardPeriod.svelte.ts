@@ -62,13 +62,21 @@ export const dashboardPeriod = {
 	},
 	set value(next: TimeRangeKey) {
 		if (!isValidTimeRange(next)) return;
+		// Avoid no-op writes — prevents effect thrashing when bound from the UI
+		if (_timeRange === next) return;
 		_timeRange = next;
 		writeStored(next);
 	},
-	/** Reset invalid month selection after data reload. */
+	/**
+	 * If the stored selection is a calendar month that no longer has data,
+	 * fall back to all time. Only call when `availableYm` is a settled list
+	 * (not empty while data is still loading).
+	 */
 	resetIfMissingMonth(availableYm: string[]) {
 		ensureHydrated();
 		if (!isMonthTimeRange(_timeRange)) return;
+		// Empty list usually means "still loading" or "no refs yet" — don't clobber selection
+		if (availableYm.length === 0) return;
 		const ym = _timeRange.slice(2);
 		if (!availableYm.includes(ym)) {
 			_timeRange = 'all';

@@ -558,88 +558,97 @@
 		let fromNetwork = 0;
 		let fromSuburbTable = 0;
 
-		for (let i = 0; i < locs.length; i++) {
-			if (cancelled || gen !== plotGeneration) return;
-			const loc = locs[i];
-
-			let point: GeoPoint | null = null;
-			/** true when we must rate-limit (live Nominatim) */
-			let pacedNetwork = false;
-
-			// Suburb-only: use stored suburb/region coords; ignore street-precision DB pins
-			const dbPrecision = loc.precision ?? 'suburb';
-			const useStored =
-				loc.lat != null &&
-				loc.lng != null &&
-				dbPrecision !== 'street';
-
-			if (useStored) {
-				fromDbCount += 1;
-				point = {
-					lat: loc.lat as number,
-					lng: loc.lng as number,
-					precision: 'suburb',
-					label: `${loc.suburb}, NSW`
-				};
-				if (loc.idsMissingCoords.length > 0) {
-					pendingPersist.push(...coordPersistFromPoint(loc.idsMissingCoords, point));
-				}
-			} else {
-				const shortLabel =
-					loc.suburb.length > 36 ? `${loc.suburb.slice(0, 33)}…` : loc.suburb;
-				statusText = `Looking up “${shortLabel}” (${i + 1} of ${locs.length})…`;
-				// Never pass street — facility suburb is not delivery street geography
-				let lookup: Awaited<ReturnType<typeof geocodeNswLocationWithSource>>;
-				try {
-					lookup = await geocodeNswLocationWithSource(loc.query, loc.suburb, {
-						street: ''
-					});
-				} catch {
-					lookup = { point: null, source: 'none' };
-				}
+		try {
+			for (let i = 0; i < locs.length; i++) {
 				if (cancelled || gen !== plotGeneration) return;
-				point = lookup.point
-					? { ...lookup.point, precision: 'suburb', label: `${loc.suburb}, NSW` }
-					: null;
-				if (lookup.source === 'browser-cache') fromBrowserCache += 1;
-				else if (lookup.source === 'network') {
-					fromNetwork += 1;
-					pacedNetwork = true;
-				} else if (lookup.source === 'suburb-table') fromSuburbTable += 1;
+				const loc = locs[i];
 
-				if (point && loc.incidentIds.length > 0) {
-					pendingPersist.push(...coordPersistFromPoint(loc.incidentIds, point));
+				let point: GeoPoint | null = null;
+				/** true when we must rate-limit (live Nominatim) */
+				let pacedNetwork = false;
+
+				// Suburb-only: use stored suburb/region coords; ignore street-precision DB pins
+				const dbPrecision = loc.precision ?? 'suburb';
+				const useStored =
+					loc.lat != null &&
+					loc.lng != null &&
+					dbPrecision !== 'street';
+
+				if (useStored) {
+					fromDbCount += 1;
+					point = {
+						lat: loc.lat as number,
+						lng: loc.lng as number,
+						precision: 'suburb',
+						label: `${loc.suburb}, NSW`
+					};
+					if (loc.idsMissingCoords.length > 0) {
+						pendingPersist.push(...coordPersistFromPoint(loc.idsMissingCoords, point));
+					}
+				} else {
+					const shortLabel =
+						loc.suburb.length > 36 ? `${loc.suburb.slice(0, 33)}…` : loc.suburb;
+					statusText = `Looking up “${shortLabel}” (${i + 1} of ${locs.length})…`;
+					// Never pass street — facility suburb is not delivery street geography
+					let lookup: Awaited<ReturnType<typeof geocodeNswLocationWithSource>>;
+					try {
+						lookup = await geocodeNswLocationWithSource(loc.query, loc.suburb, {
+							street: ''
+						});
+					} catch {
+						lookup = { point: null, source: 'none' };
+					}
+					if (cancelled || gen !== plotGeneration) return;
+					point = lookup.point
+						? { ...lookup.point, precision: 'suburb', label: `${loc.suburb}, NSW` }
+						: null;
+					if (lookup.source === 'browser-cache') fromBrowserCache += 1;
+					else if (lookup.source === 'network') {
+						fromNetwork += 1;
+						pacedNetwork = true;
+					} else if (lookup.source === 'suburb-table') fromSuburbTable += 1;
+
+					if (point && loc.incidentIds.length > 0) {
+						pendingPersist.push(...coordPersistFromPoint(loc.incidentIds, point));
+					}
+				}
+
+				if (!point) {
+					geocodeFailedIncidentCount += loc.count;
+					if (pacedNetwork) await sleep(150);
+					continue;
+				}
+
+				mappedIncidentCount += loc.count;
+
+				geocoded.push({
+					key: loc.key,
+					lat: point.lat,
+					lng: point.lng,
+					count: loc.count,
+					suburb: loc.suburb,
+					street: '',
+					precision: 'suburb',
+					placeLabel: loc.suburb
+				});
+
+				if (pacedNetwork) {
+					await sleep(120);
 				}
 			}
 
-			if (!point) {
-				geocodeFailedIncidentCount += loc.count;
-				if (pacedNetwork) await sleep(150);
-				continue;
-			}
+			if (cancelled || gen !== plotGeneration) return;
 
-			mappedIncidentCount += loc.count;
-
-			geocoded.push({
-				key: loc.key,
-				lat: point.lat,
-				lng: point.lng,
-				count: loc.count,
-				suburb: loc.suburb,
-				street: '',
-				precision: 'suburb',
-				placeLabel: loc.suburb
-			});
-
-			if (pacedNetwork) {
-				await sleep(120);
+			streetPlaces = geocoded;
+		} finally {
+			// Always clear busy state when this generation is still current
+			if (gen === plotGeneration) {
+				geocoding = false;
 			}
 		}
 
+		// Superseded by a newer period / data plot
 		if (cancelled || gen !== plotGeneration) return;
-
-		streetPlaces = geocoded;
-		geocoding = false;
 
 		// Save coords so the next full page load can skip lookups
 		if (pendingPersist.length > 0 && onPersistCoords) {
@@ -698,18 +707,29 @@
 		};
 	});
 
-	// Re-plot when incident set changes (e.g. after refresh)
+	// Re-plot when place set changes (period filter / data). Signature avoids
+	// re-geocoding solely because persist wrote lat/lng back into the store.
 	$effect(() => {
 		const locs = locations;
+		const signature = locs
+			.map((l) => `${l.key}:${l.count}:${l.lat != null ? 1 : 0}`)
+			.join('|');
 		if (!map || !ready || typeof window === 'undefined') return;
 		let active = true;
-		(async () => {
-			const L = Lref ?? (await import('leaflet'));
-			if (!active || cancelled) return;
-			await plotLocations(L, locs);
-		})();
+		const handle = setTimeout(() => {
+			void (async () => {
+				const L = Lref ?? (await import('leaflet'));
+				if (!active || cancelled) return;
+				// Re-read derived list for this signature generation
+				void signature;
+				await plotLocations(L, locs);
+			})();
+		}, 50);
 		return () => {
 			active = false;
+			clearTimeout(handle);
+			// Supersede in-flight geocode so finally/early-exit can settle
+			plotGeneration += 1;
 		};
 	});
 
