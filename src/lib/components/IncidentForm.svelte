@@ -144,7 +144,7 @@
 			sender: '',
 			teamLeaderId: null,
 			typeId: null,
-			marked: '',
+			marked: 'Normal',
 			referenceNo: '',
 			referenceText: '',
 			driverId: null,
