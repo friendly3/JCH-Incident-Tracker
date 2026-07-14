@@ -623,7 +623,6 @@
 		placedMarkers = [];
 		streetPlaces = [];
 		mappedPlaceCount = 0;
-		failedPlaceCount = 0;
 		mappedIncidentCount = 0;
 		geocodeFailedIncidentCount = 0;
 		streetLevelCount = 0;
@@ -656,7 +655,6 @@
 			if (cancelled || gen !== plotGeneration) return;
 
 			if (!point) {
-				failedPlaceCount += 1;
 				geocodeFailedIncidentCount += loc.count;
 				// Pace lightly even on failure
 				await sleep(150);
