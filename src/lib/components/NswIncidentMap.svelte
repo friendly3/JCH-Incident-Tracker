@@ -11,7 +11,6 @@
 		type GeoPoint
 	} from '$lib/geocodeNsw';
 	import {
-		resolveIncidentLocation,
 		summarizeLocationsFromSubjects,
 		type LocationAggregate
 	} from '$lib/parseEmailSubjectLocation';
@@ -28,13 +27,9 @@
 	let statusText = $state('Preparing map…');
 	/** Distinct places plotted on the map. */
 	let mappedPlaceCount = $state(0);
-	/** Distinct places that parsed but failed geocoding. */
-	let failedPlaceCount = $state(0);
 	/** Incident totals after geocoding finishes. */
 	let mappedIncidentCount = $state(0);
 	let geocodeFailedIncidentCount = $state(0);
-	/** Sample labels for places that failed geocoding (for legend identification). */
-	let geocodeFailedSamples = $state<string[]>([]);
 	let geocoding = $state(false);
 	let ready = $state(false);
 	let expanded = $state(false);
@@ -113,19 +108,6 @@
 	const undeterminedIncidentCount = $derived(
 		summary.unparseableIncidentCount + geocodeFailedIncidentCount
 	);
-
-	/** Refs for incidents with a ref but no resolveable map location (no-ref excluded). */
-	const unparseableSamples = $derived.by(() => {
-		const samples: string[] = [];
-		for (const row of incidents) {
-			const ref = row.referenceNo?.trim();
-			if (!ref) continue;
-			if (resolveIncidentLocation(row)) continue;
-			samples.push(ref);
-			if (samples.length >= 12) break;
-		}
-		return samples;
-	});
 
 	function applySydneyView(animate = false) {
 		if (!map) return;
@@ -644,7 +626,6 @@
 		failedPlaceCount = 0;
 		mappedIncidentCount = 0;
 		geocodeFailedIncidentCount = 0;
-		geocodeFailedSamples = [];
 		streetLevelCount = 0;
 		suburbLevelCount = 0;
 		geocoding = true;
@@ -663,7 +644,6 @@
 		statusText = `Geocoding ${locs.length} street location${locs.length === 1 ? '' : 's'}…`;
 
 		const geocoded: StreetPlace[] = [];
-		const failedSamples: string[] = [];
 
 		for (let i = 0; i < locs.length; i++) {
 			if (cancelled || gen !== plotGeneration) return;
@@ -678,15 +658,6 @@
 			if (!point) {
 				failedPlaceCount += 1;
 				geocodeFailedIncidentCount += loc.count;
-				const placeLabel = loc.street ? `${loc.street}, ${loc.suburb}` : loc.suburb;
-				const sampleRef = loc.samples[0] ? ` (${loc.samples[0]})` : '';
-				if (failedSamples.length < 12) {
-					failedSamples.push(
-						loc.count > 1
-							? `${placeLabel} ×${loc.count}${sampleRef}`
-							: `${placeLabel}${sampleRef}`
-					);
-				}
 				// Pace lightly even on failure
 				await sleep(150);
 				continue;
@@ -717,7 +688,6 @@
 		if (cancelled || gen !== plotGeneration) return;
 
 		streetPlaces = geocoded;
-		geocodeFailedSamples = failedSamples;
 		geocoding = false;
 
 		if (streetPlaces.length === 0) {
@@ -973,51 +943,6 @@
 					</span>
 				</li>
 			</ul>
-			{#if !geocoding && undeterminedIncidentCount > 0}
-				<div class="mt-1.5 max-h-40 space-y-1.5 overflow-y-auto border-t border-warm-100 pt-1.5 text-[10px] leading-snug text-warm-500">
-					{#if summary.unparseableIncidentCount > 0}
-						<p>
-							<span class="font-semibold text-warm-700"
-								>{summary.unparseableIncidentCount} need a location</span
-							>
-							— set suburb under Map location on the incident, or use
-							<strong class="font-medium text-warm-600">Missing map location</strong> on
-							the Incidents list
-							{#if periodLabel}
-								<span class="text-warm-400"> (list is all-time; map is {periodLabel})</span>
-							{/if}
-						</p>
-						{#if unparseableSamples.length > 0}
-							<ul class="list-inside list-disc space-y-0.5 pl-0.5 font-mono text-[10px] text-warm-600">
-								{#each unparseableSamples as sample, idx (idx)}
-									<li class="break-all">{sample}</li>
-								{/each}
-								{#if summary.unparseableIncidentCount > unparseableSamples.length}
-									<li class="list-none text-warm-400">
-										…and {summary.unparseableIncidentCount - unparseableSamples.length} more
-									</li>
-								{/if}
-							</ul>
-						{/if}
-					{/if}
-					{#if geocodeFailedIncidentCount > 0}
-						<p>
-							<span class="font-semibold text-warm-700"
-								>{geocodeFailedIncidentCount} could not be geocoded</span
-							>
-							({failedPlaceCount} place{failedPlaceCount === 1 ? '' : 's'}) — check spelling or
-							set a clearer suburb
-						</p>
-						{#if geocodeFailedSamples.length > 0}
-							<ul class="list-inside list-disc space-y-0.5 pl-0.5 font-mono text-[10px] text-warm-600">
-								{#each geocodeFailedSamples as sample, idx (idx)}
-									<li class="break-all">{sample}</li>
-								{/each}
-							</ul>
-						{/if}
-					{/if}
-				</div>
-			{/if}
 		</aside>
 	</div>
 
