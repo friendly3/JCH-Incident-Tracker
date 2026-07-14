@@ -970,13 +970,18 @@
 										{/if}
 									</td>
 									<td class="px-3 py-3 text-center max-w-0 overflow-hidden">
-										<span
-											class="inline-block max-w-full break-words whitespace-normal rounded-full px-2.5 py-0.5 text-xs font-medium border uppercase {getTypePillClass(
-												incident.type ?? ''
-											)}"
-										>
-											{incident.type ?? ''}
-										</span>
+										{#if incident.type?.trim()}
+											<span
+												class="inline-block max-w-full break-words whitespace-normal rounded-full px-2.5 py-0.5 text-xs font-medium border uppercase {getTypePillClass(
+													incident.type
+												)}"
+												title={incident.type}
+											>
+												{incident.type}
+											</span>
+										{:else}
+											<span class="text-warm-300">—</span>
+										{/if}
 									</td>
 									<td
 										class="px-3 py-3 whitespace-normal break-all text-xs {!incident.referenceNo?.trim()
