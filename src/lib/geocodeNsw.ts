@@ -320,15 +320,25 @@ function inNswBounds(lat: number, lng: number): boolean {
 	return lat >= -38 && lat <= -28 && lng >= 140 && lng <= 154;
 }
 
+/** Abort slow Nominatim proxy calls so the map never sticks on one place. */
+const GEOCODE_FETCH_MS = 8_000;
+
 /** Call our server geocode proxy (avoids browser CORS on Nominatim). */
 async function serverGeocodeCandidates(
 	q: string,
 	limit = 1
 ): Promise<GeocodeCandidate[]> {
 	if (typeof fetch === 'undefined') return [];
+	// Skip obvious non-place queries (keeps map moving)
+	const bare = q.replace(/\s*NSW,?\s*Australia\s*$/i, '').trim();
+	if (bare.length > 48 || /[&@#]|complaints?|nps|weekly/i.test(bare)) {
+		return [];
+	}
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), GEOCODE_FETCH_MS);
 	try {
 		const url = `/api/geocode?q=${encodeURIComponent(q)}&limit=${limit}`;
-		const res = await fetch(url);
+		const res = await fetch(url, { signal: controller.signal });
 		if (!res.ok) return [];
 		const data = (await res.json()) as {
 			found?: boolean;
@@ -355,6 +365,8 @@ async function serverGeocodeCandidates(
 		return [];
 	} catch {
 		return [];
+	} finally {
+		clearTimeout(timer);
 	}
 }
 
@@ -646,6 +658,19 @@ export async function geocodeNswLocationWithSource(
 
 	const street = (opts?.street ?? '').trim();
 	const suburbTrim = suburb.trim();
+
+	// Refuse non-place names (report subjects, etc.) without hitting Nominatim
+	if (
+		!suburbTrim ||
+		suburbTrim.length > 40 ||
+		suburbTrim.includes('&') ||
+		(suburbTrim.match(/-/g) ?? []).length >= 2 ||
+		/\b(complaint|complaints|nps|weekly|report|summary)\b/i.test(suburbTrim)
+	) {
+		setCached(cacheKey, null);
+		return { point: null, source: 'none' };
+	}
+
 	const centroid = suburbCentroid(suburbTrim);
 
 	// 1) Street-level via Nominatim — multi-candidate + missing street-type probing

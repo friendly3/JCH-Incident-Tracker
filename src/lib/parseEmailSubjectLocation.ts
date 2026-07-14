@@ -61,9 +61,34 @@ const DRIVER_TOKEN = /^[A-Za-z][A-Za-z0-9]{2,24}$/;
 const DRIVER_LIKELY = /[0-9]/; // preferred if contains a digit
 const FACILITY = /^N\d{3,6}$/i;
 const ARTICLE = /^\d{6,14}$/;
+/** Words that never appear in a real NSW suburb name (report / digest subjects). */
+const SUBURB_NOISE =
+	/\b(complaint|complaints|nps|weekly|report|summary|digest|newsletter|update|meeting|agenda|minutes|scorecard|dashboard|metric|metrics)\b/i;
 
 function cleanSpaces(s: string): string {
 	return s.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * True when text looks like a place name we can geocode (e.g. Menai, Oyster Bay),
+ * not a report title like "Weekly Complaints & NPS - - WE".
+ */
+export function isPlausibleSuburbName(suburb: string | null | undefined): boolean {
+	const s = cleanSpaces(suburb ?? '');
+	if (s.length < 2 || s.length > 40) return false;
+	// Must start with a letter (no leading punctuation / digits-only)
+	if (!/^[A-Za-z]/.test(s)) return false;
+	// Reject report-style / multi-dash / ampersand subjects
+	if (s.includes('&') || s.includes('@') || s.includes('#')) return false;
+	if ((s.match(/-/g) ?? []).length >= 2) return false;
+	if (SUBURB_NOISE.test(s)) return false;
+	const words = s.split(/\s+/).filter(Boolean);
+	if (words.length === 0 || words.length > 4) return false;
+	// Each token mostly letters (allow apostrophe / hyphen in names like O'Connell)
+	for (const w of words) {
+		if (!/^[A-Za-z][A-Za-z'-]*$/.test(w)) return false;
+	}
+	return true;
 }
 
 function stripSubjectNoise(subject: string): string {
@@ -270,6 +295,11 @@ export function parseEmailSubjectLocation(
 	const suburb = full.suburb.trim();
 	if (!suburb) return null;
 
+	// Map location from subject only when it looks like the SOD facility template
+	// (article and/or N##### facility). Digest subjects must not become map pins.
+	if (!full.referenceNo?.trim() && !full.facilityCode?.trim()) return null;
+	if (!isPlausibleSuburbName(suburb)) return null;
+
 	return {
 		articleNo: full.referenceNo ?? '',
 		facilityCode: full.facilityCode ?? '',
@@ -353,6 +383,11 @@ export function resolveIncidentLocation(
 	const suburb = (row.locationSuburb ?? '').trim().replace(/\s+/g, ' ');
 
 	if (suburb) {
+		// Manual/backfilled suburb must still look like a place — reject digest titles
+		// that were written into location_suburb by a bad parse.
+		if (!isPlausibleSuburbName(suburb)) {
+			return parseEmailSubjectLocation(row.emailSubject);
+		}
 		const query = street
 			? `${street}, ${suburb} NSW, Australia`
 			: `${suburb} NSW, Australia`;

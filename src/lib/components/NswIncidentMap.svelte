@@ -585,11 +585,18 @@
 					pendingPersist.push(...coordPersistFromPoint(loc.idsMissingCoords, point));
 				}
 			} else {
-				statusText = `Looking up “${loc.suburb}” (${i + 1} of ${locs.length})…`;
+				const shortLabel =
+					loc.suburb.length > 36 ? `${loc.suburb.slice(0, 33)}…` : loc.suburb;
+				statusText = `Looking up “${shortLabel}” (${i + 1} of ${locs.length})…`;
 				// Never pass street — facility suburb is not delivery street geography
-				const lookup = await geocodeNswLocationWithSource(loc.query, loc.suburb, {
-					street: ''
-				});
+				let lookup: Awaited<ReturnType<typeof geocodeNswLocationWithSource>>;
+				try {
+					lookup = await geocodeNswLocationWithSource(loc.query, loc.suburb, {
+						street: ''
+					});
+				} catch {
+					lookup = { point: null, source: 'none' };
+				}
 				if (cancelled || gen !== plotGeneration) return;
 				point = lookup.point
 					? { ...lookup.point, precision: 'suburb', label: `${loc.suburb}, NSW` }

@@ -45,19 +45,24 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 	nominatim.searchParams.set('addressdetails', '0');
 
 	try {
-		const res = await fetch(nominatim.toString(), {
+		const upstream = await fetch(nominatim.toString(), {
 			headers: {
 				Accept: 'application/json',
 				'User-Agent':
 					'JCH-Incident-Tracker/0.4 (https://github.com/friendly3/JCH-Incident-Tracker; ops map geocode)'
-			}
+			},
+			// Prevent map UI from hanging when Nominatim is slow
+			signal: AbortSignal.timeout(7_000)
 		});
 
-		if (!res.ok) {
-			return json({ error: 'Upstream geocode failed', status: res.status }, { status: 502 });
+		if (!upstream.ok) {
+			return json(
+				{ error: 'Upstream geocode failed', status: upstream.status },
+				{ status: 502 }
+			);
 		}
 
-		const data = (await res.json()) as NominatimHit[];
+		const data = (await upstream.json()) as NominatimHit[];
 		const candidates: GeocodeCandidate[] = [];
 
 		for (const hit of data) {
