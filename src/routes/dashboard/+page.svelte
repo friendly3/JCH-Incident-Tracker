@@ -2105,9 +2105,9 @@
 
 						<!-- Unresolved -->
 						<section
-							class="flex items-center gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-3 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-2"
+							class="group/unresolved relative flex items-center gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-3 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-2"
 							aria-labelledby="unresolved-callout-title"
-							title="Not fully closed (status ≠ Resolved or no Date Responded)"
+							aria-describedby="unresolved-callout-tip"
 						>
 							<div class="min-w-0 flex-1">
 								<p
@@ -2127,13 +2127,26 @@
 									</p>
 								{/if}
 							</div>
+							<span
+								class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 w-52 -translate-x-1/2 rounded-md border border-warm-200 bg-warm-900 px-2.5 py-1.5 text-center text-[11px] leading-snug text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/unresolved:opacity-100 group-focus-within/unresolved:opacity-100 dark:border-warm-600 dark:bg-warm-200 dark:text-warm-900"
+								id="unresolved-callout-tip"
+								role="tooltip"
+							>
+								Not fully closed — resolution status is not
+								<strong class="font-semibold">Resolved</strong>, or
+								<strong class="font-semibold">Date Responded</strong> is missing.
+								<span
+									class="absolute left-1/2 top-full -mt-px h-0 w-0 -translate-x-1/2 border-x-[5px] border-t-[5px] border-x-transparent border-t-warm-900 dark:border-t-warm-200"
+									aria-hidden="true"
+								></span>
+							</span>
 						</section>
 
 						<!-- Resolved -->
 						<section
-							class="flex items-center gap-2.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-3 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-2"
+							class="group/resolved relative flex items-center gap-2.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-3 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-2"
 							aria-labelledby="resolved-callout-title"
-							title="Status is Resolved and Date Responded is set"
+							aria-describedby="resolved-callout-tip"
 						>
 							<div class="min-w-0 flex-1">
 								<p
@@ -2155,6 +2168,18 @@
 									</p>
 								{/if}
 							</div>
+							<span
+								class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 w-52 -translate-x-1/2 rounded-md border border-warm-200 bg-warm-900 px-2.5 py-1.5 text-center text-[11px] leading-snug text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/resolved:opacity-100 group-focus-within/resolved:opacity-100 dark:border-warm-600 dark:bg-warm-200 dark:text-warm-900"
+								id="resolved-callout-tip"
+								role="tooltip"
+							>
+								Action status is <strong class="font-semibold">Resolved</strong> and a
+								<strong class="font-semibold">Date Responded</strong> is set.
+								<span
+									class="absolute left-1/2 top-full -mt-px h-0 w-0 -translate-x-1/2 border-x-[5px] border-t-[5px] border-x-transparent border-t-warm-900 dark:border-t-warm-200"
+									aria-hidden="true"
+								></span>
+							</span>
 						</section>
 
 						<!-- Resolution status chart (6.5rem + 10% ≈ 7.15rem) -->
@@ -2585,10 +2610,11 @@
 		max-height: 23.17rem !important;
 	}
 
+	/* +10px so multi-line type legends are not clipped */
 	:global(.dashboard-chart-footer) {
-		flex: 0 0 2.85rem;
-		min-height: 2.85rem;
-		max-height: 2.85rem;
+		flex: 0 0 calc(2.85rem + 10px);
+		min-height: calc(2.85rem + 10px);
+		max-height: calc(2.85rem + 10px);
 		margin-top: 0.35rem;
 		overflow: hidden;
 	}
