@@ -13,7 +13,10 @@
 	import {
 		dashboardPeriod,
 		TIME_RANGE_OPTIONS,
+		formatMonthYearLabel,
+		isDateReceivedInTimeRange,
 		isMonthTimeRange,
+		monthKeyFromRange,
 		type MonthTimeRangeKey,
 		type TimeRangeKey
 	} from '$lib/dashboardPeriod.svelte';
@@ -1311,19 +1314,6 @@
 		return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
 	}
 
-	function monthKeyFromRange(range: MonthTimeRangeKey): string {
-		return range.slice(2); // YYYY-MM
-	}
-
-	/** en-AU long month label, e.g. "March 2026" */
-	function formatMonthYearLabel(ym: string): string {
-		const m = /^(\d{4})-(\d{2})$/.exec(ym);
-		if (!m) return ym;
-		const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, 1);
-		if (Number.isNaN(d.getTime())) return ym;
-		return d.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
-	}
-
 	/**
 	 * Distinct calendar months (YYYY-MM) that have at least one incident,
 	 * newest first — for the time picker month list.
@@ -1352,41 +1342,6 @@
 		}
 		return 'All time';
 	});
-
-	/**
-	 * Inclusive calendar window ending today (local) for relative ranges,
-	 * or a single calendar month (YYYY-MM) when range is m:YYYY-MM.
-	 * e.g. last 7 days = today and the previous 6 calendar days.
-	 * `all` → no lower bound.
-	 */
-	function isDateReceivedInTimeRange(dateStr: string, range: TimeRangeKey, now = new Date()): boolean {
-		const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr?.trim() ?? '');
-		if (!match) return false;
-		const year = parseInt(match[1], 10);
-		const month = parseInt(match[2], 10);
-		const day = parseInt(match[3], 10);
-		const received = new Date(year, month - 1, day);
-		if (Number.isNaN(received.getTime())) return false;
-
-		// Specific calendar month that has data
-		if (isMonthTimeRange(range)) {
-			const ym = monthKeyFromRange(range);
-			return match[1] === ym.slice(0, 4) && match[2] === ym.slice(5, 7);
-		}
-
-		const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-		if (received > end) return false;
-
-		if (range === 'all') return true;
-
-		const days = parseInt(range, 10);
-		if (!Number.isFinite(days) || days < 1) return true;
-
-		const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-		start.setDate(start.getDate() - (days - 1));
-		start.setHours(0, 0, 0, 0);
-		return received >= start;
-	}
 
 	// If selected month disappears after data reload, fall back to all time.
 	// Wait until months are known (or load finished) so we don't wipe a valid pick mid-load.

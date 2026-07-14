@@ -33,6 +33,14 @@
 		type SubjectBackfillResult
 	} from '$lib/parseSubjectsBackfill';
 	import { resolveIncidentLocation } from '$lib/parseEmailSubjectLocation';
+	import {
+		TIME_RANGE_OPTIONS,
+		formatMonthYearLabel,
+		isDateReceivedInTimeRange,
+		isMonthTimeRange,
+		type MonthTimeRangeKey,
+		type TimeRangeKey
+	} from '$lib/dashboardPeriod.svelte';
 
 	let { data } = $props();
 
@@ -110,10 +118,11 @@
 	let filterAction = $state('');
 	/** Only incidents with no manual suburb and no parseable subject location. */
 	let filterMissingMapLocation = $state(false);
-	/** Date received hierarchy: Year → Month → Day (filter, not sort). */
-	let filterDateYear = $state('');
-	let filterDateMonth = $state(''); // '01'..'12'
-	let filterDateDay = $state(''); // '01'..'31'
+	/**
+	 * Date received period — same shape as dashboard Period picker
+	 * (relative ranges + months that have data). Independent of dashboard store.
+	 */
+	let filterDateRange = $state<TimeRangeKey>('all');
 
 	// Admin/CRUD state (moved from admin page)
 	let mode = $state<'list' | 'add' | 'edit'>('list');
@@ -128,75 +137,48 @@
 
 	const isModalOpen = $derived(mode !== 'list' && !isFormExpanded);
 
-	const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})/;
-
-	/** Unique years / months / days present in data for cascading selects. */
-	const dateHierarchy = $derived.by(() => {
-		const years = new Set<string>();
-		const monthsByYear = new Map<string, Set<string>>();
-		const daysByYearMonth = new Map<string, Set<string>>();
-
+	/** Months that have at least one incident (newest first) — period picker optgroup. */
+	const listAvailableMonths = $derived.by(() => {
+		const counts = new Map<string, number>();
 		for (const i of incidents) {
-			const m = DATE_ONLY_RE.exec(i.dateReceived?.trim() ?? '');
+			const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(i.dateReceived?.trim() ?? '');
 			if (!m) continue;
-			const [, y, mo, d] = m;
-			years.add(y);
-			let months = monthsByYear.get(y);
-			if (!months) {
-				months = new Set();
-				monthsByYear.set(y, months);
-			}
-			months.add(mo);
-			const ym = `${y}-${mo}`;
-			let days = daysByYearMonth.get(ym);
-			if (!days) {
-				days = new Set();
-				daysByYearMonth.set(ym, days);
-			}
-			days.add(d);
+			const ym = `${m[1]}-${m[2]}`;
+			counts.set(ym, (counts.get(ym) ?? 0) + 1);
 		}
-
-		const yearOptions = [...years].sort((a, b) => b.localeCompare(a));
-		const monthOptions = filterDateYear
-			? [...(monthsByYear.get(filterDateYear) ?? [])].sort((a, b) => b.localeCompare(a))
-			: [];
-		const dayOptions =
-			filterDateYear && filterDateMonth
-				? [
-						...(daysByYearMonth.get(`${filterDateYear}-${filterDateMonth}`) ?? [])
-					].sort((a, b) => b.localeCompare(a))
-				: [];
-
-		return { yearOptions, monthOptions, dayOptions };
+		return [...counts.entries()]
+			.sort(([a], [b]) => b.localeCompare(a))
+			.map(([ym, count]) => ({
+				ym,
+				count,
+				value: `m:${ym}` as MonthTimeRangeKey
+			}));
 	});
 
-	function monthLabel(mm: string): string {
-		const n = parseInt(mm, 10);
-		if (n < 1 || n > 12) return mm;
-		return new Date(2000, n - 1, 1).toLocaleDateString('en-AU', { month: 'long' });
-	}
-
-	function onDateYearChange(event: Event) {
+	function onDateRangeChange(event: Event) {
 		const el = event.currentTarget;
 		if (!(el instanceof HTMLSelectElement)) return;
-		filterDateYear = el.value;
-		// Cascade: clear more-specific levels when parent changes
-		filterDateMonth = '';
-		filterDateDay = '';
+		const next = el.value;
+		if (
+			next === 'all' ||
+			next === '7' ||
+			next === '30' ||
+			next === '90' ||
+			isMonthTimeRange(next)
+		) {
+			filterDateRange = next as TimeRangeKey;
+		}
 	}
 
-	function onDateMonthChange(event: Event) {
-		const el = event.currentTarget;
-		if (!(el instanceof HTMLSelectElement)) return;
-		filterDateMonth = el.value;
-		filterDateDay = '';
-	}
-
-	function onDateDayChange(event: Event) {
-		const el = event.currentTarget;
-		if (!(el instanceof HTMLSelectElement)) return;
-		filterDateDay = el.value;
-	}
+	// If selected month no longer has data, fall back to all time
+	$effect(() => {
+		if (!isMonthTimeRange(filterDateRange)) return;
+		const ym = filterDateRange.slice(2);
+		if (listAvailableMonths.length === 0) return;
+		if (!listAvailableMonths.some((m) => m.ym === ym)) {
+			filterDateRange = 'all';
+		}
+	});
 
 	const filtered = $derived.by(() => {
 		let result = incidents.filter((i) => {
@@ -223,15 +205,7 @@
 			)
 				return false;
 
-			// Date received hierarchy (filter, not sort)
-			if (filterDateYear || filterDateMonth || filterDateDay) {
-				const m = DATE_ONLY_RE.exec(i.dateReceived?.trim() ?? '');
-				if (!m) return false;
-				const [, y, mo, d] = m;
-				if (filterDateYear && y !== filterDateYear) return false;
-				if (filterDateMonth && mo !== filterDateMonth) return false;
-				if (filterDateDay && d !== filterDateDay) return false;
-			}
+			if (!isDateReceivedInTimeRange(i.dateReceived, filterDateRange)) return false;
 
 			return true;
 		});
@@ -256,9 +230,7 @@
 		filterTeamLeader = '';
 		filterAction = '';
 		filterMissingMapLocation = false;
-		filterDateYear = '';
-		filterDateMonth = '';
-		filterDateDay = '';
+		filterDateRange = 'all';
 	}
 
 	const hasFilters = $derived(
@@ -269,9 +241,7 @@
 				filterTeamLeader ||
 				filterAction ||
 				filterMissingMapLocation ||
-				filterDateYear ||
-				filterDateMonth ||
-				filterDateDay
+				filterDateRange !== 'all'
 		)
 	);
 
@@ -651,49 +621,32 @@
 						</span>
 					{/if}
 				</button>
-				<!-- Date Received hierarchy: Year → Month → Day (filters results) -->
-				<div
-					class="flex flex-wrap items-center gap-2 rounded-lg border border-warm-200 bg-warm-50 px-2 py-1.5"
-					role="group"
-					aria-label="Date received filter"
-				>
-					<span class="pl-1 text-xs font-medium uppercase tracking-wide text-warm-500">Date received</span>
+				<!-- Date received: same relative + months-with-data pattern as dashboard Period -->
+				<label class="flex items-center gap-2 text-sm text-warm-600">
+					<span class="text-xs font-medium uppercase tracking-wide text-warm-500">Date received</span>
 					<select
-						value={filterDateYear}
-						onchange={onDateYearChange}
-						class="rounded-md border border-warm-200 bg-white px-2 py-1.5 text-sm text-warm-700 input-focus dark:bg-warm-200"
-						aria-label="Filter by year"
+						value={filterDateRange}
+						onchange={onDateRangeChange}
+						class="max-w-[17.6rem] rounded-lg border border-warm-200 bg-white px-3 py-2 text-sm text-warm-700 input-focus dark:bg-warm-200"
+						aria-label="Filter by date received period"
+						title="Relative period or a calendar month with incident data"
 					>
-						<option value="">All years</option>
-						{#each dateHierarchy.yearOptions as y (y)}
-							<option value={y}>{y}</option>
-						{/each}
+						<optgroup label="Relative">
+							{#each TIME_RANGE_OPTIONS as opt (opt.value)}
+								<option value={opt.value}>{opt.label}</option>
+							{/each}
+						</optgroup>
+						{#if listAvailableMonths.length > 0}
+							<optgroup label="Months with data">
+								{#each listAvailableMonths as m (m.value)}
+									<option value={m.value}
+										>{formatMonthYearLabel(m.ym)} ({m.count})</option
+									>
+								{/each}
+							</optgroup>
+						{/if}
 					</select>
-					<select
-						value={filterDateMonth}
-						onchange={onDateMonthChange}
-						disabled={!filterDateYear}
-						class="rounded-md border border-warm-200 bg-white px-2 py-1.5 text-sm text-warm-700 input-focus disabled:cursor-not-allowed disabled:opacity-40 dark:bg-warm-200"
-						aria-label="Filter by month"
-					>
-						<option value="">All months</option>
-						{#each dateHierarchy.monthOptions as mo (mo)}
-							<option value={mo}>{monthLabel(mo)}</option>
-						{/each}
-					</select>
-					<select
-						value={filterDateDay}
-						onchange={onDateDayChange}
-						disabled={!filterDateYear || !filterDateMonth}
-						class="rounded-md border border-warm-200 bg-white px-2 py-1.5 text-sm text-warm-700 input-focus disabled:cursor-not-allowed disabled:opacity-40 dark:bg-warm-200"
-						aria-label="Filter by day"
-					>
-						<option value="">All days</option>
-						{#each dateHierarchy.dayOptions as d (d)}
-							<option value={d}>{d}</option>
-						{/each}
-					</select>
-				</div>
+				</label>
 				<button
 					type="button"
 					onclick={clearFilters}
