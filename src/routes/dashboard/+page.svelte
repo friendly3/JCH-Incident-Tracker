@@ -756,7 +756,7 @@
 					position: 'bottom',
 					labels: {
 						usePointStyle: true,
-						font: { size: 10, weight: 500 },
+						font: { size: 12, weight: 500 },
 						color: colors.legend,
 						padding: 6,
 						boxWidth: 8
@@ -809,7 +809,7 @@
 			chart.options.plugins.legend.position = 'bottom';
 			if (chart.options.plugins.legend.labels) {
 				chart.options.plugins.legend.labels.color = colors.legend;
-				chart.options.plugins.legend.labels.font = { size: 10, weight: 500 };
+				chart.options.plugins.legend.labels.font = { size: 12, weight: 500 };
 				chart.options.plugins.legend.labels.padding = 6;
 				chart.options.plugins.legend.labels.boxWidth = 8;
 			}
@@ -2300,7 +2300,7 @@
 										<li>
 											<button
 												type="button"
-												class="dashboard-legend-btn flex max-w-full items-center gap-1 text-[10px] leading-tight text-warm-600 {visible
+												class="dashboard-legend-btn flex max-w-full items-center gap-1 text-[12px] leading-tight text-warm-600 {visible
 													? ''
 													: 'opacity-40 line-through'}"
 												aria-pressed={visible}
@@ -2310,7 +2310,7 @@
 												onclick={() => toggleTypeOverTimeLegend(ds.label)}
 											>
 												<span
-													class="inline-block h-2 w-2 shrink-0 rounded-full"
+													class="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
 													style="background: {typeof ds.borderColor === 'string'
 														? ds.borderColor
 														: '#666'}"
@@ -2384,7 +2384,7 @@
 										<li>
 											<button
 												type="button"
-												class="dashboard-legend-btn flex max-w-full items-center gap-1 text-[10px] leading-tight text-warm-600 {visible
+												class="dashboard-legend-btn flex max-w-full items-center gap-1 text-[12px] leading-tight text-warm-600 {visible
 													? ''
 													: 'opacity-40 line-through'}"
 												aria-pressed={visible}
@@ -2394,7 +2394,7 @@
 												onclick={() => toggleDriverTypeLegend(ds.label)}
 											>
 												<span
-													class="inline-block h-2 w-2 shrink-0 rounded-full"
+													class="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
 													style="background: {typeof ds.borderColor === 'string'
 														? ds.borderColor
 														: '#666'}"
@@ -2586,9 +2586,9 @@
 	}
 
 	:global(.dashboard-chart-footer) {
-		flex: 0 0 2.5rem;
-		min-height: 2.5rem;
-		max-height: 2.5rem;
+		flex: 0 0 2.85rem;
+		min-height: 2.85rem;
+		max-height: 2.85rem;
 		margin-top: 0.35rem;
 		overflow: hidden;
 	}
