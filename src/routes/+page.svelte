@@ -942,7 +942,7 @@
 											formatDate(incident.dateReceived)}
 									</td>
 									<td class="px-2 py-3 text-center max-w-0 overflow-hidden">
-										{#if incident.action}
+										{#if incident.referenceNo?.trim() && incident.action?.trim()}
 											<span
 												class="inline-block max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase {getActionPillClass(
 													incident.action
@@ -952,18 +952,22 @@
 												{incident.action}
 											</span>
 										{:else}
-											<span class="text-warm-300">-</span>
+											<span class="text-warm-300">—</span>
 										{/if}
 									</td>
 									<td class="px-2 py-3 text-center whitespace-nowrap overflow-hidden">
-										<span
-											class="inline-block max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase {getPriorityPillClass(
-												incident.marked
-											)}"
-											title={normalizePriority(incident.marked)}
-										>
-											{normalizePriority(incident.marked)}
-										</span>
+										{#if incident.referenceNo?.trim() && incident.marked?.trim()}
+											<span
+												class="inline-block max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase {getPriorityPillClass(
+													incident.marked
+												)}"
+												title={normalizePriority(incident.marked)}
+											>
+												{normalizePriority(incident.marked)}
+											</span>
+										{:else}
+											<span class="text-warm-300">—</span>
+										{/if}
 									</td>
 									<td class="px-3 py-3 text-center max-w-0 overflow-hidden">
 										<span

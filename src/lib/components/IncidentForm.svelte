@@ -125,7 +125,7 @@
 			sender: '',
 			teamLeaderId: null,
 			typeId: null,
-			marked: 'Normal',
+			marked: '',
 			referenceNo: '',
 			referenceText: '',
 			driverId: null,
@@ -172,7 +172,9 @@
 			sender: value.sender?.trim() ?? '',
 			teamLeaderId: value.teamLeaderId,
 			typeId: value.typeId,
-			marked: normalizePriority(value.marked),
+			marked: value.marked?.trim()
+				? normalizePriority(value.marked)
+				: '',
 			referenceNo: value.referenceNo?.trim() ?? '',
 			referenceText: value.referenceText?.trim() ?? '',
 			driverId: value.driverId,
@@ -199,7 +201,7 @@
 		sender: '',
 		teamLeaderId: null,
 		typeId: null,
-		marked: 'Normal',
+		marked: '',
 		referenceNo: '',
 		referenceText: '',
 		driverId: null,
@@ -335,7 +337,8 @@
 			dateResponse,
 			locationStreet,
 			locationSuburb,
-			marked: normalizePriority(form.marked),
+			// Optional: leave blank until the user picks a priority (not default Normal)
+			marked: form.marked?.trim() ? normalizePriority(form.marked) : '',
 			typeId,
 			driverId: normalizeFkId(form.driverId),
 			teamLeaderId: normalizeFkId(form.teamLeaderId),

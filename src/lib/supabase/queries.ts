@@ -604,7 +604,8 @@ export function createDb(supabase: SupabaseClient) {
 					dateResponse: row.date_response || '',
 					timeResponse: normalizeTimeField(row.time_response || ''),
 					actionId: row.action_id || null,
-					action: row.incident_actions?.name || 'NEW',
+					// Leave blank when unset — do not invent "NEW" for display
+					action: row.incident_actions?.name || '',
 					updatedAt: row.updated_at || row.created_at || '',
 					updatedBy: row.updated_by ?? null,
 					updatedByName: row.updated_by_name?.trim() || ''
