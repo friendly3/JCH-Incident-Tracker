@@ -94,7 +94,10 @@
 			locationPrecision: source.locationPrecision ?? null,
 			locationGeocodedAt: source.locationGeocodedAt ?? null,
 			sender: source.sender?.trim() ?? '',
-			marked: normalizePriority(source.marked),
+			// Keep blank priority blank — do not coerce empty → Normal on load
+			marked: source.marked?.trim()
+				? normalizePriority(source.marked)
+				: '',
 			response: source.response?.trim() ?? '',
 			referenceNo: source.referenceNo?.trim() ?? '',
 			referenceText: source.referenceText?.trim() ?? '',
