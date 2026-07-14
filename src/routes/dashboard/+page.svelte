@@ -2105,11 +2105,11 @@
 
 						<!-- Unresolved -->
 						<section
-							class="group/unresolved relative flex items-center gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-3 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-2"
+							class="flex flex-col justify-between gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-3 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-2"
 							aria-labelledby="unresolved-callout-title"
 							aria-describedby="unresolved-callout-tip"
 						>
-							<div class="min-w-0 flex-1">
+							<div class="min-w-0">
 								<p
 									id="unresolved-callout-title"
 									class="text-[12.65px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
@@ -2117,7 +2117,7 @@
 									Unresolved
 								</p>
 								<p
-									class="text-[2.156rem] font-bold leading-none tabular-nums text-amber-900 dark:text-amber-100"
+									class="mt-0.5 text-[2.156rem] font-bold leading-none tabular-nums text-amber-900 dark:text-amber-100"
 								>
 									{unresolvedIncidents}
 								</p>
@@ -2127,28 +2127,22 @@
 									</p>
 								{/if}
 							</div>
-							<span
-								class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 w-52 -translate-x-1/2 rounded-md border border-warm-200 bg-warm-900 px-2.5 py-1.5 text-center text-[11px] leading-snug text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/unresolved:opacity-100 group-focus-within/unresolved:opacity-100 dark:border-warm-600 dark:bg-warm-200 dark:text-warm-900"
+							<p
 								id="unresolved-callout-tip"
-								role="tooltip"
+								class="text-[10px] leading-snug text-amber-800/85 dark:text-amber-200/85"
 							>
-								Not fully closed — resolution status is not
-								<strong class="font-semibold">Resolved</strong>, or
-								<strong class="font-semibold">Date Responded</strong> is missing.
-								<span
-									class="absolute left-1/2 top-full -mt-px h-0 w-0 -translate-x-1/2 border-x-[5px] border-t-[5px] border-x-transparent border-t-warm-900 dark:border-t-warm-200"
-									aria-hidden="true"
-								></span>
-							</span>
+								Not fully closed — status is not <span class="font-semibold">Resolved</span>, or
+								<span class="font-semibold">Date Responded</span> is missing.
+							</p>
 						</section>
 
 						<!-- Resolved -->
 						<section
-							class="group/resolved relative flex items-center gap-2.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-3 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-2"
+							class="flex flex-col justify-between gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-3 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-2"
 							aria-labelledby="resolved-callout-title"
 							aria-describedby="resolved-callout-tip"
 						>
-							<div class="min-w-0 flex-1">
+							<div class="min-w-0">
 								<p
 									id="resolved-callout-title"
 									class="text-[12.65px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200"
@@ -2156,7 +2150,7 @@
 									Resolved
 								</p>
 								<p
-									class="text-[2.156rem] font-bold leading-none tabular-nums text-emerald-900 dark:text-emerald-100"
+									class="mt-0.5 text-[2.156rem] font-bold leading-none tabular-nums text-emerald-900 dark:text-emerald-100"
 								>
 									{resolvedIncidents}
 								</p>
@@ -2168,18 +2162,13 @@
 									</p>
 								{/if}
 							</div>
-							<span
-								class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 w-52 -translate-x-1/2 rounded-md border border-warm-200 bg-warm-900 px-2.5 py-1.5 text-center text-[11px] leading-snug text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/resolved:opacity-100 group-focus-within/resolved:opacity-100 dark:border-warm-600 dark:bg-warm-200 dark:text-warm-900"
+							<p
 								id="resolved-callout-tip"
-								role="tooltip"
+								class="text-[10px] leading-snug text-emerald-800/85 dark:text-emerald-200/85"
 							>
-								Action status is <strong class="font-semibold">Resolved</strong> and a
-								<strong class="font-semibold">Date Responded</strong> is set.
-								<span
-									class="absolute left-1/2 top-full -mt-px h-0 w-0 -translate-x-1/2 border-x-[5px] border-t-[5px] border-x-transparent border-t-warm-900 dark:border-t-warm-200"
-									aria-hidden="true"
-								></span>
-							</span>
+								Status is <span class="font-semibold">Resolved</span> and a
+								<span class="font-semibold">Date Responded</span> is set.
+							</p>
 						</section>
 
 						<!-- Resolution status chart (6.5rem + 10% ≈ 7.15rem) -->
