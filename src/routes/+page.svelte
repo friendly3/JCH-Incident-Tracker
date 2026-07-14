@@ -108,6 +108,8 @@
 	let filterDriver = $state('');
 	let filterTeamLeader = $state('');
 	let filterAction = $state('');
+	/** Only incidents with no manual suburb and no parseable subject location. */
+	let filterMissingMapLocation = $state(false);
 	/** Date received hierarchy: Year → Month → Day (filter, not sort). */
 	let filterDateYear = $state('');
 	let filterDateMonth = $state(''); // '01'..'12'
@@ -205,13 +207,16 @@
 				!i.referenceText.toLowerCase().includes(q) &&
 				!(i.driver ?? '').toLowerCase().includes(q) &&
 				!(i.type ?? '').toLowerCase().includes(q) &&
-				!i.response.toLowerCase().includes(q)
+				!i.response.toLowerCase().includes(q) &&
+				!(i.emailSubject ?? '').toLowerCase().includes(q) &&
+				!(i.emailSender ?? '').toLowerCase().includes(q)
 			)
 				return false;
 			if (filterType && i.type !== filterType) return false;
 			if (filterDriver && i.driver !== filterDriver) return false;
 			if (filterTeamLeader && i.teamLeader !== filterTeamLeader) return false;
 			if (filterAction && i.action !== filterAction) return false;
+			if (filterMissingMapLocation && resolveIncidentLocation(i)) return false;
 
 			// Date received hierarchy (filter, not sort)
 			if (filterDateYear || filterDateMonth || filterDateDay) {
@@ -234,12 +239,18 @@
 		return result;
 	});
 
+	/** Incidents with no usable map location (manual suburb or subject parse). */
+	const missingMapLocationCount = $derived(
+		incidents.filter((i) => !resolveIncidentLocation(i)).length
+	);
+
 	function clearFilters() {
 		search = '';
 		filterType = '';
 		filterDriver = '';
 		filterTeamLeader = '';
 		filterAction = '';
+		filterMissingMapLocation = false;
 		filterDateYear = '';
 		filterDateMonth = '';
 		filterDateDay = '';
@@ -252,6 +263,7 @@
 				filterDriver ||
 				filterTeamLeader ||
 				filterAction ||
+				filterMissingMapLocation ||
 				filterDateYear ||
 				filterDateMonth ||
 				filterDateDay
@@ -610,6 +622,30 @@
 					<option value="" class="normal-case">All Resolution Statuses</option>
 					{#each data.incidentActions ?? [] as a}<option value={a.name} class="uppercase">{a.name}</option>{/each}
 				</select>
+				<button
+					type="button"
+					onclick={() => (filterMissingMapLocation = !filterMissingMapLocation)}
+					aria-pressed={filterMissingMapLocation}
+					title="Incidents with no suburb/street for the NSW map (manual or email subject)"
+					class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition input-focus {filterMissingMapLocation
+						? 'border-accent-500 bg-accent-50 text-accent-800 ring-1 ring-accent-400'
+						: 'border-warm-200 bg-warm-50 text-warm-700 hover:bg-warm-100'}"
+				>
+					<span
+						class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-accent-500"
+						aria-hidden="true"
+					></span>
+					Missing map location
+					{#if missingMapLocationCount > 0}
+						<span
+							class="rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums {filterMissingMapLocation
+								? 'bg-accent-600 text-white'
+								: 'bg-warm-200 text-warm-700'}"
+						>
+							{missingMapLocationCount}
+						</span>
+					{/if}
+				</button>
 				<!-- Date Received hierarchy: Year → Month → Day (filters results) -->
 				<div
 					class="flex flex-wrap items-center gap-2 rounded-lg border border-warm-200 bg-warm-50 px-2 py-1.5"
@@ -947,13 +983,18 @@
 									>
 										<span class="inline-flex max-w-full items-start gap-1.5">
 											<span class="min-w-0 flex-1 break-words">{incident.emailSubject || ''}</span>
-											{#if incident.referenceNo?.trim() && !resolveIncidentLocation(incident)}
+											{#if !resolveIncidentLocation(incident)}
 												<span
-													class="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-accent-500"
-													title="Map location could not be detected (no suburb/street for geocoding)"
+													class="mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full border border-accent-300 bg-accent-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-700"
+													title="No map location — open the incident and set suburb (street optional) under Map location"
 													aria-label="Map location could not be detected"
-													role="img"
-												></span>
+												>
+													<span
+														class="inline-block h-2 w-2 rounded-full bg-accent-500"
+														aria-hidden="true"
+													></span>
+													No map
+												</span>
 											{/if}
 										</span>
 									</td>

@@ -709,7 +709,7 @@
 		e.preventDefault();
 		handleSubmit();
 	}}
-	class="flex min-h-0 flex-1 flex-col"
+	class="relative flex min-h-0 flex-1 flex-col"
 >
 	<div
 		class="{variant === 'shell'
@@ -1325,7 +1325,7 @@
 
 	<footer class="sn-form-footer shrink-0 bg-white px-6 py-4 dark:bg-warm-100">
 		<div class="mx-auto w-full max-w-3xl space-y-3">
-			{#if submitError}
+			{#if submitError && !showConfirm}
 				<p
 					id="incident-submit-error"
 					class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
@@ -1335,21 +1335,53 @@
 				</p>
 			{/if}
 
-			{#if isEdit && showConfirm}
-				<p class="rounded-md border border-amber-200 bg-amber-100 px-4 py-3 text-sm text-amber-700">
-					Review your changes, then click <strong>Confirm Update</strong> to save.
-				</p>
-			{/if}
-
 			<div class="flex flex-wrap items-center gap-3">
-				{#if isEdit && showConfirm}
-					<button
-						type="button"
-						onclick={handleSubmit}
-						class="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+				<button
+					type="submit"
+					class="rounded-md bg-accent-600 px-5 py-2 text-sm font-medium text-white hover:bg-accent-500 {footerBtnFocus}"
+				>
+					{isEdit ? 'Update' : 'Add'} Incident
+				</button>
+				<button
+					type="button"
+					onclick={handleCancel}
+					class="rounded-md border border-warm-300 bg-white px-5 py-2 text-sm text-warm-700 hover:bg-warm-50 dark:bg-warm-200 {footerBtnFocus}"
+				>
+					Cancel
+				</button>
+			</div>
+		</div>
+	</footer>
+
+	{#if isEdit && showConfirm}
+		<!-- Full takeover over the editor: confirm save or return to editing -->
+		<div
+			class="absolute inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+			role="presentation"
+		>
+			<div
+				class="w-full max-w-md rounded-lg border border-warm-200 bg-white p-6 shadow-xl dark:bg-warm-100"
+				role="alertdialog"
+				aria-modal="true"
+				aria-labelledby="confirm-changes-title"
+				aria-describedby="confirm-changes-desc"
+			>
+				<h3 id="confirm-changes-title" class="mb-2 text-lg font-semibold text-warm-800">
+					Confirm changes
+				</h3>
+				<p id="confirm-changes-desc" class="mb-6 text-sm leading-relaxed text-warm-600">
+					Save your updates to this incident? You can cancel to keep editing without saving.
+				</p>
+				{#if submitError}
+					<p
+						id="incident-submit-error"
+						class="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+						role="alert"
 					>
-						Confirm Update
-					</button>
+						{submitError}
+					</p>
+				{/if}
+				<div class="flex flex-wrap justify-end gap-3">
 					<button
 						type="button"
 						onclick={() => {
@@ -1357,28 +1389,21 @@
 							submitError = null;
 							submitErrorField = null;
 						}}
-						class="rounded-md border border-warm-200 px-5 py-2 text-sm text-warm-600 hover:bg-warm-50 {footerBtnFocus}"
+						class="rounded-md border border-warm-300 bg-white px-5 py-2 text-sm font-medium text-warm-700 hover:bg-warm-50 {footerBtnFocus} dark:bg-warm-200"
 					>
 						Cancel
-					</button>
-				{:else}
-					<button
-						type="submit"
-						class="rounded-md bg-accent-600 px-5 py-2 text-sm font-medium text-white hover:bg-accent-500 {footerBtnFocus}"
-					>
-						{isEdit ? 'Update' : 'Add'} Incident
 					</button>
 					<button
 						type="button"
-						onclick={handleCancel}
-						class="rounded-md border border-warm-300 bg-white px-5 py-2 text-sm text-warm-700 hover:bg-warm-50 dark:bg-warm-200 {footerBtnFocus}"
+						onclick={handleSubmit}
+						class="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
 					>
-						Cancel
+						Confirm changes
 					</button>
-				{/if}
+				</div>
 			</div>
 		</div>
-	</footer>
+	{/if}
 </form>
 
 <style>
