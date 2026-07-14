@@ -2047,7 +2047,7 @@
 						role="group"
 						aria-label="Period KPIs and resolution breakdown"
 					>
-						<!-- Total KPI -->
+						<!-- Total KPI (+15% type scale) -->
 						<section
 							class="flex items-center gap-2.5 rounded-md border border-warm-200 bg-white px-3 py-3 shadow-sm dark:bg-warm-100 lg:col-span-2"
 							aria-labelledby="total-incidents-title"
@@ -2055,18 +2055,18 @@
 							<div class="min-w-0 flex-1">
 								<p
 									id="total-incidents-title"
-									class="text-[11px] font-semibold uppercase tracking-wide text-warm-500"
+									class="text-[12.65px] font-semibold uppercase tracking-wide text-warm-500"
 								>
 									Total
 								</p>
-								<p class="text-3xl font-bold leading-none tabular-nums text-accent-600">
+								<p class="text-[2.156rem] font-bold leading-none tabular-nums text-accent-600">
 									{totalIncidents}
 								</p>
-								<p class="mt-1 truncate text-[11px] text-warm-500">{timeRangeLabel}</p>
+								<p class="mt-1 truncate text-[12.65px] text-warm-500">{timeRangeLabel}</p>
 							</div>
 							{#if totalIncidents > 0}
 								<div
-									class="group relative hidden w-[4.25rem] shrink-0 cursor-help sm:block"
+									class="group relative hidden w-[4.5rem] shrink-0 cursor-help sm:block"
 									title="{resolvedPct}% of incidents in this period are resolved (status Resolved + Date Responded set). {unresolvedPct}% remain open."
 									aria-label="{resolvedPct} percent resolved in period"
 								>
@@ -2080,12 +2080,12 @@
 										></div>
 									</div>
 									<p
-										class="mt-0.5 text-center text-[10px] leading-tight tabular-nums text-warm-600"
+										class="mt-0.5 text-center text-[11.5px] leading-tight tabular-nums text-warm-600"
 									>
 										<span class="font-semibold text-emerald-700 dark:text-emerald-300"
 											>{resolvedPct}%</span
 										>
-										<span class="block text-[9px] font-medium text-warm-500">resolved</span>
+										<span class="block text-[10.35px] font-medium text-warm-500">resolved</span>
 									</p>
 									<!-- Visible hover tip -->
 									<span
@@ -2112,17 +2112,17 @@
 							<div class="min-w-0 flex-1">
 								<p
 									id="unresolved-callout-title"
-									class="text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
+									class="text-[12.65px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
 								>
 									Unresolved
 								</p>
 								<p
-									class="text-3xl font-bold leading-none tabular-nums text-amber-900 dark:text-amber-100"
+									class="text-[2.156rem] font-bold leading-none tabular-nums text-amber-900 dark:text-amber-100"
 								>
 									{unresolvedIncidents}
 								</p>
 								{#if totalIncidents > 0}
-									<p class="mt-1 text-[11px] font-medium text-amber-800/90 dark:text-amber-200/90">
+									<p class="mt-1 text-[12.65px] font-medium text-amber-800/90 dark:text-amber-200/90">
 										{unresolvedPct}% of period
 									</p>
 								{/if}
@@ -2138,18 +2138,18 @@
 							<div class="min-w-0 flex-1">
 								<p
 									id="resolved-callout-title"
-									class="text-[11px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200"
+									class="text-[12.65px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200"
 								>
 									Resolved
 								</p>
 								<p
-									class="text-3xl font-bold leading-none tabular-nums text-emerald-900 dark:text-emerald-100"
+									class="text-[2.156rem] font-bold leading-none tabular-nums text-emerald-900 dark:text-emerald-100"
 								>
 									{resolvedIncidents}
 								</p>
 								{#if totalIncidents > 0}
 									<p
-										class="mt-1 text-[11px] font-medium text-emerald-800/90 dark:text-emerald-200/90"
+										class="mt-1 text-[12.65px] font-medium text-emerald-800/90 dark:text-emerald-200/90"
 									>
 										{resolvedPct}% of period
 									</p>
