@@ -1953,6 +1953,10 @@
 				</div>
 			</div>
 			{#if !data.loadError && !incidentStore.isLoading && !incidentStore.error}
+				<span
+					class="hidden h-9 w-px shrink-0 self-center bg-warm-300/70 dark:bg-warm-400/50 sm:block"
+					aria-hidden="true"
+				></span>
 				<div class="flex flex-wrap items-center gap-2.5">
 					<label class="flex items-center gap-2 text-[0.9625rem] text-warm-600">
 						<span class="font-medium text-warm-700">Period</span>
