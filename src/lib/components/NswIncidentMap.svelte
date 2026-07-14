@@ -343,14 +343,19 @@
 		applySydneyView(true);
 	}
 
-	function fitAllMarkers() {
+	/** Frame all pins (same as the Fit all control). Used on first load and period changes. */
+	function fitAllMarkers(animate = true) {
 		if (!map || !Lref) return;
 		const layers = markersLayer?.getLayers?.() ?? [];
 		if (layers.length > 0) {
 			const group = Lref.featureGroup(layers);
-			map.fitBounds(group.getBounds().pad(0.2), { maxZoom: 14, animate: true });
+			map.fitBounds(group.getBounds().pad(0.2), {
+				maxZoom: 14,
+				animate,
+				padding: [28, 28]
+			});
 		} else {
-			applySydneyView(true);
+			applySydneyView(animate);
 		}
 	}
 
@@ -500,12 +505,7 @@
 		statusText = `Suburb view: ${streetPlaces.length} suburb${streetPlaces.length === 1 ? '' : 's'} (${mappedIncidentCount} incidents). Street-level pins are off.`;
 
 		if (fitBounds && placedMarkers.length > 0) {
-			const group = L.featureGroup(placedMarkers.map((p) => p.marker));
-			map.fitBounds(group.getBounds().pad(0.22), {
-				maxZoom: SYDNEY_DEFAULT_ZOOM + 1,
-				animate: false,
-				padding: [28, 28]
-			});
+			fitAllMarkers(false);
 		}
 
 		map.invalidateSize({ animate: false });
@@ -809,7 +809,7 @@
 			<button
 				type="button"
 				class="rounded-md border border-warm-200 bg-warm-50 px-2.5 py-1 text-xs font-medium text-warm-700 hover:bg-warm-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40 disabled:opacity-50"
-				onclick={fitAllMarkers}
+				onclick={() => fitAllMarkers(true)}
 				disabled={!ready || mappedPlaceCount === 0}
 				title="Fit all mapped locations"
 			>
