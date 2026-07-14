@@ -89,6 +89,10 @@
 			emailSubject: source.emailSubject?.trim() ?? '',
 			locationStreet: source.locationStreet?.trim() ?? '',
 			locationSuburb: source.locationSuburb?.trim() ?? '',
+			locationLat: source.locationLat ?? null,
+			locationLng: source.locationLng ?? null,
+			locationPrecision: source.locationPrecision ?? null,
+			locationGeocodedAt: source.locationGeocodedAt ?? null,
 			sender: source.sender?.trim() ?? '',
 			marked: normalizePriority(source.marked),
 			response: source.response?.trim() ?? '',
@@ -112,6 +116,10 @@
 			emailSubject: '',
 			locationStreet: '',
 			locationSuburb: '',
+			locationLat: null,
+			locationLng: null,
+			locationPrecision: null,
+			locationGeocodedAt: null,
 			dateReceived: '',
 			time: '',
 			sender: '',
@@ -625,6 +633,10 @@
 	function clearManualLocation() {
 		form.locationStreet = '';
 		form.locationSuburb = '';
+		form.locationLat = null;
+		form.locationLng = null;
+		form.locationPrecision = null;
+		form.locationGeocodedAt = null;
 		if (submitErrorField === 'location') {
 			submitError = null;
 			submitErrorField = null;

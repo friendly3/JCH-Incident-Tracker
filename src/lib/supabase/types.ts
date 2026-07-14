@@ -129,6 +129,10 @@ export interface Database {
           email_subject?: string | null
           location_street?: string
           location_suburb?: string
+          location_lat?: number | null
+          location_lng?: number | null
+          location_precision?: string | null
+          location_geocoded_at?: string | null
           sender?: string
           marked?: string
           source?: string
@@ -157,6 +161,10 @@ export interface Database {
           email_subject?: string | null
           location_street?: string
           location_suburb?: string
+          location_lat?: number | null
+          location_lng?: number | null
+          location_precision?: string | null
+          location_geocoded_at?: string | null
           sender?: string
           marked?: string
           source?: string
@@ -184,6 +192,10 @@ export interface Database {
           email_subject?: string | null
           location_street?: string
           location_suburb?: string
+          location_lat?: number | null
+          location_lng?: number | null
+          location_precision?: string | null
+          location_geocoded_at?: string | null
           sender?: string
           marked?: string
           date_response?: string | null

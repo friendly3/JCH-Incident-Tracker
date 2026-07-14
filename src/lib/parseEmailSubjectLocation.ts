@@ -43,10 +43,14 @@ export type ParsedEmailSubject = {
 };
 
 export type IncidentLocationFields = {
+	id?: string;
 	emailSubject?: string;
 	referenceNo?: string;
 	locationStreet?: string;
 	locationSuburb?: string;
+	locationLat?: number | null;
+	locationLng?: number | null;
+	locationPrecision?: 'street' | 'suburb' | 'region' | null;
 };
 
 const RE_PREFIX = /^(?:(?:re|fw|fwd)\s*:\s*)+/i;
@@ -377,7 +381,26 @@ export type LocationAggregate = {
 	samples: string[];
 	/** At least one incident in this group used a manual location. */
 	hasManual: boolean;
+	/** Stored geocode when any incident in the group already has coords. */
+	lat: number | null;
+	lng: number | null;
+	precision: 'street' | 'suburb' | 'region' | null;
+	/** All incident ids in this place group. */
+	incidentIds: string[];
+	/** Ids that still need lat/lng written back to the DB. */
+	idsMissingCoords: string[];
 };
+
+function rowHasStoredCoords(row: IncidentLocationFields): boolean {
+	const lat = row.locationLat;
+	const lng = row.locationLng;
+	return (
+		typeof lat === 'number' &&
+		typeof lng === 'number' &&
+		Number.isFinite(lat) &&
+		Number.isFinite(lng)
+	);
+}
 
 /** Aggregate incidents by resolved street+suburb key (manual overrides subject). */
 export function aggregateLocationsFromSubjects(
@@ -392,10 +415,22 @@ export function aggregateLocationsFromSubjects(
 		const existing = map.get(key);
 		const sample =
 			row.referenceNo?.trim() || parsed.articleNo || parsed.raw;
+		const id = row.id?.trim() || '';
+		const hasCoords = rowHasStoredCoords(row);
+
 		if (existing) {
 			existing.count += 1;
 			if (parsed.source === 'manual') existing.hasManual = true;
 			if (existing.samples.length < 5) existing.samples.push(sample);
+			if (id) {
+				existing.incidentIds.push(id);
+				if (!hasCoords) existing.idsMissingCoords.push(id);
+			}
+			if (hasCoords && existing.lat == null) {
+				existing.lat = row.locationLat as number;
+				existing.lng = row.locationLng as number;
+				existing.precision = row.locationPrecision ?? 'suburb';
+			}
 		} else {
 			map.set(key, {
 				key,
@@ -404,7 +439,12 @@ export function aggregateLocationsFromSubjects(
 				query: parsed.query,
 				count: 1,
 				samples: [sample],
-				hasManual: parsed.source === 'manual'
+				hasManual: parsed.source === 'manual',
+				lat: hasCoords ? (row.locationLat as number) : null,
+				lng: hasCoords ? (row.locationLng as number) : null,
+				precision: hasCoords ? (row.locationPrecision ?? 'suburb') : null,
+				incidentIds: id ? [id] : [],
+				idsMissingCoords: id && !hasCoords ? [id] : []
 			});
 		}
 	}

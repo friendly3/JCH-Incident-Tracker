@@ -11,6 +11,10 @@
 		type GeoPoint
 	} from '$lib/geocodeNsw';
 	import {
+		coordPersistFromPoint,
+		type CoordPersistUpdate
+	} from '$lib/geocodeIncidentCoords';
+	import {
 		summarizeLocationsFromSubjects,
 		type LocationAggregate
 	} from '$lib/parseEmailSubjectLocation';
@@ -19,9 +23,14 @@
 		incidents: Incident[];
 		/** Active dashboard period label, e.g. "Last 30 days" — shown on the map chrome. */
 		periodLabel?: string;
+		/**
+		 * Persist newly resolved lat/lng onto incidents (write-once backfill).
+		 * Called in batches after the map resolves places missing DB coords.
+		 */
+		onPersistCoords?: (updates: CoordPersistUpdate[]) => void | Promise<void>;
 	}
 
-	let { incidents, periodLabel = '' }: Props = $props();
+	let { incidents, periodLabel = '', onPersistCoords }: Props = $props();
 
 	let mapEl = $state<HTMLDivElement | undefined>(undefined);
 	let statusText = $state('Preparing map…');
@@ -640,24 +649,50 @@
 			return;
 		}
 
-		statusText = `Geocoding ${locs.length} street location${locs.length === 1 ? '' : 's'}…`;
+		const withStored = locs.filter((l) => l.lat != null && l.lng != null).length;
+		const needRemote = locs.length - withStored;
+		statusText =
+			needRemote > 0
+				? `Loading map… ${withStored} cached, geocoding ${needRemote} place${needRemote === 1 ? '' : 's'}…`
+				: `Loading ${locs.length} mapped place${locs.length === 1 ? '' : 's'}…`;
 
 		const geocoded: StreetPlace[] = [];
+		/** Coords to write back for incidents missing DB lat/lng. */
+		const pendingPersist: CoordPersistUpdate[] = [];
 
 		for (let i = 0; i < locs.length; i++) {
 			if (cancelled || gen !== plotGeneration) return;
 			const loc = locs[i];
-			statusText = `Geocoding street ${i + 1} of ${locs.length}…`;
 
-			const point: GeoPoint | null = await geocodeNswLocation(loc.query, loc.suburb, {
-				street: loc.street
-			});
-			if (cancelled || gen !== plotGeneration) return;
+			let point: GeoPoint | null = null;
+			let fromDb = false;
+
+			if (loc.lat != null && loc.lng != null) {
+				fromDb = true;
+				point = {
+					lat: loc.lat,
+					lng: loc.lng,
+					precision: loc.precision ?? (loc.street ? 'street' : 'suburb'),
+					label: loc.street ? `${loc.street}, ${loc.suburb}` : loc.suburb
+				};
+				// Same place: copy coords onto sibling incidents that lack them
+				if (loc.idsMissingCoords.length > 0) {
+					pendingPersist.push(...coordPersistFromPoint(loc.idsMissingCoords, point));
+				}
+			} else {
+				statusText = `Geocoding place ${i + 1} of ${locs.length} (${needRemote} new)…`;
+				point = await geocodeNswLocation(loc.query, loc.suburb, {
+					street: loc.street
+				});
+				if (cancelled || gen !== plotGeneration) return;
+				if (point && loc.incidentIds.length > 0) {
+					pendingPersist.push(...coordPersistFromPoint(loc.incidentIds, point));
+				}
+			}
 
 			if (!point) {
 				geocodeFailedIncidentCount += loc.count;
-				// Pace lightly even on failure
-				await sleep(150);
+				if (!fromDb) await sleep(150);
 				continue;
 			}
 
@@ -679,14 +714,24 @@
 				placeLabel
 			});
 
-			// Nominatim courtesy via server (~1/s when uncached)
-			await sleep(point.precision === 'street' ? 900 : 120);
+			// Only pace when we actually hit the geocoder
+			if (!fromDb) {
+				await sleep(point.precision === 'street' ? 900 : 120);
+			}
 		}
 
 		if (cancelled || gen !== plotGeneration) return;
 
 		streetPlaces = geocoded;
 		geocoding = false;
+
+		// Fire-and-forget DB backfill so the next page load is fully cached
+		if (pendingPersist.length > 0 && onPersistCoords) {
+			const deduped = dedupeCoordUpdates(pendingPersist);
+			void Promise.resolve(onPersistCoords(deduped)).catch((err) => {
+				console.warn('Failed to persist map coordinates', err);
+			});
+		}
 
 		if (streetPlaces.length === 0) {
 			applySydneyView(false);
@@ -711,6 +756,12 @@
 
 	function sleep(ms: number) {
 		return new Promise((r) => setTimeout(r, ms));
+	}
+
+	function dedupeCoordUpdates(updates: CoordPersistUpdate[]): CoordPersistUpdate[] {
+		const byId = new Map<string, CoordPersistUpdate>();
+		for (const u of updates) byId.set(u.id, u);
+		return [...byId.values()];
 	}
 
 	function escapeHtml(s: string): string {

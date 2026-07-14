@@ -6,6 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Incident, IncidentType } from '$lib/data/incidents';
 import type { Driver } from '$lib/data/team';
 import { createDb } from '$lib/supabase/queries';
+import { withGeocodedLocation } from '$lib/geocodeIncidentCoords';
 import {
 	matchDriverUsername,
 	matchIncidentTypeName,
@@ -160,7 +161,7 @@ export async function backfillIncidentsFromSubjects(options: {
 			}
 		}
 
-		// Map location
+		// Map location (+ coords when text is set)
 		if (parsed.suburb) {
 			const locEmpty =
 				isBlank(incident.locationSuburb) && isBlank(incident.locationStreet);
@@ -174,6 +175,38 @@ export async function backfillIncidentsFromSubjects(options: {
 					updates.locationStreet = nextStreet;
 					updates.locationSuburb = nextSuburb;
 				}
+			}
+		}
+
+		// Geocode when we have (or just set) location text but no stored coords
+		const mergedStreet =
+			updates.locationStreet !== undefined
+				? updates.locationStreet
+				: incident.locationStreet;
+		const mergedSuburb =
+			updates.locationSuburb !== undefined
+				? updates.locationSuburb
+				: incident.locationSuburb;
+		const needsCoords =
+			!isBlank(mergedSuburb) &&
+			(incident.locationLat == null ||
+				incident.locationLng == null ||
+				updates.locationStreet !== undefined ||
+				updates.locationSuburb !== undefined);
+		if (needsCoords) {
+			const coords = await withGeocodedLocation({
+				...incident,
+				locationStreet: mergedStreet,
+				locationSuburb: mergedSuburb
+			});
+			if (
+				coords.locationLat !== incident.locationLat ||
+				coords.locationLng !== incident.locationLng
+			) {
+				updates.locationLat = coords.locationLat;
+				updates.locationLng = coords.locationLng;
+				updates.locationPrecision = coords.locationPrecision;
+				updates.locationGeocodedAt = coords.locationGeocodedAt;
 			}
 		}
 

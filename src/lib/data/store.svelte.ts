@@ -1,5 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Incident } from './incidents';
+import {
+	applyCoordUpdatesToList,
+	type CoordPersistUpdate,
+	withGeocodedLocation
+} from '../geocodeIncidentCoords';
 import { createDb } from '../supabase/queries';
 
 let _incidents = $state<Incident[]>([]);
@@ -53,7 +58,9 @@ export const incidentStore = {
 	) {
 		if (!_db) return false;
 		try {
-			const success = await _db.addIncident(incident, userId, audit);
+			// Geocode once at write time so the map can plot without Nominatim on load
+			const withCoords = await withGeocodedLocation(incident);
+			const success = await _db.addIncident(withCoords, userId, audit);
 			if (success) {
 				// userId is for insert ownership only; main page shows all incidents
 				await this.reload();
@@ -76,7 +83,8 @@ export const incidentStore = {
 		if (!_db) return false;
 		_error = null;
 		try {
-			const success = await _db.updateIncident(id, updated, audit);
+			const withCoords = await withGeocodedLocation(updated);
+			const success = await _db.updateIncident(id, withCoords, audit);
 			if (success) {
 				await this.reload();
 			}
@@ -94,6 +102,27 @@ export const incidentStore = {
 			_incidents = _incidents.filter((i) => i.id !== id);
 		}
 		return success;
+	},
+	/**
+	 * Write lat/lng for incidents that already have map text but no coords
+	 * (e.g. first map visit after migration). Updates local list without full reload.
+	 */
+	async persistLocationCoords(updates: CoordPersistUpdate[]): Promise<number> {
+		if (!_db || updates.length === 0) return 0;
+		let saved = 0;
+		for (const u of updates) {
+			const ok = await _db.updateIncident(u.id, {
+				locationLat: u.locationLat,
+				locationLng: u.locationLng,
+				locationPrecision: u.locationPrecision,
+				locationGeocodedAt: u.locationGeocodedAt
+			});
+			if (ok) saved += 1;
+		}
+		if (saved > 0) {
+			_incidents = applyCoordUpdatesToList(_incidents, updates);
+		}
+		return saved;
 	},
 	reset() {
 		_incidents = [];

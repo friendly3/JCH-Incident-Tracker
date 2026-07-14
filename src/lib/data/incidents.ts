@@ -28,6 +28,13 @@ export interface Incident {
      */
     locationStreet?: string;
     locationSuburb?: string;
+    /** Persisted geocode (WGS84); map prefers these over live Nominatim. */
+    locationLat?: number | null;
+    locationLng?: number | null;
+    /** street | suburb | region */
+    locationPrecision?: 'street' | 'suburb' | 'region' | null;
+    /** ISO timestamp when lat/lng were last resolved. */
+    locationGeocodedAt?: string | null;
     dateReceived: string;
     /**
      * Clock for Date Received (HH:mm).

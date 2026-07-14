@@ -21,6 +21,7 @@ export type SupabaseIncident = Database['public']['Tables']['incidents']['Row']
 export const INCIDENT_SENDER_MIGRATION = 'add_incident_sender_marked_source.sql'
 export const INCIDENT_NORMALIZATION_MIGRATION = 'normalise_incidents_lookup_tables.sql'
 export const INCIDENT_LOCATION_MIGRATION = 'add_incident_location_fields.sql'
+export const INCIDENT_LOCATION_COORDS_MIGRATION = 'add_incident_location_coords.sql'
 export const RESPONDED_BY_MIGRATION = 'add_responded_by_lookup.sql'
 export const EMAIL_RECEIVED_TIME_MIGRATION = 'add_email_received_time.sql'
 export const INCIDENT_UPDATED_BY_MIGRATION = 'add_incident_updated_by.sql'
@@ -67,6 +68,12 @@ const NORMALIZATION_SCHEMA_MARKERS = [
 
 const SENDER_SCHEMA_MARKERS = ['sender', 'marked', 'source'] as const
 const LOCATION_SCHEMA_MARKERS = ['location_street', 'location_suburb'] as const
+const LOCATION_COORDS_SCHEMA_MARKERS = [
+	'location_lat',
+	'location_lng',
+	'location_precision',
+	'location_geocoded_at'
+] as const
 const EMAIL_RECEIVED_TIME_MARKERS = ['email_received_time'] as const
 const UPDATED_BY_SCHEMA_MARKERS = ['updated_by', 'updated_by_name'] as const
 
@@ -110,6 +117,10 @@ function getIncidentSchemaErrorMessage(error: { message?: string; code?: string 
 		return `Database migration required. Please apply ${INCIDENT_LOCATION_MIGRATION}.`
 	}
 
+	if (messageMentionsAny(msg, LOCATION_COORDS_SCHEMA_MARKERS)) {
+		return `Database migration required. Please apply ${INCIDENT_LOCATION_COORDS_MIGRATION}.`
+	}
+
 	if (messageMentionsAny(msg, EMAIL_RECEIVED_TIME_MARKERS)) {
 		return `Database migration required. Please apply ${EMAIL_RECEIVED_TIME_MIGRATION}.`
 	}
@@ -118,7 +129,21 @@ function getIncidentSchemaErrorMessage(error: { message?: string; code?: string 
 		return `Database migration required. Please apply ${INCIDENT_UPDATED_BY_MIGRATION}.`
 	}
 
-	return `Database schema mismatch. Please apply pending migrations: ${INCIDENT_NORMALIZATION_MIGRATION}, ${INCIDENT_SENDER_MIGRATION}, ${INCIDENT_LOCATION_MIGRATION}, ${EMAIL_RECEIVED_TIME_MIGRATION}, and ${INCIDENT_UPDATED_BY_MIGRATION}.`
+	return `Database schema mismatch. Please apply pending migrations: ${INCIDENT_NORMALIZATION_MIGRATION}, ${INCIDENT_SENDER_MIGRATION}, ${INCIDENT_LOCATION_MIGRATION}, ${INCIDENT_LOCATION_COORDS_MIGRATION}, ${EMAIL_RECEIVED_TIME_MIGRATION}, and ${INCIDENT_UPDATED_BY_MIGRATION}.`
+}
+
+function parseCoord(value: unknown): number | null {
+	if (value == null || value === '') return null
+	const n = typeof value === 'number' ? value : Number(value)
+	return Number.isFinite(n) ? n : null
+}
+
+function parsePrecision(
+	value: unknown
+): 'street' | 'suburb' | 'region' | null {
+	const s = String(value ?? '').trim().toLowerCase()
+	if (s === 'street' || s === 'suburb' || s === 'region') return s
+	return null
 }
 
 // Convert Supabase row to our app's Facility type
@@ -178,6 +203,10 @@ export function toIncidentInsert(
 		email_subject: incident.emailSubject?.trim() || null,
 		location_street: incident.locationStreet?.trim() ?? '',
 		location_suburb: incident.locationSuburb?.trim() ?? '',
+		location_lat: parseCoord(incident.locationLat),
+		location_lng: parseCoord(incident.locationLng),
+		location_precision: incident.locationPrecision ?? null,
+		location_geocoded_at: incident.locationGeocodedAt?.trim() || null,
 		sender: incident.sender?.trim() ?? '',
 		marked: incident.marked?.trim() ?? '',
 		source: 'ui',
@@ -230,6 +259,18 @@ export function toIncidentUpdate(
 	}
 	if (updates.locationSuburb !== undefined) {
 		payload.location_suburb = updates.locationSuburb?.trim() ?? '';
+	}
+	if (updates.locationLat !== undefined) {
+		payload.location_lat = parseCoord(updates.locationLat);
+	}
+	if (updates.locationLng !== undefined) {
+		payload.location_lng = parseCoord(updates.locationLng);
+	}
+	if (updates.locationPrecision !== undefined) {
+		payload.location_precision = updates.locationPrecision ?? null;
+	}
+	if (updates.locationGeocodedAt !== undefined) {
+		payload.location_geocoded_at = updates.locationGeocodedAt?.trim() || null;
 	}
 	if (updates.sender !== undefined) payload.sender = updates.sender?.trim() ?? '';
 	if (updates.marked !== undefined) payload.marked = updates.marked?.trim() ?? '';
@@ -543,6 +584,10 @@ export function createDb(supabase: SupabaseClient) {
 					emailSubject: row.email_subject || '',
 					locationStreet: row.location_street || '',
 					locationSuburb: row.location_suburb || '',
+					locationLat: parseCoord(row.location_lat),
+					locationLng: parseCoord(row.location_lng),
+					locationPrecision: parsePrecision(row.location_precision),
+					locationGeocodedAt: row.location_geocoded_at || null,
 					dateReceived,
 					time,
 					sender: row.sender?.trim() ?? '',
