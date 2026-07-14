@@ -2047,60 +2047,54 @@
 						role="group"
 						aria-label="Period KPIs and resolution breakdown"
 					>
-						<!-- Total KPI (+15% type scale) -->
+						<!-- Total KPI — same vertical stack as Unresolved / Resolved -->
 						<section
-							class="flex items-center gap-2.5 rounded-md border border-warm-200 bg-white px-3 py-3 shadow-sm dark:bg-warm-100 lg:col-span-2"
+							class="flex flex-col justify-between gap-1.5 rounded-md border border-warm-200 bg-white px-3 py-3 shadow-sm dark:bg-warm-100 lg:col-span-2"
 							aria-labelledby="total-incidents-title"
+							aria-describedby="total-incidents-tip"
 						>
-							<div class="min-w-0 flex-1">
+							<div class="min-w-0">
 								<p
 									id="total-incidents-title"
 									class="text-[12.65px] font-semibold uppercase tracking-wide text-warm-500"
 								>
 									Total
 								</p>
-								<p class="text-[2.156rem] font-bold leading-none tabular-nums text-accent-600">
+								<p
+									class="mt-0.5 text-[2.156rem] font-bold leading-none tabular-nums text-accent-600"
+								>
 									{totalIncidents}
 								</p>
-								<p class="mt-1 truncate text-[12.65px] text-warm-500">{timeRangeLabel}</p>
+								{#if totalIncidents > 0}
+									<p class="mt-1 text-[12.65px] font-medium text-warm-600">
+										<span class="font-semibold text-emerald-700 dark:text-emerald-300"
+											>{resolvedPct}% resolved</span
+										>
+										<span class="text-warm-400"> · </span>
+										<span class="truncate">{timeRangeLabel}</span>
+									</p>
+								{:else}
+									<p class="mt-1 truncate text-[12.65px] text-warm-500">{timeRangeLabel}</p>
+								{/if}
 							</div>
-							{#if totalIncidents > 0}
-								<div
-									class="group relative hidden w-[4.5rem] shrink-0 cursor-help sm:block"
-									title="{resolvedPct}% of incidents in this period are resolved (status Resolved + Date Responded set). {unresolvedPct}% remain open."
-									aria-label="{resolvedPct} percent resolved in period"
-								>
+							<div id="total-incidents-tip" class="min-w-0">
+								{#if totalIncidents > 0}
 									<div
 										class="h-1.5 w-full overflow-hidden rounded-full bg-warm-100 dark:bg-warm-200"
 										role="presentation"
+										title="{resolvedPct}% of period is resolved (status Resolved + Date Responded)"
 									>
 										<div
 											class="h-full rounded-full bg-emerald-500/90"
 											style="width: {resolvedPct}%"
 										></div>
 									</div>
-									<p
-										class="mt-0.5 text-center text-[11.5px] leading-tight tabular-nums text-warm-600"
-									>
-										<span class="font-semibold text-emerald-700 dark:text-emerald-300"
-											>{resolvedPct}%</span
-										>
-										<span class="block text-[10.35px] font-medium text-warm-500">resolved</span>
-									</p>
-									<!-- Visible hover tip -->
-									<span
-										class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 w-36 -translate-x-1/2 rounded-md border border-warm-200 bg-warm-900 px-2 py-1.5 text-center text-[10px] leading-snug text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 dark:border-warm-600 dark:bg-warm-200 dark:text-warm-900"
-										role="tooltip"
-									>
-										Share of period that is <strong class="font-semibold">resolved</strong>
-										(status Resolved + Date Responded).
-										<span
-											class="absolute left-1/2 top-full -mt-px h-0 w-0 -translate-x-1/2 border-x-[5px] border-t-[5px] border-x-transparent border-t-warm-900 dark:border-t-warm-200"
-											aria-hidden="true"
-										></span>
-									</span>
-								</div>
-							{/if}
+								{/if}
+								<p class="mt-1 text-[10px] leading-snug text-warm-500">
+									Incidents in the selected period. Bar = share
+									<span class="font-semibold text-warm-600">resolved</span>.
+								</p>
+							</div>
 						</section>
 
 						<!-- Unresolved -->
