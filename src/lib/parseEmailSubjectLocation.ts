@@ -418,8 +418,9 @@ export type LocationParseSummary = {
 	/** Incidents with a usable location (manual or subject). */
 	parseableIncidentCount: number;
 	/**
-	 * Incidents with no usable location
+	 * Incidents with a reference number but no usable location
 	 * (no manual suburb and subject missing / not matching template).
+	 * Rows without a reference number are excluded from this count.
 	 */
 	unparseableIncidentCount: number;
 	totalIncidents: number;
@@ -432,10 +433,17 @@ export function summarizeLocationsFromSubjects(
 	const locations = aggregateLocationsFromSubjects(rows);
 	const parseableIncidentCount = locations.reduce((sum, loc) => sum + loc.count, 0);
 	const totalIncidents = rows.length;
+	// Only flag “needs location” when there is a ref to find the incident by.
+	// Blank / NO REF rows are excluded from the undetermined location count.
+	let unparseableIncidentCount = 0;
+	for (const row of rows) {
+		if (!row.referenceNo?.trim()) continue;
+		if (!resolveIncidentLocation(row)) unparseableIncidentCount += 1;
+	}
 	return {
 		locations,
 		parseableIncidentCount,
-		unparseableIncidentCount: Math.max(0, totalIncidents - parseableIncidentCount),
+		unparseableIncidentCount,
 		totalIncidents
 	};
 }

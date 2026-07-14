@@ -216,7 +216,12 @@
 			if (filterDriver && i.driver !== filterDriver) return false;
 			if (filterTeamLeader && i.teamLeader !== filterTeamLeader) return false;
 			if (filterAction && i.action !== filterAction) return false;
-			if (filterMissingMapLocation && resolveIncidentLocation(i)) return false;
+			// Missing map: has a ref but no usable suburb/street (no-ref rows excluded)
+			if (
+				filterMissingMapLocation &&
+				(!i.referenceNo?.trim() || resolveIncidentLocation(i))
+			)
+				return false;
 
 			// Date received hierarchy (filter, not sort)
 			if (filterDateYear || filterDateMonth || filterDateDay) {
@@ -239,9 +244,9 @@
 		return result;
 	});
 
-	/** Incidents with no usable map location (manual suburb or subject parse). */
+	/** Has ref but no usable map location (no-ref rows excluded). */
 	const missingMapLocationCount = $derived(
-		incidents.filter((i) => !resolveIncidentLocation(i)).length
+		incidents.filter((i) => i.referenceNo?.trim() && !resolveIncidentLocation(i)).length
 	);
 
 	function clearFilters() {
@@ -626,7 +631,7 @@
 					type="button"
 					onclick={() => (filterMissingMapLocation = !filterMissingMapLocation)}
 					aria-pressed={filterMissingMapLocation}
-					title="Incidents with no suburb/street for the NSW map (manual or email subject)"
+					title="Incidents with a reference number but no suburb/street for the NSW map (blank ref excluded)"
 					class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition input-focus {filterMissingMapLocation
 						? 'border-accent-500 bg-accent-50 text-accent-800 ring-1 ring-accent-400'
 						: 'border-warm-200 bg-warm-50 text-warm-700 hover:bg-warm-100'}"
@@ -983,7 +988,7 @@
 									>
 										<span class="inline-flex max-w-full items-start gap-1.5">
 											<span class="min-w-0 flex-1 break-words">{incident.emailSubject || ''}</span>
-											{#if !resolveIncidentLocation(incident)}
+											{#if incident.referenceNo?.trim() && !resolveIncidentLocation(incident)}
 												<span
 													class="mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full border border-accent-300 bg-accent-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-700"
 													title="No map location — open the incident and set suburb (street optional) under Map location"
@@ -1013,8 +1018,6 @@
 											<button onclick={() => (deleteConfirmId = null)}
 												class="px-3 py-1 text-xs bg-warm-100 hover:bg-warm-200 text-warm-700 rounded">No</button>
 										{:else}
-											<button type="button" onclick={() => startEdit(incident)}
-												class="mr-2 px-3 py-1 text-sm bg-accent-100 hover:bg-accent-600 hover:text-white text-accent-700 rounded border border-accent-200">Edit</button>
 											<button type="button" onclick={() => (deleteConfirmId = incident.id)}
 												class="px-3 py-1 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded">Delete</button>
 										{/if}

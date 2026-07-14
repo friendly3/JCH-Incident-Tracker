@@ -114,18 +114,14 @@
 		summary.unparseableIncidentCount + geocodeFailedIncidentCount
 	);
 
-	/** Refs / short subjects for incidents with no resolveable map location. */
+	/** Refs for incidents with a ref but no resolveable map location (no-ref excluded). */
 	const unparseableSamples = $derived.by(() => {
 		const samples: string[] = [];
 		for (const row of incidents) {
-			if (resolveIncidentLocation(row)) continue;
 			const ref = row.referenceNo?.trim();
-			const subject = (row.emailSubject ?? '').trim();
-			const label =
-				ref ||
-				(subject.length > 48 ? `${subject.slice(0, 45)}…` : subject) ||
-				'(no ref or subject)';
-			samples.push(label);
+			if (!ref) continue;
+			if (resolveIncidentLocation(row)) continue;
+			samples.push(ref);
 			if (samples.length >= 12) break;
 		}
 		return samples;
