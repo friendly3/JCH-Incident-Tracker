@@ -7,7 +7,7 @@
 		SYDNEY_DEFAULT_ZOOM,
 		aggregatePlacesBySuburb,
 		collapseOverlappingToSuburbPins,
-		geocodeNswLocation,
+		geocodeNswLocationWithSource,
 		type GeoPoint
 	} from '$lib/geocodeNsw';
 	import {
@@ -650,25 +650,32 @@
 		}
 
 		const withStored = locs.filter((l) => l.lat != null && l.lng != null).length;
-		const needRemote = locs.length - withStored;
+		const needLookup = locs.length - withStored;
 		statusText =
-			needRemote > 0
-				? `Loading map… ${withStored} cached, geocoding ${needRemote} place${needRemote === 1 ? '' : 's'}…`
-				: `Loading ${locs.length} mapped place${locs.length === 1 ? '' : 's'}…`;
+			needLookup > 0
+				? withStored > 0
+					? `Loading map… ${withStored} from database, resolving ${needLookup} place${needLookup === 1 ? '' : 's'}…`
+					: `Resolving ${needLookup} map place${needLookup === 1 ? '' : 's'} (saves for next visit)…`
+				: `Loading ${locs.length} place${locs.length === 1 ? '' : 's'} from database…`;
 
 		const geocoded: StreetPlace[] = [];
 		/** Coords to write back for incidents missing DB lat/lng. */
 		const pendingPersist: CoordPersistUpdate[] = [];
+		let fromDbCount = 0;
+		let fromBrowserCache = 0;
+		let fromNetwork = 0;
+		let fromSuburbTable = 0;
 
 		for (let i = 0; i < locs.length; i++) {
 			if (cancelled || gen !== plotGeneration) return;
 			const loc = locs[i];
 
 			let point: GeoPoint | null = null;
-			let fromDb = false;
+			/** true when we must rate-limit (live Nominatim) */
+			let pacedNetwork = false;
 
 			if (loc.lat != null && loc.lng != null) {
-				fromDb = true;
+				fromDbCount += 1;
 				point = {
 					lat: loc.lat,
 					lng: loc.lng,
@@ -680,11 +687,19 @@
 					pendingPersist.push(...coordPersistFromPoint(loc.idsMissingCoords, point));
 				}
 			} else {
-				statusText = `Geocoding place ${i + 1} of ${locs.length} (${needRemote} new)…`;
-				point = await geocodeNswLocation(loc.query, loc.suburb, {
+				const placeLabel = loc.street ? `${loc.street}, ${loc.suburb}` : loc.suburb;
+				statusText = `Looking up “${placeLabel}” (${i + 1} of ${locs.length})…`;
+				const lookup = await geocodeNswLocationWithSource(loc.query, loc.suburb, {
 					street: loc.street
 				});
 				if (cancelled || gen !== plotGeneration) return;
+				point = lookup.point;
+				if (lookup.source === 'browser-cache') fromBrowserCache += 1;
+				else if (lookup.source === 'network') {
+					fromNetwork += 1;
+					pacedNetwork = true;
+				} else if (lookup.source === 'suburb-table') fromSuburbTable += 1;
+
 				if (point && loc.incidentIds.length > 0) {
 					pendingPersist.push(...coordPersistFromPoint(loc.incidentIds, point));
 				}
@@ -692,7 +707,7 @@
 
 			if (!point) {
 				geocodeFailedIncidentCount += loc.count;
-				if (!fromDb) await sleep(150);
+				if (pacedNetwork) await sleep(150);
 				continue;
 			}
 
@@ -714,8 +729,8 @@
 				placeLabel
 			});
 
-			// Only pace when we actually hit the geocoder
-			if (!fromDb) {
+			// Rate-limit only live Nominatim calls (not DB / browser cache / suburb table)
+			if (pacedNetwork) {
 				await sleep(point.precision === 'street' ? 900 : 120);
 			}
 		}
@@ -725,19 +740,32 @@
 		streetPlaces = geocoded;
 		geocoding = false;
 
-		// Fire-and-forget DB backfill so the next page load is fully cached
+		// Save coords so the next full page load can skip lookups
 		if (pendingPersist.length > 0 && onPersistCoords) {
 			const deduped = dedupeCoordUpdates(pendingPersist);
-			void Promise.resolve(onPersistCoords(deduped)).catch((err) => {
+			statusText = `Saving ${deduped.length} map location${deduped.length === 1 ? '' : 's'}…`;
+			try {
+				await onPersistCoords(deduped);
+			} catch (err) {
 				console.warn('Failed to persist map coordinates', err);
-			});
+			}
 		}
 
 		if (streetPlaces.length === 0) {
 			applySydneyView(false);
-			statusText = 'Parsed locations but none could be geocoded yet.';
+			statusText = 'Parsed locations but none could be placed on the map yet.';
 			return;
 		}
+
+		// Brief ready summary (legend also has counts)
+		const parts: string[] = [];
+		if (fromDbCount > 0) parts.push(`${fromDbCount} from database`);
+		if (fromBrowserCache > 0) parts.push(`${fromBrowserCache} from browser cache`);
+		if (fromSuburbTable > 0) parts.push(`${fromSuburbTable} suburb centre`);
+		if (fromNetwork > 0) parts.push(`${fromNetwork} new lookup${fromNetwork === 1 ? '' : 's'}`);
+		const readyDetail = parts.length > 0 ? parts.join(' · ') : `${streetPlaces.length} places`;
+		// statusText is refined again after markers render; set a provisional line here
+		statusText = `Map ready · ${readyDetail}`;
 
 		// Default load: suburb overview only (street detail requires user zoom-in)
 		const suburbMaxZoom = STREET_DETAIL_MIN_ZOOM - 1;

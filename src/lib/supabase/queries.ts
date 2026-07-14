@@ -671,6 +671,41 @@ export function createDb(supabase: SupabaseClient) {
 			return !error
 		},
 
+		/**
+		 * Lightweight lat/lng write-back for the map (no source fetch / audit churn).
+		 * Used when backfilling coords after a first-time geocode.
+		 */
+		async updateIncidentCoords(
+			id: string,
+			coords: {
+				locationLat: number
+				locationLng: number
+				locationPrecision: 'street' | 'suburb' | 'region'
+				locationGeocodedAt: string
+			}
+		): Promise<boolean> {
+			const { error } = await supabase
+				.from('incidents')
+				.update({
+					location_lat: coords.locationLat,
+					location_lng: coords.locationLng,
+					location_precision: coords.locationPrecision,
+					location_geocoded_at: coords.locationGeocodedAt
+				})
+				.eq('id', id)
+
+			if (error) {
+				const schemaMessage = getIncidentSchemaErrorMessage(error)
+				if (schemaMessage) {
+					console.error(schemaMessage, error)
+					throw new Error(schemaMessage)
+				}
+				console.error('Error updating incident coords:', id, error)
+				return false
+			}
+			return true
+		},
+
 		async deleteIncident(id: string) {
 			const { error } = await supabase
 				.from('incidents')

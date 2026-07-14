@@ -110,17 +110,31 @@ export const incidentStore = {
 	async persistLocationCoords(updates: CoordPersistUpdate[]): Promise<number> {
 		if (!_db || updates.length === 0) return 0;
 		let saved = 0;
-		for (const u of updates) {
-			const ok = await _db.updateIncident(u.id, {
-				locationLat: u.locationLat,
-				locationLng: u.locationLng,
-				locationPrecision: u.locationPrecision,
-				locationGeocodedAt: u.locationGeocodedAt
-			});
-			if (ok) saved += 1;
+		const okUpdates: CoordPersistUpdate[] = [];
+		// Modest concurrency so a large first-time backfill does not stall
+		const chunkSize = 8;
+		for (let i = 0; i < updates.length; i += chunkSize) {
+			const chunk = updates.slice(i, i + chunkSize);
+			const results = await Promise.all(
+				chunk.map(async (u) => {
+					const ok = await _db!.updateIncidentCoords(u.id, {
+						locationLat: u.locationLat,
+						locationLng: u.locationLng,
+						locationPrecision: u.locationPrecision,
+						locationGeocodedAt: u.locationGeocodedAt
+					});
+					return ok ? u : null;
+				})
+			);
+			for (const u of results) {
+				if (u) {
+					saved += 1;
+					okUpdates.push(u);
+				}
+			}
 		}
-		if (saved > 0) {
-			_incidents = applyCoordUpdatesToList(_incidents, updates);
+		if (okUpdates.length > 0) {
+			_incidents = applyCoordUpdatesToList(_incidents, okUpdates);
 		}
 		return saved;
 	},

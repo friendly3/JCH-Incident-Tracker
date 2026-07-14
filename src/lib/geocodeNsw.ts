@@ -253,24 +253,39 @@ export const NSW_BOUNDS: [[number, number], [number, number]] = [
 	[-28.1, 153.7]
 ];
 
+/** Where a geocode result came from (for map status / rate limiting). */
+export type GeocodeSource =
+	| 'browser-cache'
+	| 'network'
+	| 'suburb-table'
+	| 'none';
+
+export type GeocodeLookupResult = {
+	point: GeoPoint | null;
+	source: GeocodeSource;
+};
+
 /**
- * Geocode a street + suburb in NSW.
+ * Geocode a street + suburb in NSW (with source metadata).
  * Prefers true street-level coords via server Nominatim; falls back to suburb centre.
  */
-export async function geocodeNswLocation(
+export async function geocodeNswLocationWithSource(
 	query: string,
 	suburb: string,
 	opts?: { street?: string }
-): Promise<GeoPoint | null> {
+): Promise<GeocodeLookupResult> {
 	const cacheKey = query.trim().toLowerCase();
 	const cached = getCached(cacheKey);
 	if (cached !== undefined) {
 		// Re-apply street jitter only on suburb-precision fallbacks
 		if (cached && cached.precision === 'suburb' && opts?.street) {
 			const j = jitterFromKey(cached.lat, cached.lng, cacheKey);
-			return { ...cached, lat: j.lat, lng: j.lng };
+			return {
+				point: { ...cached, lat: j.lat, lng: j.lng },
+				source: 'browser-cache'
+			};
 		}
-		return cached;
+		return { point: cached, source: cached ? 'browser-cache' : 'none' };
 	}
 
 	const street = (opts?.street ?? '').trim();
@@ -295,7 +310,7 @@ export async function geocodeNswLocation(
 					: (remote.label ?? `${suburbTrim}, NSW`)
 			};
 			setCached(cacheKey, point);
-			return point;
+			return { point, source: 'network' };
 		}
 	}
 
@@ -311,9 +326,17 @@ export async function geocodeNswLocation(
 			setCached(cacheKey, point);
 			if (street) {
 				const j = jitterFromKey(point.lat, point.lng, cacheKey);
-				return { ...point, lat: j.lat, lng: j.lng, label: `${street}, ${suburbTrim}, NSW` };
+				return {
+					point: {
+						...point,
+						lat: j.lat,
+						lng: j.lng,
+						label: `${street}, ${suburbTrim}, NSW`
+					},
+					source: 'network'
+				};
 			}
-			return point;
+			return { point, source: 'network' };
 		}
 	}
 
@@ -323,17 +346,33 @@ export async function geocodeNswLocation(
 		if (street) {
 			const j = jitterFromKey(centroid.lat, centroid.lng, cacheKey);
 			return {
-				...centroid,
-				lat: j.lat,
-				lng: j.lng,
-				label: `${street}, ${suburbTrim}, NSW`
+				point: {
+					...centroid,
+					lat: j.lat,
+					lng: j.lng,
+					label: `${street}, ${suburbTrim}, NSW`
+				},
+				source: 'suburb-table'
 			};
 		}
-		return centroid;
+		return { point: centroid, source: 'suburb-table' };
 	}
 
 	setCached(cacheKey, null);
-	return null;
+	return { point: null, source: 'none' };
+}
+
+/**
+ * Geocode a street + suburb in NSW.
+ * Prefers true street-level coords via server Nominatim; falls back to suburb centre.
+ */
+export async function geocodeNswLocation(
+	query: string,
+	suburb: string,
+	opts?: { street?: string }
+): Promise<GeoPoint | null> {
+	const { point } = await geocodeNswLocationWithSource(query, suburb, opts);
+	return point;
 }
 
 /**
