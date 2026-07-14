@@ -333,6 +333,16 @@
 		form.locationStreet = locationStreet;
 		form.locationSuburb = locationSuburb;
 
+		const referenceNo = form.referenceNo?.trim() ?? '';
+		// Priority: default Normal only when there is a reference number; blank ref → blank priority
+		const marked = form.marked?.trim()
+			? normalizePriority(form.marked)
+			: referenceNo
+				? 'Normal'
+				: '';
+		form.referenceNo = referenceNo;
+		form.marked = marked;
+
 		const payload: Incident = {
 			...form,
 			source: form.source === 'import' ? 'import' : 'ui',
@@ -340,8 +350,8 @@
 			dateResponse,
 			locationStreet,
 			locationSuburb,
-			// Optional: leave blank until the user picks a priority (not default Normal)
-			marked: form.marked?.trim() ? normalizePriority(form.marked) : '',
+			referenceNo,
+			marked,
 			typeId,
 			driverId: normalizeFkId(form.driverId),
 			teamLeaderId: normalizeFkId(form.teamLeaderId),
@@ -597,6 +607,8 @@
 		const ref = subjectParsed?.referenceNo;
 		if (!ref) return;
 		form.referenceNo = ref;
+		// New/blank priority → Normal once a ref is present
+		if (!form.marked?.trim()) form.marked = 'Normal';
 	}
 
 	function applySubjectType() {
@@ -617,7 +629,10 @@
 	function applyAllFromSubject() {
 		const p = subjectParsed;
 		if (!p) return;
-		if (p.referenceNo) form.referenceNo = p.referenceNo;
+		if (p.referenceNo) {
+			form.referenceNo = p.referenceNo;
+			if (!form.marked?.trim()) form.marked = 'Normal';
+		}
 		if (subjectMatchedType) {
 			form.typeId = subjectMatchedType.id;
 			if (submitErrorField === 'type') {
