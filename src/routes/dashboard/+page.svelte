@@ -509,7 +509,7 @@
 	function aggregateIncidentsBy(field: 'driver', emptyLabel = 'Unassigned') {
 		const grouped = new Map<string, { label: string; count: number }>();
 
-		incidents.forEach((incident) => {
+		dashboardIncidents.forEach((incident) => {
 			const { key, label } = normalizeAggregationKey(incident[field], emptyLabel);
 			const existing = grouped.get(key);
 			grouped.set(key, {
@@ -1221,6 +1221,14 @@
 
 	const incidents = $derived(incidentsFromPageData(incidentStore.list, data.incidents));
 
+	/** Dashboard metrics ignore blank / missing reference numbers (NO REF). */
+	function hasIncidentReference(incident: Incident): boolean {
+		return Boolean(incident.referenceNo?.trim());
+	}
+
+	/** All dashboard charts, KPIs, tables, and map use this set only. */
+	const dashboardIncidents = $derived(incidents.filter(hasIncidentReference));
+
 	let canvasElement: HTMLCanvasElement | undefined = $state();
 	let typeOverTimeCanvas: HTMLCanvasElement | undefined = $state();
 	let actionStatusCanvas: HTMLCanvasElement | undefined = $state();
@@ -1311,7 +1319,7 @@
 	 */
 	const availableMonths = $derived.by(() => {
 		const counts = new Map<string, number>();
-		for (const incident of incidents) {
+		for (const incident of dashboardIncidents) {
 			const key = dateReceivedKey(incident.dateReceived);
 			if (!key) continue;
 			const ym = key.slice(0, 7);
@@ -1383,7 +1391,7 @@
 		const grouped: Record<string, number> = {};
 		const range = timeRange;
 
-		incidents.forEach((incident) => {
+		dashboardIncidents.forEach((incident) => {
 			const date = incident.dateReceived;
 			if (!isDateReceivedInTimeRange(date, range)) return;
 			const key = dateReceivedKey(date);
@@ -1429,7 +1437,7 @@
 		/** typeKey → total in selected period (legend; explicit range filter) */
 		const typeTotals = new Map<string, number>();
 
-		for (const incident of incidents) {
+		for (const incident of dashboardIncidents) {
 			// Honour time picker directly (do not rely only on date-key set membership)
 			if (!isDateReceivedInTimeRange(incident.dateReceived, range)) continue;
 			const date = dateReceivedKey(incident.dateReceived);
@@ -1504,10 +1512,10 @@
 		return `Incidents by type over time (${timeRangeLabel}) for ${dateKeys.length} days. Types: ${typeNames}${more}.`;
 	});
 
-	/** Incidents in the selected time period (shared by summary tiles, charts, tables). */
+	/** Incidents in the selected time period (shared by summary tiles, charts, tables, map). */
 	const periodIncidents = $derived.by(() => {
 		const range = timeRange;
-		return incidents.filter((i) => isDateReceivedInTimeRange(i.dateReceived, range));
+		return dashboardIncidents.filter((i) => isDateReceivedInTimeRange(i.dateReceived, range));
 	});
 
 	/** Counts by resolution status in the selected period — sorted high → low. */
@@ -1558,7 +1566,7 @@
 		const typeMeta = new Map<string, string>();
 		const typeTotals = new Map<string, number>();
 
-		for (const incident of incidents) {
+		for (const incident of dashboardIncidents) {
 			if (!isDateReceivedInTimeRange(incident.dateReceived, range)) continue;
 
 			const d = normalizeAggregationKey(incident.driver, 'Unassigned');
@@ -1676,7 +1684,7 @@
 		const byDriver = new Map<string, DriverRow>();
 		const monthSet = new Set<string>();
 
-		for (const incident of incidents) {
+		for (const incident of dashboardIncidents) {
 			if (!isDateReceivedInTimeRange(incident.dateReceived, range)) continue;
 			const dateKey = dateReceivedKey(incident.dateReceived);
 			if (!dateKey) continue;
