@@ -402,21 +402,47 @@ function rowHasStoredCoords(row: IncidentLocationFields): boolean {
 	);
 }
 
-/** Aggregate incidents by resolved street+suburb key (manual overrides subject). */
+export type AggregateLocationsOptions = {
+	/**
+	 * When true (default for map), group by suburb only and ignore street.
+	 * Subject “suburb” is facility/PO context — not street geography.
+	 */
+	suburbOnly?: boolean;
+};
+
+/**
+ * Aggregate incidents by resolved location (manual overrides subject).
+ * Default is suburb-only (one group per suburb); set suburbOnly: false for street+suburb.
+ */
 export function aggregateLocationsFromSubjects(
-	rows: IncidentLocationFields[]
+	rows: IncidentLocationFields[],
+	options?: AggregateLocationsOptions
 ): LocationAggregate[] {
+	const suburbOnly = options?.suburbOnly !== false;
 	const map = new Map<string, LocationAggregate>();
 
 	for (const row of rows) {
 		const parsed = resolveIncidentLocation(row);
 		if (!parsed) continue;
-		const key = `${parsed.suburb.toLowerCase()}|${parsed.street.toLowerCase()}`;
+
+		const suburb = parsed.suburb.trim();
+		const street = suburbOnly ? '' : parsed.street.trim();
+		const key = suburbOnly
+			? suburb.toLowerCase()
+			: `${suburb.toLowerCase()}|${street.toLowerCase()}`;
+		const query = suburbOnly
+			? `${suburb} NSW, Australia`
+			: parsed.query;
+
 		const existing = map.get(key);
 		const sample =
 			row.referenceNo?.trim() || parsed.articleNo || parsed.raw;
 		const id = row.id?.trim() || '';
-		const hasCoords = rowHasStoredCoords(row);
+		// Street-precision coords are not reliable for facility-suburb pins
+		const precision = row.locationPrecision ?? null;
+		const hasUsableCoords =
+			rowHasStoredCoords(row) &&
+			(!suburbOnly || precision === 'suburb' || precision === 'region' || precision == null);
 
 		if (existing) {
 			existing.count += 1;
@@ -424,27 +450,27 @@ export function aggregateLocationsFromSubjects(
 			if (existing.samples.length < 5) existing.samples.push(sample);
 			if (id) {
 				existing.incidentIds.push(id);
-				if (!hasCoords) existing.idsMissingCoords.push(id);
+				if (!hasUsableCoords) existing.idsMissingCoords.push(id);
 			}
-			if (hasCoords && existing.lat == null) {
+			if (hasUsableCoords && existing.lat == null) {
 				existing.lat = row.locationLat as number;
 				existing.lng = row.locationLng as number;
-				existing.precision = row.locationPrecision ?? 'suburb';
+				existing.precision = precision ?? 'suburb';
 			}
 		} else {
 			map.set(key, {
 				key,
-				suburb: parsed.suburb,
-				street: parsed.street,
-				query: parsed.query,
+				suburb,
+				street,
+				query,
 				count: 1,
 				samples: [sample],
 				hasManual: parsed.source === 'manual',
-				lat: hasCoords ? (row.locationLat as number) : null,
-				lng: hasCoords ? (row.locationLng as number) : null,
-				precision: hasCoords ? (row.locationPrecision ?? 'suburb') : null,
+				lat: hasUsableCoords ? (row.locationLat as number) : null,
+				lng: hasUsableCoords ? (row.locationLng as number) : null,
+				precision: hasUsableCoords ? (precision ?? 'suburb') : null,
 				incidentIds: id ? [id] : [],
-				idsMissingCoords: id && !hasCoords ? [id] : []
+				idsMissingCoords: id && !hasUsableCoords ? [id] : []
 			});
 		}
 	}

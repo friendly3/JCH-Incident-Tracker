@@ -2,11 +2,8 @@
 	import { onDestroy, onMount, tick } from 'svelte';
 	import type { Incident } from '$lib/data/incidents';
 	import {
-		STREET_DETAIL_MIN_ZOOM,
 		SYDNEY_CENTER,
 		SYDNEY_DEFAULT_ZOOM,
-		aggregatePlacesBySuburb,
-		collapseOverlappingToSuburbPins,
 		geocodeNswLocationWithSource,
 		type GeoPoint
 	} from '$lib/geocodeNsw';
@@ -42,9 +39,8 @@
 	let geocoding = $state(false);
 	let ready = $state(false);
 	let expanded = $state(false);
-	/** street = individual streets; suburb = aggregated by suburb (zoom-dependent). */
-	let viewMode = $state<'street' | 'suburb'>('suburb');
-	let streetLevelCount = $state(0);
+	/** Map is facility/PO suburb only — street-level is disabled. */
+	const viewMode = 'suburb' as const;
 	let suburbLevelCount = $state(0);
 
 	// Leaflet map instance (typed loosely to avoid SSR issues)
@@ -65,7 +61,6 @@
 	let streetPlaces: StreetPlace[] = [];
 	let labelLayoutBound = false;
 	let labelLayoutTimer: ReturnType<typeof setTimeout> | null = null;
-	let viewModeBound = false;
 	let initialFitDone = false;
 
 	type StreetPlace = {
@@ -192,25 +187,8 @@
 			map.on('zoomend moveend', scheduleLabelLayout);
 			labelLayoutBound = true;
 		}
-		if (!viewModeBound) {
-			map.on('zoomend', onZoomModeChange);
-			viewModeBound = true;
-		}
-
 		ready = true;
 		await plotLocations(L, locations);
-	}
-
-	function onZoomModeChange() {
-		if (!map || streetPlaces.length === 0 || geocoding) return;
-		const next: 'street' | 'suburb' =
-			map.getZoom() >= STREET_DETAIL_MIN_ZOOM ? 'street' : 'suburb';
-		if (next !== viewMode) {
-			viewMode = next;
-			renderMarkersForMode(false);
-		} else {
-			scheduleLabelLayout();
-		}
 	}
 
 	function scheduleLabelLayout() {
@@ -486,10 +464,8 @@
 	}
 
 	/**
-	 * Draw markers for the current zoom mode from `streetPlaces`.
-	 * - Suburb mode: one pin per suburb
-	 * - Street mode: one pin per geocode; overlapping positions collapse to a
-	 *   single pin labelled with the suburb (not fanned-out streets)
+	 * Draw suburb-only markers (facility / PO suburb totals).
+	 * Street-level pins are disabled — subject suburb is not street geography.
 	 */
 	function renderMarkersForMode(fitBounds: boolean) {
 		if (!map || !markersLayer || !Lref) return;
@@ -498,121 +474,38 @@
 		markersLayer.clearLayers();
 		placedMarkers = [];
 
-		const zoom = map.getZoom() as number;
-		viewMode = zoom >= STREET_DETAIL_MIN_ZOOM ? 'street' : 'suburb';
-
 		if (streetPlaces.length === 0) {
 			mappedPlaceCount = 0;
 			statusText = 'No geocoded places to show.';
 			return;
 		}
 
-		if (viewMode === 'suburb') {
-			const suburbs = aggregatePlacesBySuburb(
-				streetPlaces.map((p) => ({
-					key: p.key,
-					lat: p.lat,
-					lng: p.lng,
-					count: p.count,
-					suburb: p.suburb,
-					street: p.street,
-					precision: p.precision
-				}))
-			);
-			suburbLevelCount = suburbs.length;
+		suburbLevelCount = streetPlaces.length;
 
-			for (const s of suburbs) {
-				addMarkerEntry({
-					L,
-					lat: s.lat,
-					lng: s.lng,
-					count: s.count,
-					nameLine: s.suburb,
-					suburbLine: `${s.placeCount} location${s.placeCount === 1 ? '' : 's'} · NSW`,
-					placeLabel: s.suburb,
-					precisionNote: `Suburb total · zoom in (level ${STREET_DETAIL_MIN_ZOOM}+) for detail`,
-					popupDetail: `${s.suburb}, NSW · ${s.placeCount} location${s.placeCount === 1 ? '' : 's'}`
-				});
-			}
-
-			mappedPlaceCount = suburbs.length;
-			statusText = `Suburb view: ${suburbs.length} suburb${suburbs.length === 1 ? '' : 's'} (${mappedIncidentCount} incidents). Zoom in to level ${STREET_DETAIL_MIN_ZOOM}+ for more detail.`;
-		} else {
-			// Overlapping coords → one indicator, suburb label only
-			const collapsed = collapseOverlappingToSuburbPins(
-				streetPlaces.map((p) => ({
-					key: p.key,
-					lat: p.lat,
-					lng: p.lng,
-					count: p.count,
-					suburb: p.suburb,
-					street: p.street,
-					precision: p.precision
-				})),
-				4 // ~11 m grid — treats near-identical pins as one
-			);
-
-			for (const p of collapsed) {
-				const isMerged = p.merged;
-				const nameLine = isMerged || !p.street ? p.suburb : p.street;
-				const suburbLine = isMerged
-					? `${p.placeCount} locations · NSW`
-					: p.street
-						? p.suburb
-						: 'NSW';
-				const placeLabel = isMerged || !p.street ? p.suburb : `${p.street}, ${p.suburb}`;
-				const streetsNote =
-					isMerged && p.streets.length
-						? p.streets.slice(0, 8).join(', ') +
-							(p.streets.length > 8 ? ` (+${p.streets.length - 8} more)` : '')
-						: '';
-
-				addMarkerEntry({
-					L,
-					lat: p.lat,
-					lng: p.lng,
-					count: p.count,
-					nameLine,
-					suburbLine,
-					placeLabel,
-					precisionNote: isMerged
-						? 'Overlapping locations combined · suburb label'
-						: p.precision === 'street'
-							? 'Street-level geocode'
-							: 'Approx. location',
-					popupDetail: isMerged
-						? `${p.suburb}, NSW${streetsNote ? `<br/><span style="color:#555">${escapeHtml(streetsNote)}</span>` : ''}`
-						: `${p.suburb}, NSW`
-				});
-			}
-
-			mappedPlaceCount = collapsed.length;
-			const mergedCount = collapsed.filter((p) => p.merged).length;
-			statusText =
-				mergedCount > 0
-					? `Showing ${collapsed.length} indicator${collapsed.length === 1 ? '' : 's'} (${mergedCount} combined where locations overlapped · labelled by suburb).`
-					: `Showing ${collapsed.length} location${collapsed.length === 1 ? '' : 's'}. Overlapping pins combine into one suburb label.`;
+		for (const p of streetPlaces) {
+			addMarkerEntry({
+				L,
+				lat: p.lat,
+				lng: p.lng,
+				count: p.count,
+				nameLine: p.suburb,
+				suburbLine: `${p.count} incident${p.count === 1 ? '' : 's'} · NSW`,
+				placeLabel: p.suburb,
+				precisionNote: 'Facility / post office suburb (not delivery street)',
+				popupDetail: `${p.suburb}, NSW · ${p.count} incident${p.count === 1 ? '' : 's'}`
+			});
 		}
+
+		mappedPlaceCount = streetPlaces.length;
+		statusText = `Suburb view: ${streetPlaces.length} suburb${streetPlaces.length === 1 ? '' : 's'} (${mappedIncidentCount} incidents). Street-level pins are off.`;
 
 		if (fitBounds && placedMarkers.length > 0) {
 			const group = L.featureGroup(placedMarkers.map((p) => p.marker));
-			// Cap suburb overview below street-detail zoom so the default view
-			// never flips into street pins after fitBounds.
-			const suburbMaxZoom = STREET_DETAIL_MIN_ZOOM - 1;
 			map.fitBounds(group.getBounds().pad(0.22), {
-				maxZoom: viewMode === 'street' ? 15 : suburbMaxZoom,
+				maxZoom: SYDNEY_DEFAULT_ZOOM + 1,
 				animate: false,
 				padding: [28, 28]
 			});
-			// Re-evaluate mode after fit (fit may change zoom)
-			const afterZoom = map.getZoom() as number;
-			const afterMode: 'street' | 'suburb' =
-				afterZoom >= STREET_DETAIL_MIN_ZOOM ? 'street' : 'suburb';
-			if (afterMode !== viewMode) {
-				viewMode = afterMode;
-				renderMarkersForMode(false);
-				return;
-			}
 		}
 
 		map.invalidateSize({ animate: false });
@@ -634,7 +527,6 @@
 		mappedPlaceCount = 0;
 		mappedIncidentCount = 0;
 		geocodeFailedIncidentCount = 0;
-		streetLevelCount = 0;
 		suburbLevelCount = 0;
 		geocoding = true;
 		initialFitDone = false;
@@ -674,35 +566,34 @@
 			/** true when we must rate-limit (live Nominatim) */
 			let pacedNetwork = false;
 
-			// Use DB coords when we already have a true street hit, or suburb-only (no street).
-			// Re-lookup when a street name exists but precision is only suburb — often means
-			// the first pass failed and we can improve via street-type inference.
-			const dbPrecision = loc.precision ?? (loc.street ? 'street' : 'suburb');
+			// Suburb-only: use stored suburb/region coords; ignore street-precision DB pins
+			const dbPrecision = loc.precision ?? 'suburb';
 			const useStored =
 				loc.lat != null &&
 				loc.lng != null &&
-				!(loc.street?.trim() && dbPrecision === 'suburb');
+				dbPrecision !== 'street';
 
 			if (useStored) {
 				fromDbCount += 1;
 				point = {
 					lat: loc.lat as number,
 					lng: loc.lng as number,
-					precision: dbPrecision,
-					label: loc.street ? `${loc.street}, ${loc.suburb}` : loc.suburb
+					precision: 'suburb',
+					label: `${loc.suburb}, NSW`
 				};
-				// Same place: copy coords onto sibling incidents that lack them
 				if (loc.idsMissingCoords.length > 0) {
 					pendingPersist.push(...coordPersistFromPoint(loc.idsMissingCoords, point));
 				}
 			} else {
-				const placeLabel = loc.street ? `${loc.street}, ${loc.suburb}` : loc.suburb;
-				statusText = `Looking up “${placeLabel}” (${i + 1} of ${locs.length})…`;
+				statusText = `Looking up “${loc.suburb}” (${i + 1} of ${locs.length})…`;
+				// Never pass street — facility suburb is not delivery street geography
 				const lookup = await geocodeNswLocationWithSource(loc.query, loc.suburb, {
-					street: loc.street
+					street: ''
 				});
 				if (cancelled || gen !== plotGeneration) return;
-				point = lookup.point;
+				point = lookup.point
+					? { ...lookup.point, precision: 'suburb', label: `${loc.suburb}, NSW` }
+					: null;
 				if (lookup.source === 'browser-cache') fromBrowserCache += 1;
 				else if (lookup.source === 'network') {
 					fromNetwork += 1;
@@ -721,11 +612,6 @@
 			}
 
 			mappedIncidentCount += loc.count;
-			if (point.precision === 'street') streetLevelCount += 1;
-
-			const placeLabel = loc.street
-				? `${loc.street}, ${loc.suburb}`
-				: loc.suburb;
 
 			geocoded.push({
 				key: loc.key,
@@ -733,14 +619,13 @@
 				lng: point.lng,
 				count: loc.count,
 				suburb: loc.suburb,
-				street: loc.street,
-				precision: point.precision,
-				placeLabel
+				street: '',
+				precision: 'suburb',
+				placeLabel: loc.suburb
 			});
 
-			// Rate-limit only live Nominatim calls (not DB / browser cache / suburb table)
 			if (pacedNetwork) {
-				await sleep(point.precision === 'street' ? 900 : 120);
+				await sleep(120);
 			}
 		}
 
@@ -776,18 +661,7 @@
 		// statusText is refined again after markers render; set a provisional line here
 		statusText = `Map ready · ${readyDetail}`;
 
-		// Default load: suburb overview only (street detail requires user zoom-in)
-		const suburbMaxZoom = STREET_DETAIL_MIN_ZOOM - 1;
-		if (map.getZoom() > suburbMaxZoom) {
-			map.setZoom(Math.min(SYDNEY_DEFAULT_ZOOM, suburbMaxZoom), { animate: false });
-		}
 		renderMarkersForMode(true);
-		// Hard clamp: initial fit must not leave the map in street mode
-		if (map.getZoom() >= STREET_DETAIL_MIN_ZOOM) {
-			map.setZoom(suburbMaxZoom, { animate: false });
-			viewMode = 'suburb';
-			renderMarkersForMode(false);
-		}
 		initialFitDone = true;
 	}
 
@@ -842,7 +716,6 @@
 		resizeObserver = null;
 		if (map) {
 			map.off('zoomend moveend', scheduleLabelLayout);
-			map.off('zoomend', onZoomModeChange);
 			map.remove();
 			map = null;
 			markersLayer = null;
@@ -850,7 +723,6 @@
 		placedMarkers = [];
 		streetPlaces = [];
 		labelLayoutBound = false;
-		viewModeBound = false;
 		Lref = null;
 	});
 </script>
@@ -893,11 +765,7 @@
 				{/if}
 			</div>
 			<p class="mt-0.5 text-xs text-warm-500 sm:text-sm">
-				{#if viewMode === 'suburb'}
-					Suburb totals (zoom to {STREET_DETAIL_MIN_ZOOM}+ for street locations). Hover for counts.
-				{:else}
-					Street locations. Zoom out below {STREET_DETAIL_MIN_ZOOM} for suburb totals.
-				{/if}
+				Facility / post office suburb totals (street pins off). Hover for counts.
 			</p>
 			<p class="mt-0.5 text-xs text-warm-400" aria-live="polite">{statusText}</p>
 		</div>
@@ -981,20 +849,13 @@
 				<li class="flex items-center gap-2">
 					<span class="incident-legend-pulse shrink-0" aria-hidden="true"></span>
 					<span class="min-w-0 leading-snug">
-						<span class="font-medium text-warm-800">
-							{viewMode === 'suburb' ? 'Suburb total' : 'Street location'}
-						</span>
+						<span class="font-medium text-warm-800">Suburb total</span>
 						<span class="mt-0.5 block text-[11px] text-warm-500">
 							{#if geocoding}
-								Geocoding streets…
-							{:else if viewMode === 'suburb'}
-								{mappedIncidentCount} incident{mappedIncidentCount === 1 ? '' : 's'}
-								· {mappedPlaceCount} suburb{mappedPlaceCount === 1 ? '' : 's'}
-								· zoom in for streets
+								Looking up suburbs…
 							{:else}
 								{mappedIncidentCount} incident{mappedIncidentCount === 1 ? '' : 's'}
-								· {mappedPlaceCount} street pin{mappedPlaceCount === 1 ? '' : 's'}
-								({streetLevelCount} precise)
+								· {mappedPlaceCount} suburb{mappedPlaceCount === 1 ? '' : 's'}
 							{/if}
 						</span>
 					</span>

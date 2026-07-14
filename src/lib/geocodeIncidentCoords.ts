@@ -58,11 +58,15 @@ export async function resolveLocationCoords(
 	const parsed = resolveIncidentLocation(row);
 	if (!parsed) return emptyLocationCoords();
 
-	const point = await geocodeNswLocation(parsed.query, parsed.suburb, {
-		street: parsed.street
-	});
+	// Suburb-only map: facility/PO suburb is not the street’s suburb — never geocode street.
+	const point = await geocodeNswLocation(
+		`${parsed.suburb} NSW, Australia`,
+		parsed.suburb,
+		{ street: '' }
+	);
 	if (!point) return emptyLocationCoords();
-	return coordsFromGeoPoint(point);
+	// Force suburb precision for stored pins
+	return coordsFromGeoPoint({ ...point, precision: 'suburb' });
 }
 
 /** Merge geocoded coords onto an incident (for insert/update payloads). */
