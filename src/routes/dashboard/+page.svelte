@@ -2541,7 +2541,7 @@
 
 					<div class="flex min-h-0 min-w-0 flex-col">
 						<div class="min-h-0 flex-1 [&_.map-chart-shell]:h-full">
-							<NswIncidentMap {incidents} />
+							<NswIncidentMap incidents={periodIncidents} periodLabel={timeRangeLabel} />
 						</div>
 					</div>
 				</div>

@@ -17,9 +17,11 @@
 
 	interface Props {
 		incidents: Incident[];
+		/** Active dashboard period label, e.g. "Last 30 days" — shown on the map chrome. */
+		periodLabel?: string;
 	}
 
-	let { incidents }: Props = $props();
+	let { incidents, periodLabel = '' }: Props = $props();
 
 	let mapEl = $state<HTMLDivElement | undefined>(undefined);
 	let statusText = $state('Preparing map…');
@@ -793,9 +795,19 @@
 >
 	<div class="flex flex-wrap items-start justify-between gap-2 border-b border-warm-200 px-3 py-2.5 sm:px-4">
 		<div class="min-w-0 flex-1">
-			<h2 id="nsw-map-title" class="text-base font-semibold text-warm-800">
-				Incident locations (NSW)
-			</h2>
+			<div class="flex flex-wrap items-center gap-2">
+				<h2 id="nsw-map-title" class="text-base font-semibold text-warm-800">
+					Incident locations (NSW)
+				</h2>
+				{#if periodLabel.trim()}
+					<span
+						class="inline-flex items-center rounded-full border border-accent-200 bg-accent-50 px-2 py-0.5 text-[10px] font-medium tabular-nums text-accent-700 dark:border-accent-200/40 dark:bg-accent-100/30 dark:text-accent-600"
+						title="Map pins reflect the dashboard period filter"
+					>
+						{periodLabel.trim()}
+					</span>
+				{/if}
+			</div>
 			<p class="mt-0.5 text-xs text-warm-500 sm:text-sm">
 				{#if viewMode === 'suburb'}
 					Suburb totals (zoom to {STREET_DETAIL_MIN_ZOOM}+ for street locations). Hover for counts.
