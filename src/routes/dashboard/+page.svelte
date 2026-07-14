@@ -10,6 +10,13 @@
 	} from '$lib/syncIncidentStore';
 	import CourierTruckIcon from '$lib/components/CourierTruckIcon.svelte';
 	import NswIncidentMap from '$lib/components/NswIncidentMap.svelte';
+	import {
+		dashboardPeriod,
+		TIME_RANGE_OPTIONS,
+		isMonthTimeRange,
+		type MonthTimeRangeKey,
+		type TimeRangeKey
+	} from '$lib/dashboardPeriod.svelte';
 	import { theme } from '$lib/theme.svelte';
 	import type { Chart as ChartJS, ChartOptions, Plugin } from 'chart.js';
 	import { Chart, registerables } from 'chart.js';
@@ -1244,22 +1251,15 @@
 	});
 
 	/**
-	 * Time window for over-time / driver charts.
-	 * - Relative: all | 7 | 30 | 90 (days ending today)
-	 * - Calendar month with data: m:YYYY-MM
+	 * Time window for summary / charts — persisted across navigations
+	 * (module store + sessionStorage; see `$lib/dashboardPeriod.svelte.ts`).
 	 */
-	type RelativeTimeRangeKey = 'all' | '7' | '30' | '90';
-	type MonthTimeRangeKey = `m:${string}`;
-	type TimeRangeKey = RelativeTimeRangeKey | MonthTimeRangeKey;
+	let timeRange = $state<TimeRangeKey>(dashboardPeriod.value);
 
-	const TIME_RANGE_OPTIONS: { value: RelativeTimeRangeKey; label: string }[] = [
-		{ value: 'all', label: 'All time' },
-		{ value: '90', label: 'Last 90 days' },
-		{ value: '30', label: 'Last 30 days' },
-		{ value: '7', label: 'Last 7 days' }
-	];
-
-	let timeRange = $state<TimeRangeKey>('all');
+	// Persist whenever the selection changes (including initial hydration write)
+	$effect(() => {
+		dashboardPeriod.value = timeRange;
+	});
 
 	/**
 	 * Legend filters for multi-series charts (row 3): labels listed here are hidden.
@@ -1290,10 +1290,6 @@
 	function dateReceivedKey(dateStr: string | undefined | null): string | null {
 		const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr?.trim() ?? '');
 		return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
-	}
-
-	function isMonthTimeRange(range: string): range is MonthTimeRangeKey {
-		return /^m:\d{4}-\d{2}$/.test(range);
 	}
 
 	function monthKeyFromRange(range: MonthTimeRangeKey): string {
@@ -1375,10 +1371,10 @@
 
 	// If selected month disappears after data reload, fall back to all time
 	$effect(() => {
-		if (!isMonthTimeRange(timeRange)) return;
-		const ym = monthKeyFromRange(timeRange);
-		if (!availableMonths.some((m) => m.ym === ym)) {
-			timeRange = 'all';
+		const yms = availableMonths.map((m) => m.ym);
+		dashboardPeriod.resetIfMissingMonth(yms);
+		if (timeRange !== dashboardPeriod.value) {
+			timeRange = dashboardPeriod.value;
 		}
 	});
 
@@ -1947,7 +1943,8 @@
 
 <div class="flex-1 flex flex-col bg-warm-50 text-warm-900 overflow-hidden">
 	<header class="border-b border-warm-200 bg-white/80 px-4 py-3 backdrop-blur flex-shrink-0">
-		<div class="flex w-full min-w-0 flex-wrap items-start justify-between gap-3">
+		<!-- Period sits immediately to the right of the title block (not page right-aligned) -->
+		<div class="flex w-full min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
 			<div class="flex min-w-0 items-start gap-2">
 				<CourierTruckIcon />
 				<div class="min-w-0">
@@ -1956,12 +1953,12 @@
 				</div>
 			</div>
 			{#if !data.loadError && !incidentStore.isLoading && !incidentStore.error}
-				<div class="flex flex-wrap items-center gap-2 sm:pt-1">
-					<label class="flex items-center gap-2 text-sm text-warm-600">
+				<div class="flex flex-wrap items-center gap-2.5">
+					<label class="flex items-center gap-2 text-[0.9625rem] text-warm-600">
 						<span class="font-medium text-warm-700">Period</span>
 						<select
 							bind:value={timeRange}
-							class="max-w-[16rem] rounded-lg border border-warm-200 bg-white px-2.5 py-1.5 text-sm text-warm-700 shadow-sm input-focus dark:bg-warm-200"
+							class="max-w-[17.6rem] rounded-lg border border-warm-200 bg-white px-[0.6875rem] py-[0.4125rem] text-[0.9625rem] text-warm-700 shadow-sm input-focus dark:bg-warm-200"
 							aria-controls="over-time-chart-canvas"
 							aria-label="Time period for dashboard summary and charts"
 							title="Relative period or a calendar month with incident data"
@@ -1982,7 +1979,7 @@
 							{/if}
 						</select>
 					</label>
-					<span class="text-xs text-warm-500">{timeRangeLabel}</span>
+					<span class="text-[0.825rem] text-warm-500">{timeRangeLabel}</span>
 				</div>
 			{/if}
 		</div>
