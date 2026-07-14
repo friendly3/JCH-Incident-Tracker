@@ -69,6 +69,22 @@
 		return value;
 	}
 
+	/** Resolution status "NEW" from dropdown config (case-insensitive). */
+	function defaultNewActionId(): string | null {
+		const hit = incidentActions.find((a) => a.name.trim().toUpperCase() === 'NEW');
+		return hit?.id ?? null;
+	}
+
+	/** When a reference is present, fill unset priority → Normal and status → NEW. */
+	function applyRefDefaults() {
+		if (!form.referenceNo?.trim()) return;
+		if (!form.marked?.trim()) form.marked = 'Normal';
+		if (!normalizeFkId(form.actionId)) {
+			const newId = defaultNewActionId();
+			if (newId) form.actionId = newId;
+		}
+	}
+
 	function setFkField(field: 'typeId' | 'driverId' | 'teamLeaderId' | 'actionId', raw: string) {
 		form[field] = raw === FK_EMPTY ? null : raw;
 	}
@@ -309,14 +325,6 @@
 			return;
 		}
 
-		const actionId = normalizeFkId(form.actionId);
-		if (!actionId) {
-			submitError = 'Resolution Status is required — please select a status.';
-			submitErrorField = 'action';
-			formTab = 'details';
-			return;
-		}
-
 		const locationStreet = form.locationStreet?.trim() ?? '';
 		const locationSuburb = form.locationSuburb?.trim() ?? '';
 		// Street without suburb is not enough to place on the map
@@ -334,14 +342,30 @@
 		form.locationSuburb = locationSuburb;
 
 		const referenceNo = form.referenceNo?.trim() ?? '';
-		// Priority: default Normal only when there is a reference number; blank ref → blank priority
-		const marked = form.marked?.trim()
-			? normalizePriority(form.marked)
-			: referenceNo
-				? 'Normal'
-				: '';
 		form.referenceNo = referenceNo;
+
+		// With a ref: default priority Normal + resolution NEW when unset
+		// Without a ref: leave priority and resolution blank (null)
+		let marked = form.marked?.trim() ? normalizePriority(form.marked) : '';
+		let actionId = normalizeFkId(form.actionId);
+		if (referenceNo) {
+			if (!marked) marked = 'Normal';
+			if (!actionId) {
+				actionId = defaultNewActionId();
+				if (!actionId) {
+					submitError =
+						'Resolution Status “NEW” is not configured — add it under Configuration, or select a status.';
+					submitErrorField = 'action';
+					formTab = 'details';
+					return;
+				}
+			}
+		} else {
+			marked = marked || '';
+			actionId = null;
+		}
 		form.marked = marked;
+		form.actionId = actionId;
 
 		const payload: Incident = {
 			...form,
@@ -607,8 +631,7 @@
 		const ref = subjectParsed?.referenceNo;
 		if (!ref) return;
 		form.referenceNo = ref;
-		// New/blank priority → Normal once a ref is present
-		if (!form.marked?.trim()) form.marked = 'Normal';
+		applyRefDefaults();
 	}
 
 	function applySubjectType() {
@@ -631,7 +654,7 @@
 		if (!p) return;
 		if (p.referenceNo) {
 			form.referenceNo = p.referenceNo;
-			if (!form.marked?.trim()) form.marked = 'Normal';
+			applyRefDefaults();
 		}
 		if (subjectMatchedType) {
 			form.typeId = subjectMatchedType.id;
