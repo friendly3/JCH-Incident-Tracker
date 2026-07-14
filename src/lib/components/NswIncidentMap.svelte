@@ -674,12 +674,21 @@
 			/** true when we must rate-limit (live Nominatim) */
 			let pacedNetwork = false;
 
-			if (loc.lat != null && loc.lng != null) {
+			// Use DB coords when we already have a true street hit, or suburb-only (no street).
+			// Re-lookup when a street name exists but precision is only suburb — often means
+			// the first pass failed and we can improve via street-type inference.
+			const dbPrecision = loc.precision ?? (loc.street ? 'street' : 'suburb');
+			const useStored =
+				loc.lat != null &&
+				loc.lng != null &&
+				!(loc.street?.trim() && dbPrecision === 'suburb');
+
+			if (useStored) {
 				fromDbCount += 1;
 				point = {
-					lat: loc.lat,
-					lng: loc.lng,
-					precision: loc.precision ?? (loc.street ? 'street' : 'suburb'),
+					lat: loc.lat as number,
+					lng: loc.lng as number,
+					precision: dbPrecision,
 					label: loc.street ? `${loc.street}, ${loc.suburb}` : loc.suburb
 				};
 				// Same place: copy coords onto sibling incidents that lack them

@@ -1,8 +1,9 @@
 /**
  * Lightweight NSW geocoding for map pins.
  * 1) Street-level via /api/geocode (server Nominatim proxy) when street is known
- * 2) Known suburb centroids (offline fallback)
- * 3) Deterministic micro-offset only for co-located suburb fallbacks
+ * 2) Infer missing street types (e.g. "Acacia" → "Acacia Crescent") via multi-candidate search
+ * 3) Known suburb centroids (offline fallback)
+ * 4) Deterministic micro-offset only for co-located suburb fallbacks
  * Results are cached in-memory + localStorage.
  */
 
@@ -97,7 +98,124 @@ const SUBURB_CENTROIDS: Record<string, { lat: number; lng: number }> = {
 
 const memoryCache = new Map<string, GeoPoint | null>();
 /** Bump when strategy changes so stale null/bad coords are not reused. */
-const STORAGE_KEY = 'nsw-geocode-v4-street';
+const STORAGE_KEY = 'nsw-geocode-v5-street-types';
+
+/** Common Australian street-type words / abbreviations (lowercased). */
+const STREET_TYPE_WORDS = new Set([
+	'street',
+	'st',
+	'road',
+	'rd',
+	'avenue',
+	'ave',
+	'drive',
+	'dr',
+	'crescent',
+	'cres',
+	'cr',
+	'court',
+	'ct',
+	'place',
+	'pl',
+	'parade',
+	'pde',
+	'boulevard',
+	'blvd',
+	'lane',
+	'ln',
+	'way',
+	'close',
+	'cl',
+	'circuit',
+	'cct',
+	'grove',
+	'gr',
+	'terrace',
+	'tce',
+	'highway',
+	'hwy',
+	'rise',
+	'walk',
+	'row',
+	'mews',
+	'gardens',
+	'gdns',
+	'parkway',
+	'pwy',
+	'esplanade',
+	'esp',
+	'trail',
+	'track',
+	'loop',
+	'vista',
+	'view',
+	'point',
+	'pt',
+	'pass',
+	'path',
+	'alley',
+	'arcade',
+	'bypass',
+	'circle',
+	'crescent'
+]);
+
+/** Full type names to try when the subject omits the street type. */
+const STREET_TYPE_SUFFIXES = [
+	'Street',
+	'Road',
+	'Avenue',
+	'Drive',
+	'Crescent',
+	'Court',
+	'Place',
+	'Parade',
+	'Boulevard',
+	'Lane',
+	'Way',
+	'Close',
+	'Circuit',
+	'Grove',
+	'Terrace',
+	'Highway',
+	'Rise',
+	'Walk',
+	'Esplanade',
+	'Parkway'
+] as const;
+
+/** Expand common abbreviations to full OSM-friendly forms. */
+const STREET_ABBREV_EXPAND: Record<string, string> = {
+	st: 'Street',
+	rd: 'Road',
+	ave: 'Avenue',
+	dr: 'Drive',
+	cres: 'Crescent',
+	cr: 'Crescent',
+	ct: 'Court',
+	pl: 'Place',
+	pde: 'Parade',
+	blvd: 'Boulevard',
+	ln: 'Lane',
+	cl: 'Close',
+	cct: 'Circuit',
+	gr: 'Grove',
+	tce: 'Terrace',
+	hwy: 'Highway',
+	gdns: 'Gardens',
+	pwy: 'Parkway',
+	esp: 'Esplanade',
+	pt: 'Point'
+};
+
+type GeocodeCandidate = {
+	lat: number;
+	lng: number;
+	label: string;
+	class: string;
+	type: string;
+	importance: number;
+};
 
 function loadStorage(): Record<string, GeoPoint | null> {
 	if (typeof localStorage === 'undefined') return {};
@@ -203,30 +321,53 @@ function inNswBounds(lat: number, lng: number): boolean {
 }
 
 /** Call our server geocode proxy (avoids browser CORS on Nominatim). */
-async function serverGeocode(q: string): Promise<GeoPoint | null> {
-	if (typeof fetch === 'undefined') return null;
+async function serverGeocodeCandidates(
+	q: string,
+	limit = 1
+): Promise<GeocodeCandidate[]> {
+	if (typeof fetch === 'undefined') return [];
 	try {
-		const url = `/api/geocode?q=${encodeURIComponent(q)}`;
+		const url = `/api/geocode?q=${encodeURIComponent(q)}&limit=${limit}`;
 		const res = await fetch(url);
-		if (!res.ok) return null;
+		if (!res.ok) return [];
 		const data = (await res.json()) as {
 			found?: boolean;
+			candidates?: GeocodeCandidate[];
 			lat?: number;
 			lng?: number;
 			label?: string;
-			precision?: 'street' | 'suburb';
 		};
-		if (!data.found || data.lat == null || data.lng == null) return null;
-		if (!inNswBounds(data.lat, data.lng)) return null;
-		return {
-			lat: data.lat,
-			lng: data.lng,
-			precision: data.precision === 'suburb' ? 'suburb' : 'street',
-			label: data.label ?? q
-		};
+		if (Array.isArray(data.candidates) && data.candidates.length > 0) {
+			return data.candidates.filter((c) => inNswBounds(c.lat, c.lng));
+		}
+		if (data.found && data.lat != null && data.lng != null && inNswBounds(data.lat, data.lng)) {
+			return [
+				{
+					lat: data.lat,
+					lng: data.lng,
+					label: data.label ?? q,
+					class: '',
+					type: '',
+					importance: 0
+				}
+			];
+		}
+		return [];
 	} catch {
-		return null;
+		return [];
 	}
+}
+
+async function serverGeocode(q: string): Promise<GeoPoint | null> {
+	const hits = await serverGeocodeCandidates(q, 1);
+	const hit = hits[0];
+	if (!hit) return null;
+	return {
+		lat: hit.lat,
+		lng: hit.lng,
+		precision: 'street',
+		label: hit.label
+	};
 }
 
 function kmBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
@@ -234,6 +375,221 @@ function kmBetween(a: { lat: number; lng: number }, b: { lat: number; lng: numbe
 	const dLng =
 		(a.lng - b.lng) * 111.32 * Math.cos((a.lat * Math.PI) / 180);
 	return Math.hypot(dLat, dLng);
+}
+
+function cleanStreetName(street: string): string {
+	return street.trim().replace(/\s+/g, ' ');
+}
+
+/** Last token looks like a street type (St, Crescent, etc.). */
+export function streetHasTypeSuffix(street: string): boolean {
+	const parts = cleanStreetName(street).split(/\s+/);
+	if (parts.length < 2) return false;
+	const last = parts[parts.length - 1].replace(/\./g, '').toLowerCase();
+	return STREET_TYPE_WORDS.has(last);
+}
+
+/** Expand "Blaxland Dr" → also try "Blaxland Drive". */
+export function expandStreetTypeAbbreviations(street: string): string[] {
+	const cleaned = cleanStreetName(street);
+	const parts = cleaned.split(/\s+/);
+	if (parts.length < 2) return [cleaned];
+	const lastRaw = parts[parts.length - 1].replace(/\./g, '');
+	const last = lastRaw.toLowerCase();
+	const full = STREET_ABBREV_EXPAND[last];
+	if (!full) return [cleaned];
+	const base = parts.slice(0, -1).join(' ');
+	const expanded = `${base} ${full}`;
+	return expanded.toLowerCase() === cleaned.toLowerCase()
+		? [cleaned]
+		: [cleaned, expanded];
+}
+
+/**
+ * Score a Nominatim candidate for "street in this suburb".
+ * Higher = better.
+ */
+function scoreStreetCandidate(
+	c: GeocodeCandidate,
+	street: string,
+	suburb: string,
+	centroid: { lat: number; lng: number } | null
+): number {
+	const label = (c.label ?? '').toLowerCase();
+	const suburbL = suburb.trim().toLowerCase();
+	const streetL = cleanStreetName(street).toLowerCase();
+	const streetTokens = streetL.split(/\s+/).filter((t) => !STREET_TYPE_WORDS.has(t));
+
+	let score = 0;
+
+	// Must prefer hits that mention the suburb
+	if (suburbL && label.includes(suburbL)) score += 40;
+	else if (suburbL) {
+		// partial: first word of multi-word suburb
+		const first = suburbL.split(/\s+/)[0];
+		if (first.length >= 4 && label.includes(first)) score += 12;
+		else score -= 25;
+	}
+
+	// Prefer NSW
+	if (label.includes('new south wales') || label.includes('nsw')) score += 8;
+
+	// Prefer road features over POIs / suburbs / admin
+	const cls = (c.class ?? '').toLowerCase();
+	const typ = (c.type ?? '').toLowerCase();
+	if (cls === 'highway') score += 30;
+	else if (cls === 'place' && (typ === 'suburb' || typ === 'neighbourhood')) score -= 20;
+	else if (cls === 'boundary') score -= 15;
+	else if (cls === 'building' || cls === 'amenity') score -= 10;
+
+	// Name token overlap (bare street name without type)
+	for (const t of streetTokens) {
+		if (t.length >= 3 && label.includes(t)) score += 10;
+	}
+
+	// Full type present in label when we searched with a type
+	const lastStreet = streetL.split(/\s+/).pop() ?? '';
+	if (STREET_TYPE_WORDS.has(lastStreet) && label.includes(lastStreet)) score += 8;
+	// Expanded forms
+	const expanded = STREET_ABBREV_EXPAND[lastStreet];
+	if (expanded && label.includes(expanded.toLowerCase())) score += 10;
+
+	// Closer to suburb centre is better (soft)
+	if (centroid) {
+		const km = kmBetween(c, centroid);
+		if (km <= 1.5) score += 20;
+		else if (km <= 3) score += 12;
+		else if (km <= 6) score += 5;
+		else if (km <= 12) score += 0;
+		else score -= 30;
+	}
+
+	score += Math.min(8, (c.importance ?? 0) * 10);
+	return score;
+}
+
+function pickBestStreetCandidate(
+	candidates: GeocodeCandidate[],
+	street: string,
+	suburb: string,
+	centroid: { lat: number; lng: number } | null
+): GeocodeCandidate | null {
+	if (candidates.length === 0) return null;
+	let best: GeocodeCandidate | null = null;
+	let bestScore = -Infinity;
+	for (const c of candidates) {
+		const s = scoreStreetCandidate(c, street, suburb, centroid);
+		if (s > bestScore) {
+			bestScore = s;
+			best = c;
+		}
+	}
+	// Require a minimum confidence when we have a suburb to validate against
+	if (best && suburb.trim() && bestScore < 25) return null;
+	return best;
+}
+
+/**
+ * Build free-text queries for a street+suburb, including:
+ * - original spelling
+ * - expanded abbreviations (Dr → Drive)
+ * - when no type: bare name, then bare + common types (Crescent, Street, …)
+ */
+export function buildStreetGeocodeQueries(street: string, suburb: string): string[] {
+	const suburbTrim = suburb.trim();
+	const cleaned = cleanStreetName(street);
+	if (!cleaned || !suburbTrim) return [];
+
+	const suffix = `, ${suburbTrim} NSW, Australia`;
+	const out: string[] = [];
+	const seen = new Set<string>();
+
+	const push = (name: string) => {
+		const q = `${name}${suffix}`;
+		const key = q.toLowerCase();
+		if (!seen.has(key)) {
+			seen.add(key);
+			out.push(q);
+		}
+	};
+
+	for (const form of expandStreetTypeAbbreviations(cleaned)) {
+		push(form);
+	}
+
+	if (!streetHasTypeSuffix(cleaned)) {
+		// Bare name alone (Nominatim sometimes still finds the road)
+		push(cleaned);
+		// Try common types — map provider validates which exists in this suburb
+		for (const typ of STREET_TYPE_SUFFIXES) {
+			push(`${cleaned} ${typ}`);
+		}
+	}
+
+	return out;
+}
+
+/**
+ * Resolve street+suburb via Nominatim: multi-candidate + optional street-type probing.
+ * Returns null when no candidate is plausible for the suburb.
+ */
+async function resolveStreetInSuburb(
+	street: string,
+	suburb: string,
+	centroid: { lat: number; lng: number } | null
+): Promise<GeoPoint | null> {
+	const queries = buildStreetGeocodeQueries(street, suburb);
+	if (queries.length === 0) return null;
+
+	// 1) Primary: original / expanded forms with multi-hit ranking
+	const primaryQueries = streetHasTypeSuffix(street)
+		? expandStreetTypeAbbreviations(street).map(
+				(s) => `${cleanStreetName(s)}, ${suburb.trim()} NSW, Australia`
+			)
+		: queries.slice(0, 3); // original + bare (+ first type if any)
+
+	for (const q of primaryQueries) {
+		const candidates = await serverGeocodeCandidates(q, 6);
+		const best = pickBestStreetCandidate(candidates, street, suburb, centroid);
+		if (best) {
+			return {
+				lat: best.lat,
+				lng: best.lng,
+				precision: 'street',
+				label: best.label
+			};
+		}
+		// Pace only after a network attempt
+		await sleepMs(200);
+	}
+
+	// 2) Missing street type: probe remaining type suffixes (batched lightly)
+	if (!streetHasTypeSuffix(street)) {
+		const already = new Set(primaryQueries.map((q) => q.toLowerCase()));
+		const rest = queries.filter((q) => !already.has(q.toLowerCase()));
+		// Cap probes so one incident does not hammer Nominatim
+		const maxProbes = 10;
+		for (let i = 0; i < Math.min(rest.length, maxProbes); i++) {
+			const q = rest[i];
+			const candidates = await serverGeocodeCandidates(q, 4);
+			const best = pickBestStreetCandidate(candidates, street, suburb, centroid);
+			if (best) {
+				return {
+					lat: best.lat,
+					lng: best.lng,
+					precision: 'street',
+					label: best.label
+				};
+			}
+			await sleepMs(250);
+		}
+	}
+
+	return null;
+}
+
+function sleepMs(ms: number): Promise<void> {
+	return new Promise((r) => setTimeout(r, ms));
 }
 
 /** Zoom at/above this shows street-level pins; below aggregates by suburb. */
@@ -292,29 +648,37 @@ export async function geocodeNswLocationWithSource(
 	const suburbTrim = suburb.trim();
 	const centroid = suburbCentroid(suburbTrim);
 
-	// 1) Street-level (or full query) via server proxy — preferred precision
-	const streetQuery = street
-		? `${street}, ${suburbTrim} NSW, Australia`
-		: query || `${suburbTrim} NSW, Australia`;
-	const remote = await serverGeocode(streetQuery);
-	if (remote) {
-		// If we know the suburb centre, reject hits that are clearly the wrong suburb
-		if (centroid && kmBetween(remote, centroid) > 12) {
-			// try suburb-only geocode next
-		} else {
+	// 1) Street-level via Nominatim — multi-candidate + missing street-type probing
+	if (street && suburbTrim) {
+		const resolved = await resolveStreetInSuburb(street, suburbTrim, centroid);
+		if (resolved) {
 			const point: GeoPoint = {
-				...remote,
-				precision: street ? 'street' : remote.precision,
-				label: street
-					? `${street}, ${suburbTrim}, NSW`
-					: (remote.label ?? `${suburbTrim}, NSW`)
+				...resolved,
+				precision: 'street',
+				// Keep operator-facing label as parsed street + suburb (type may be inferred)
+				label: `${street}, ${suburbTrim}, NSW`
 			};
 			setCached(cacheKey, point);
 			return { point, source: 'network' };
 		}
+	} else if (!street) {
+		// Suburb-only query (no street on incident)
+		const streetQuery = query || `${suburbTrim} NSW, Australia`;
+		const remote = await serverGeocode(streetQuery);
+		if (remote) {
+			if (!centroid || kmBetween(remote, centroid) <= 12) {
+				const point: GeoPoint = {
+					...remote,
+					precision: 'suburb',
+					label: remote.label ?? `${suburbTrim}, NSW`
+				};
+				setCached(cacheKey, point);
+				return { point, source: 'network' };
+			}
+		}
 	}
 
-	// 2) Suburb-only remote if street miss
+	// 2) Suburb-only remote if street miss / ambiguous
 	if (suburbTrim) {
 		const remoteSuburb = await serverGeocode(`${suburbTrim} NSW, Australia`);
 		if (remoteSuburb && inNswBounds(remoteSuburb.lat, remoteSuburb.lng)) {
@@ -324,18 +688,7 @@ export async function geocodeNswLocationWithSource(
 				label: `${suburbTrim}, NSW`
 			};
 			setCached(cacheKey, point);
-			if (street) {
-				const j = jitterFromKey(point.lat, point.lng, cacheKey);
-				return {
-					point: {
-						...point,
-						lat: j.lat,
-						lng: j.lng,
-						label: `${street}, ${suburbTrim}, NSW`
-					},
-					source: 'network'
-				};
-			}
+			// No jitter: suburb-level pins stay at true centre (street was not validated)
 			return { point, source: 'network' };
 		}
 	}
@@ -343,18 +696,6 @@ export async function geocodeNswLocationWithSource(
 	// 3) Offline suburb centroid catalogue
 	if (centroid) {
 		setCached(cacheKey, centroid);
-		if (street) {
-			const j = jitterFromKey(centroid.lat, centroid.lng, cacheKey);
-			return {
-				point: {
-					...centroid,
-					lat: j.lat,
-					lng: j.lng,
-					label: `${street}, ${suburbTrim}, NSW`
-				},
-				source: 'suburb-table'
-			};
-		}
 		return { point: centroid, source: 'suburb-table' };
 	}
 
