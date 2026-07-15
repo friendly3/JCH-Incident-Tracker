@@ -223,6 +223,34 @@
 		incidents.filter((i) => i.referenceNo?.trim() && !resolveIncidentLocation(i)).length
 	);
 
+	/**
+	 * Incident ids that share a reference number with an older row — show DUPE tag.
+	 * The earliest (date received + time) occurrence of each ref is left untagged.
+	 */
+	const duplicateRefIds = $derived.by(() => {
+		const byRef = new Map<string, Incident[]>();
+		for (const i of incidents) {
+			const ref = i.referenceNo?.trim();
+			if (!ref) continue;
+			const key = ref.toUpperCase();
+			const list = byRef.get(key);
+			if (list) list.push(i);
+			else byRef.set(key, [i]);
+		}
+		const ids = new Set<string>();
+		for (const group of byRef.values()) {
+			if (group.length < 2) continue;
+			group.sort((a, b) =>
+				`${a.dateReceived}T${a.time}`.localeCompare(`${b.dateReceived}T${b.time}`)
+			);
+			// Skip index 0 (original); tag all later rows
+			for (let n = 1; n < group.length; n++) {
+				ids.add(group[n].id);
+			}
+		}
+		return ids;
+	});
+
 	function clearFilters() {
 		search = '';
 		filterType = '';
@@ -863,15 +891,26 @@
 								>
 									<td class="px-2 py-3 font-mono text-xs max-w-0 overflow-hidden whitespace-nowrap">
 										{#if incident.referenceNo?.trim()}
-											<button
-												type="button"
-												onclick={() => startEdit(incident)}
-												title="Edit incident {incident.referenceNo}"
-												aria-label="Edit incident {incident.referenceNo}"
-												class="block w-full max-w-full cursor-pointer truncate whitespace-nowrap text-left text-accent-600 hover:text-accent-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-warm-50 dark:focus-visible:ring-offset-warm-200"
-											>
-												{incident.referenceNo}
-											</button>
+											<span class="inline-flex max-w-full items-center gap-1">
+												<button
+													type="button"
+													onclick={() => startEdit(incident)}
+													title="Edit incident {incident.referenceNo}"
+													aria-label="Edit incident {incident.referenceNo}"
+													class="min-w-0 max-w-full cursor-pointer truncate whitespace-nowrap text-left text-accent-600 hover:text-accent-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-warm-50 dark:focus-visible:ring-offset-warm-200"
+												>
+													{incident.referenceNo}
+												</button>
+												{#if duplicateRefIds.has(incident.id)}
+													<span
+														class="shrink-0 rounded border border-amber-300 bg-amber-50 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-amber-800 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-200"
+														title="Duplicate reference number — a earlier incident uses this ref"
+														aria-label="Duplicate reference number"
+													>
+														DUPE
+													</span>
+												{/if}
+											</span>
 										{:else}
 											<button
 												type="button"
