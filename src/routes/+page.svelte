@@ -56,22 +56,15 @@
 	let isParsingSubjects = $state(false);
 	let parseSubjectsError = $state<string | null>(null);
 	let parseSubjectsResult = $state<SubjectBackfillResult | null>(null);
-	let showParseConfirm = $state(false);
 
 	/**
 	 * Parse email subjects → DB (fill empty fields only).
-	 * Used by the confirm dialog and silently after Refresh.
+	 * Runs in the background after Refresh; stats appear in the result banner.
 	 */
-	async function runParseSubjectsBackfill(options?: { silent?: boolean }) {
-		const silent = options?.silent === true;
+	async function runParseSubjectsBackfill() {
 		if (!data.supabase || isParsingSubjects) return;
 		isParsingSubjects = true;
-		if (!silent) {
-			parseSubjectsError = null;
-			parseSubjectsResult = null;
-		}
 		try {
-			// Prefer latest store list after a refresh
 			const list = incidentStore.isInitialized ? incidentStore.list : incidents;
 			const result = await backfillIncidentsFromSubjects({
 				supabase: data.supabase,
@@ -83,16 +76,11 @@
 			});
 			parseSubjectsResult = result;
 			parseSubjectsError = null;
-			// Reload list + lookup tables so new types/drivers appear in filters
 			await invalidateAll();
 			await incidentStore.reload();
-			showParseConfirm = false;
 		} catch (err) {
 			parseSubjectsError = err instanceof Error ? err.message : 'Subject parse failed';
-			if (silent) {
-				// Still surface the error banner for background runs
-				parseSubjectsResult = null;
-			}
+			parseSubjectsResult = null;
 		} finally {
 			isParsingSubjects = false;
 		}
@@ -114,19 +102,7 @@
 			return;
 		}
 		isRefreshing = false;
-		// Silent: no confirm modal; stats still shown when parse finishes
-		void runParseSubjectsBackfill({ silent: true });
-	}
-
-	function openParseSubjectsConfirm() {
-		parseSubjectsError = null;
-		parseSubjectsResult = null;
-		showParseConfirm = true;
-	}
-
-	function closeParseSubjectsConfirm() {
-		if (isParsingSubjects) return;
-		showParseConfirm = false;
+		void runParseSubjectsBackfill();
 	}
 
 	let search = $state('');
@@ -747,7 +723,7 @@
 			</div>
 			<p class="mt-3 text-sm text-warm-500">{filtered.length} {filtered.length === 1 ? 'incident' : 'incidents'} found</p>
 		</div>
-		<!-- Actions under filters: Add, Parse subjects, Refresh -->
+		<!-- Actions under filters: Add, Refresh (also runs parse subjects → DB) -->
 		<div class="mt-3 flex flex-wrap items-center justify-start gap-2 pl-[2ch]">
 			<button
 				type="button"
@@ -757,37 +733,6 @@
 			>
 				+ Add Incident
 			</button>
-			<div class="group relative inline-flex">
-				<button
-					type="button"
-					onclick={openParseSubjectsConfirm}
-					disabled={isParsingSubjects || incidents.length === 0}
-					aria-label="Parse email subjects into incident fields"
-					aria-describedby="parse-subjects-tooltip"
-					class="rounded-lg border border-warm-200 bg-white px-3 py-2 text-sm font-medium text-warm-700 transition hover:bg-warm-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-40"
-				>
-					{isParsingSubjects ? 'Parsing subjects…' : 'Parse subjects → DB'}
-				</button>
-				<div
-					id="parse-subjects-tooltip"
-					role="tooltip"
-					class="pointer-events-none absolute left-1/2 top-full z-40 mt-2 w-72 -translate-x-1/2 rounded-lg border border-warm-200 bg-warm-900 px-3 py-2 text-left text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 dark:border-warm-600 dark:bg-warm-200 dark:text-warm-900"
-				>
-					<p class="font-semibold">Parse email subjects → database</p>
-					<p class="mt-1 opacity-95">
-						Reads each incident’s email subject and fills blank
-						<strong class="font-semibold"> reference</strong>,
-						<strong class="font-semibold"> type</strong>,
-						<strong class="font-semibold"> driver</strong>, and
-						<strong class="font-semibold"> map location</strong> fields.
-						Creates missing types and drivers. Existing values are not overwritten.
-					</p>
-					<span
-						class="absolute bottom-full left-1/2 -mb-px h-0 w-0 -translate-x-1/2 border-x-[6px] border-b-[6px] border-x-transparent border-b-warm-900 dark:border-b-warm-200"
-						aria-hidden="true"
-					></span>
-				</div>
-			</div>
 			<button
 				type="button"
 				onclick={handleRefresh}
@@ -1270,61 +1215,6 @@
 					<button type="button" onclick={confirmDiscard}
 						class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
 						Discard Changes
-					</button>
-				</div>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Confirm bulk parse of email subjects → database -->
-	{#if showParseConfirm}
-		<div
-			class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
-			onclick={(e) => {
-				if (e.target === e.currentTarget) closeParseSubjectsConfirm();
-			}}
-			role="presentation"
-		>
-			<div
-				class="max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-warm-100"
-				role="alertdialog"
-				aria-modal="true"
-				aria-labelledby="parse-subjects-title"
-			>
-				<h3 id="parse-subjects-title" class="mb-2 text-lg font-semibold text-warm-800">
-					Parse email subjects → database
-				</h3>
-				<p class="mb-3 text-sm text-warm-600">
-					For each incident with an email subject, this will:
-				</p>
-				<ul class="mb-4 list-disc space-y-1 pl-5 text-sm text-warm-600">
-					<li>Extract <strong>reference number</strong>, <strong>type</strong>, <strong>driver</strong>, and <strong>map location</strong></li>
-					<li>Fill only fields that are currently <strong>blank</strong> (existing values are kept)</li>
-					<li><strong>Create</strong> any missing type or driver rows automatically</li>
-				</ul>
-				<p class="mb-6 text-xs text-warm-500">
-					{incidents.length} incident{incidents.length === 1 ? '' : 's'} will be scanned. You can run this
-					again safely.
-				</p>
-				{#if parseSubjectsError}
-					<p class="mb-3 text-sm text-red-600">{parseSubjectsError}</p>
-				{/if}
-				<div class="flex justify-end gap-3">
-					<button
-						type="button"
-						onclick={closeParseSubjectsConfirm}
-						disabled={isParsingSubjects}
-						class="rounded-lg border border-warm-200 px-4 py-2 text-sm text-warm-700 hover:bg-warm-50 disabled:opacity-50"
-					>
-						Cancel
-					</button>
-					<button
-						type="button"
-						onclick={() => runParseSubjectsBackfill()}
-						disabled={isParsingSubjects}
-						class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-500 disabled:opacity-50"
-					>
-						{isParsingSubjects ? 'Running…' : 'Run parse'}
 					</button>
 				</div>
 			</div>
