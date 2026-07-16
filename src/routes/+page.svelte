@@ -58,16 +58,64 @@
 	let parseSubjectsResult = $state<SubjectBackfillResult | null>(null);
 	let showParseConfirm = $state(false);
 
+	/**
+	 * Parse email subjects → DB (fill empty fields only).
+	 * Used by the confirm dialog and silently after Refresh.
+	 */
+	async function runParseSubjectsBackfill(options?: { silent?: boolean }) {
+		const silent = options?.silent === true;
+		if (!data.supabase || isParsingSubjects) return;
+		isParsingSubjects = true;
+		if (!silent) {
+			parseSubjectsError = null;
+			parseSubjectsResult = null;
+		}
+		try {
+			// Prefer latest store list after a refresh
+			const list = incidentStore.isInitialized ? incidentStore.list : incidents;
+			const result = await backfillIncidentsFromSubjects({
+				supabase: data.supabase,
+				incidents: list,
+				incidentTypes: data.incidentTypes ?? [],
+				drivers: data.drivers ?? [],
+				userId: data.user?.id,
+				fillOnlyEmpty: true
+			});
+			parseSubjectsResult = result;
+			parseSubjectsError = null;
+			// Reload list + lookup tables so new types/drivers appear in filters
+			await invalidateAll();
+			await incidentStore.reload();
+			showParseConfirm = false;
+		} catch (err) {
+			parseSubjectsError = err instanceof Error ? err.message : 'Subject parse failed';
+			if (silent) {
+				// Still surface the error banner for background runs
+				parseSubjectsResult = null;
+			}
+		} finally {
+			isParsingSubjects = false;
+		}
+	}
+
+	/**
+	 * Reload page data, then run parse subjects → DB in the background.
+	 * Post-run stats appear in the existing result banner.
+	 */
 	async function handleRefresh() {
 		isRefreshing = true;
 		refreshError = null;
 		try {
 			await invalidateAll();
+			await incidentStore.reload();
 		} catch (err) {
 			refreshError = err instanceof Error ? err.message : 'Refresh failed';
-		} finally {
 			isRefreshing = false;
+			return;
 		}
+		isRefreshing = false;
+		// Silent: no confirm modal; stats still shown when parse finishes
+		void runParseSubjectsBackfill({ silent: true });
 	}
 
 	function openParseSubjectsConfirm() {
@@ -79,36 +127,6 @@
 	function closeParseSubjectsConfirm() {
 		if (isParsingSubjects) return;
 		showParseConfirm = false;
-	}
-
-	/**
-	 * Parse all email subjects, create missing types/drivers, write blank fields
-	 * (ref / type / driver / map location) back to Supabase, then refresh.
-	 */
-	async function runParseSubjectsBackfill() {
-		if (!data.supabase || isParsingSubjects) return;
-		isParsingSubjects = true;
-		parseSubjectsError = null;
-		parseSubjectsResult = null;
-		try {
-			const result = await backfillIncidentsFromSubjects({
-				supabase: data.supabase,
-				incidents,
-				incidentTypes: data.incidentTypes ?? [],
-				drivers: data.drivers ?? [],
-				userId: data.user?.id,
-				fillOnlyEmpty: true
-			});
-			parseSubjectsResult = result;
-			// Reload list + lookup tables so new types/drivers appear in filters
-			await invalidateAll();
-			await incidentStore.reload();
-			showParseConfirm = false;
-		} catch (err) {
-			parseSubjectsError = err instanceof Error ? err.message : 'Subject parse failed';
-		} finally {
-			isParsingSubjects = false;
-		}
 	}
 
 	let search = $state('');
@@ -773,10 +791,10 @@
 			<button
 				type="button"
 				onclick={handleRefresh}
-				title="Refresh data"
-				aria-label="Refresh incidents data"
+				title="Refresh data, then parse subjects → DB in the background"
+				aria-label="Refresh incidents data and parse email subjects"
 				class="rounded-lg border border-warm-200 bg-white p-2 text-warm-500 transition hover:border-warm-300 hover:text-warm-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-40"
-				disabled={isRefreshing || isParsingSubjects}
+				disabled={isRefreshing}
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -1302,7 +1320,7 @@
 					</button>
 					<button
 						type="button"
-						onclick={runParseSubjectsBackfill}
+						onclick={() => runParseSubjectsBackfill()}
 						disabled={isParsingSubjects}
 						class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-500 disabled:opacity-50"
 					>
