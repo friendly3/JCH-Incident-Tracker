@@ -951,7 +951,7 @@
 														title="Copy reference number to clipboard for search"
 														aria-label="Copy duplicate reference {incident.referenceNo} to clipboard"
 													>
-														DUPE
+														DUPLICATE
 													</button>
 												{/if}
 											</span>
