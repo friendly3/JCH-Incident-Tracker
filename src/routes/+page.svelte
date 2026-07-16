@@ -134,6 +134,39 @@
 	let addIncidentBtn = $state<HTMLButtonElement | undefined>(undefined);
 	let backToListBtn = $state<HTMLButtonElement | undefined>(undefined);
 	let modalCloseBtn = $state<HTMLButtonElement | undefined>(undefined);
+	/** Toast after copying a duplicate ref for search */
+	let copyToast = $state<string | null>(null);
+	let copyToastTimer: ReturnType<typeof setTimeout> | null = null;
+
+	async function copyDupeRef(ref: string, event: MouseEvent) {
+		event.stopPropagation();
+		event.preventDefault();
+		const text = ref.trim();
+		if (!text) return;
+		try {
+			await navigator.clipboard.writeText(text);
+		} catch {
+			// Fallback when clipboard API is blocked
+			const ta = document.createElement('textarea');
+			ta.value = text;
+			ta.setAttribute('readonly', '');
+			ta.style.position = 'fixed';
+			ta.style.left = '-9999px';
+			document.body.appendChild(ta);
+			ta.select();
+			try {
+				document.execCommand('copy');
+			} finally {
+				document.body.removeChild(ta);
+			}
+		}
+		if (copyToastTimer) clearTimeout(copyToastTimer);
+		copyToast = `Copied ${text} to clipboard`;
+		copyToastTimer = setTimeout(() => {
+			copyToast = null;
+			copyToastTimer = null;
+		}, 2000);
+	}
 
 	const isModalOpen = $derived(mode !== 'list' && !isFormExpanded);
 
@@ -530,6 +563,15 @@
 <svelte:window onkeydowncapture={handleModalKeydownCapture} />
 
 <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-warm-50 text-warm-900">
+	{#if copyToast}
+		<div
+			class="pointer-events-none fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 rounded-lg border border-warm-200 bg-warm-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg dark:border-warm-600 dark:bg-warm-100 dark:text-warm-900"
+			role="status"
+			aria-live="polite"
+		>
+			{copyToast}
+		</div>
+	{/if}
 	<!-- List shell: inert under modal; visually hidden when form is expanded to full main pane -->
 	<div
 		class="flex min-h-0 flex-1 flex-col overflow-hidden {isFormExpanded ? 'invisible pointer-events-none' : ''}"
@@ -902,13 +944,15 @@
 													{incident.referenceNo}
 												</button>
 												{#if duplicateRefIds.has(incident.id)}
-													<span
-														class="shrink-0 rounded border border-amber-300 bg-amber-50 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-amber-800 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-200"
-														title="Duplicate reference number — a earlier incident uses this ref"
-														aria-label="Duplicate reference number"
+													<button
+														type="button"
+														onclick={(e) => copyDupeRef(incident.referenceNo, e)}
+														class="shrink-0 cursor-pointer rounded border border-amber-300 bg-amber-50 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-amber-800 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-900/50"
+														title="Copy reference number to clipboard for search"
+														aria-label="Copy duplicate reference {incident.referenceNo} to clipboard"
 													>
 														DUPE
-													</span>
+													</button>
 												{/if}
 											</span>
 										{:else}
