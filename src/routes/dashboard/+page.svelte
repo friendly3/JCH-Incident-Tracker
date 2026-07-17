@@ -1405,13 +1405,18 @@
 	}
 
 	/**
-	 * Apply full / dimmed fills for stacked driver-type bar datasets in place.
-	 * (Same hover path as the line chart — avoid relying on a full theme rebuild alone.)
+	 * Stacked driver bar theme. When `focusLabel` is set (legend hover), other
+	 * type segments grey out so the focused stack colour is prominent.
+	 *
+	 * Bars need a full dataset rebuild + theme on hover (unlike lines, which
+	 * recolour in place). Chart.js stacked bar meta often ignores in-place
+	 * backgroundColor tweaks after the first paint.
 	 */
-	function applyDriverBarSeriesFocus(
+	function applyDriverBarTheme(
 		chart: ChartJS<'bar'>,
 		focusLabel: string | null = null
 	) {
+		const colors = getChartTheme(theme.isDark);
 		const isDark = theme.isDark;
 		const dimFill = getDimmedSeriesColor(isDark);
 		const dimBorder = getDimmedSeriesBorderColor(isDark);
@@ -1426,7 +1431,7 @@
 				colorMap.get(typeLabel) ?? getChartCategoryColor(typeLabel, 0, isDark);
 			const dimmed = focusLabel != null && focusLabel !== typeLabel;
 			const focused = focusLabel != null && focusLabel === typeLabel;
-			// Solid light grey when dimmed (more visible than low-alpha slate)
+			// Gridline grey when dimmed; full type colour when focused / idle
 			dataset.backgroundColor = dimmed ? dimFill : withAlpha(solid, 0.82);
 			dataset.borderColor = dimmed ? dimBorder : solid;
 			dataset.borderWidth = dimmed ? 0.5 : focused ? 1.5 : 1;
@@ -1437,19 +1442,6 @@
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			(dataset as any).stack = 'types';
 		});
-	}
-
-	/**
-	 * Stacked driver bar theme. When `focusLabel` is set (legend hover), other
-	 * type segments grey out so the focused stack colour is prominent.
-	 */
-	function applyDriverBarTheme(
-		chart: ChartJS<'bar'>,
-		focusLabel: string | null = null
-	) {
-		const colors = getChartTheme(theme.isDark);
-		const isDark = theme.isDark;
-		applyDriverBarSeriesFocus(chart, focusLabel);
 
 		// Refresh total label chrome for theme
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2234,28 +2226,21 @@
 		instance.update('none');
 	});
 
-	// Data / hide-filter updates (hover recolour is separate, like the line chart)
+	// Driver stacked bar: rebuild + theme on data/hide/hover together.
+	// Tracking hover here (not untracked) is what made dimming work previously —
+	// stacked bars need a fresh dataset array + applyDriverBarTheme on each focus change.
 	$effect(() => {
 		const instance = driverChart;
 		if (!instance) return;
 		const next = driverStackedBarData;
 		const hidden = hiddenDriverTypeLabels;
+		const focus = hoveredDriverTypeLabel;
 		instance.data.labels = next.labels;
-		// Rebuild stacked type series; honour legend filter
 		instance.data.datasets = next.datasets.map((ds) => ({
 			...ds,
 			hidden: hidden.includes(ds.label)
 		}));
-		applyDriverBarTheme(instance, untrack(() => hoveredDriverTypeLabel));
-	});
-
-	// Legend hover: recolour bar segments in place only
-	$effect(() => {
-		const instance = driverChart;
-		const focus = hoveredDriverTypeLabel;
-		if (!instance) return;
-		applyDriverBarSeriesFocus(instance, focus);
-		instance.update('none');
+		applyDriverBarTheme(instance, focus);
 	});
 
 	$effect(() => {
@@ -2272,6 +2257,7 @@
 		if (actionStatusChart) {
 			applyActionStatusBarTheme(actionStatusChart);
 		}
+		// Hover is applied by the driver data effect above; only re-theme on dark toggle
 		if (driverChart) {
 			applyDriverBarTheme(
 				driverChart,
