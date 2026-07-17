@@ -1,9 +1,15 @@
 <script lang="ts">
 	import { invalidateAll } from '$app/navigation';
 	import { incidentStore } from '$lib/data/store.svelte';
-	import { formatDate, normalizeDateOnly } from '$lib/formatDate';
+	import { formatDate, formatDateTimeFields, normalizeDateOnly } from '$lib/formatDate';
 	import type { Incident } from '$lib/data/incidents';
-	import { getActionStatusChartColor } from '$lib/pillClasses';
+	import {
+		getActionPillClass,
+		getActionStatusChartColor,
+		getPriorityPillClass,
+		getTypePillClass,
+		normalizePriority
+	} from '$lib/pillClasses';
 	import {
 		incidentsFromPageData,
 		syncIncidentStoreFromPageData
@@ -1741,6 +1747,66 @@
 		return `Driver incidents by month for ${periodLabel}. ${rows.length} drivers, ${months.length} months, ${grandTotal} total incidents.`;
 	});
 
+	/** Drill-down: incidents for one driver × calendar month cell. */
+	type DriverMonthDetail = {
+		driverKey: string;
+		driverLabel: string;
+		monthYm: string;
+	};
+	let driverMonthDetail = $state<DriverMonthDetail | null>(null);
+
+	function openDriverMonthDetail(
+		driverKey: string,
+		driverLabel: string,
+		monthYm: string | undefined,
+		count: number
+	) {
+		if (count <= 0 || !monthYm) return;
+		driverMonthDetail = { driverKey, driverLabel, monthYm };
+	}
+
+	function closeDriverMonthDetail() {
+		driverMonthDetail = null;
+	}
+
+	function handleDriverMonthDetailKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			e.stopPropagation();
+			closeDriverMonthDetail();
+		}
+	}
+
+	function handleDriverMonthDetailBackdrop(e: MouseEvent) {
+		if (e.target === e.currentTarget) closeDriverMonthDetail();
+	}
+
+	/** Same filters as the driver×month tally for the selected cell. */
+	const driverMonthDetailIncidents = $derived.by(() => {
+		const sel = driverMonthDetail;
+		if (!sel) return [] as Incident[];
+		const range = timeRange;
+		const list: Incident[] = [];
+		for (const incident of dashboardIncidents) {
+			if (!isDateReceivedInTimeRange(incident.dateReceived, range)) continue;
+			const d = normalizeAggregationKey(incident.driver, 'Unassigned');
+			if (d.key !== sel.driverKey) continue;
+			const dateKey = dateReceivedKey(incident.dateReceived);
+			if (!dateKey || dateKey.slice(0, 7) !== sel.monthYm) continue;
+			list.push(incident);
+		}
+		list.sort((a, b) =>
+			`${a.dateReceived}T${a.time ?? ''}`.localeCompare(`${b.dateReceived}T${b.time ?? ''}`)
+		);
+		return list;
+	});
+
+	const driverMonthDetailTitle = $derived.by(() => {
+		const sel = driverMonthDetail;
+		if (!sel) return '';
+		return `${sel.driverLabel} · ${formatMonthYearLabel(sel.monthYm)}`;
+	});
+
 	onMount(() => {
 		resizeHandler = () => {
 			chartInstance?.resize();
@@ -2507,7 +2573,33 @@
 															? 'text-warm-400'
 															: 'font-medium text-warm-800'}"
 													>
-														{count === 0 ? '—' : count}
+														{#if count === 0}
+															—
+														{:else}
+															<button
+																type="button"
+																class="rounded px-1.5 py-0.5 tabular-nums font-medium text-accent-700 underline-offset-2 hover:bg-accent-50 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-accent-600 dark:hover:bg-warm-200"
+																title="View {count} incident{count === 1
+																	? ''
+																	: 's'} for {row.label} in {formatMonthYearLabel(
+																	driverMonthTally.months[i] ?? ''
+																)}"
+																aria-label="View {count} incident{count === 1
+																	? ''
+																	: 's'} for {row.label}, {formatMonthYearLabel(
+																	driverMonthTally.months[i] ?? ''
+																)}"
+																onclick={() =>
+																	openDriverMonthDetail(
+																		row.key,
+																		row.label,
+																		driverMonthTally.months[i],
+																		count
+																	)}
+															>
+																{count}
+															</button>
+														{/if}
 													</td>
 												{/each}
 												{#if showDriverMonthTotals}
@@ -2564,6 +2656,189 @@
 					</div>
 				</div>
 				</section>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Driver × month cell drill-down: list incidents for that data point -->
+	{#if driverMonthDetail}
+		<div
+			class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
+			onclick={handleDriverMonthDetailBackdrop}
+			onkeydown={handleDriverMonthDetailKeydown}
+			role="presentation"
+		>
+			<div
+				class="flex max-h-[min(90vh,56rem)] w-[70%] flex-col overflow-hidden rounded-lg border border-warm-200 bg-white shadow-2xl dark:bg-warm-100"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="driver-month-detail-title"
+				tabindex="-1"
+			>
+				<header
+					class="flex shrink-0 items-start justify-between gap-4 border-b border-warm-200 bg-warm-50 px-5 py-3 dark:bg-warm-200"
+				>
+					<div class="min-w-0">
+						<h2
+							id="driver-month-detail-title"
+							class="truncate text-lg font-semibold text-warm-800"
+						>
+							{driverMonthDetailTitle}
+						</h2>
+						<p class="mt-0.5 text-sm text-warm-500">
+							{driverMonthDetailIncidents.length}
+							incident{driverMonthDetailIncidents.length === 1 ? '' : 's'}
+							· {timeRangeLabel}
+						</p>
+					</div>
+					<button
+						type="button"
+						onclick={closeDriverMonthDetail}
+						aria-label="Close incident list"
+						title="Close"
+						class="shrink-0 rounded-md border border-warm-200 bg-white p-2 text-warm-600 hover:bg-warm-100 hover:text-warm-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:bg-warm-100"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							class="h-4 w-4"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke="currentColor"
+							stroke-width="2"
+							aria-hidden="true"
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+						</svg>
+					</button>
+				</header>
+
+				<div class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-3 sm:px-5">
+					{#if driverMonthDetailIncidents.length === 0}
+						<p class="py-8 text-center text-sm text-warm-500">No incidents for this cell.</p>
+					{:else}
+						<table
+							class="w-full table-fixed border-collapse text-left text-sm"
+						>
+							<colgroup>
+								<col class="w-[12%]" />
+								<col class="w-[14%]" />
+								<col class="w-[12%]" />
+								<col class="w-[9%]" />
+								<col class="w-[14%]" />
+								<col class="w-[16%]" />
+								<col class="w-[23%]" />
+							</colgroup>
+							<thead class="sticky top-0 z-10 border-b border-warm-200 bg-white dark:bg-warm-100">
+								<tr>
+									<th
+										scope="col"
+										class="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-warm-600"
+										>Reference</th
+									>
+									<th
+										scope="col"
+										class="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-warm-600"
+										>Date / time received</th
+									>
+									<th
+										scope="col"
+										class="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-warm-600"
+										>Resolution</th
+									>
+									<th
+										scope="col"
+										class="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-warm-600"
+										>Priority</th
+									>
+									<th
+										scope="col"
+										class="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-warm-600"
+										>Type</th
+									>
+									<th
+										scope="col"
+										class="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-warm-600"
+										>Email sender</th
+									>
+									<th
+										scope="col"
+										class="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-warm-600"
+										>Subject</th
+									>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-warm-100">
+								{#each driverMonthDetailIncidents as incident (incident.id)}
+									<tr class="align-top hover:bg-warm-50/80 dark:hover:bg-warm-200/30">
+										<td class="break-words px-2 py-2 font-mono text-xs text-warm-800">
+											{incident.referenceNo?.trim() || '—'}
+										</td>
+										<td class="break-words px-2 py-2 text-xs tabular-nums text-warm-700">
+											{formatDateTimeFields(incident.dateReceived, incident.time) || '—'}
+										</td>
+										<td class="px-2 py-2">
+											{#if incident.action?.trim()}
+												<span
+													class="inline-block max-w-full break-words rounded-full border px-2 py-0.5 text-xs font-medium {getActionPillClass(
+														incident.action
+													)}"
+												>
+													{incident.action}
+												</span>
+											{:else}
+												<span class="text-xs text-warm-400">—</span>
+											{/if}
+										</td>
+										<td class="px-2 py-2">
+											{#if incident.marked?.trim()}
+												<span
+													class="inline-block max-w-full break-words rounded-full border px-2 py-0.5 text-xs font-medium {getPriorityPillClass(
+														normalizePriority(incident.marked)
+													)}"
+												>
+													{normalizePriority(incident.marked)}
+												</span>
+											{:else}
+												<span class="text-xs text-warm-400">—</span>
+											{/if}
+										</td>
+										<td class="px-2 py-2">
+											{#if incident.type?.trim()}
+												<span
+													class="inline-block max-w-full break-words rounded-full border px-2 py-0.5 text-xs font-medium {getTypePillClass(
+														incident.type
+													)}"
+												>
+													{incident.type}
+												</span>
+											{:else}
+												<span class="text-xs text-warm-400">—</span>
+											{/if}
+										</td>
+										<td class="break-words px-2 py-2 text-xs text-warm-700">
+											{incident.emailSender?.trim() || '—'}
+										</td>
+										<td class="break-words px-2 py-2 text-xs text-warm-700">
+											{incident.emailSubject?.trim() || '—'}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					{/if}
+				</div>
+
+				<footer
+					class="flex shrink-0 justify-end border-t border-warm-200 bg-warm-50 px-5 py-3 dark:bg-warm-200"
+				>
+					<button
+						type="button"
+						onclick={closeDriverMonthDetail}
+						class="rounded-md border border-warm-300 bg-white px-5 py-2 text-sm font-medium text-warm-700 hover:bg-warm-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:bg-warm-100"
+					>
+						Close
+					</button>
+				</footer>
 			</div>
 		</div>
 	{/if}
