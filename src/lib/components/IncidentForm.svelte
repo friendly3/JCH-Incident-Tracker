@@ -126,7 +126,8 @@
 			actionId: normalizeFkId(source.actionId),
 			updatedAt: source.updatedAt ?? '',
 			updatedBy: source.updatedBy ?? null,
-			updatedByName: source.updatedByName?.trim() ?? ''
+			updatedByName: source.updatedByName?.trim() ?? '',
+			duplicateExempt: Boolean(source.duplicateExempt)
 		};
 	}
 
@@ -157,7 +158,8 @@
 			actionId: null,
 			updatedAt: '',
 			updatedBy: null,
-			updatedByName: ''
+			updatedByName: '',
+			duplicateExempt: false
 		};
 	}
 
@@ -233,7 +235,8 @@
 		actionId: null,
 		updatedAt: '',
 		updatedBy: null,
-		updatedByName: ''
+		updatedByName: '',
+		duplicateExempt: false
 	});
 
 	const lastUpdatedLabel = $derived(formatTimestampLocal(form.updatedAt));

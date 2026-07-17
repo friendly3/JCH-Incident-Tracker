@@ -25,6 +25,7 @@ export const INCIDENT_LOCATION_COORDS_MIGRATION = 'add_incident_location_coords.
 export const RESPONDED_BY_MIGRATION = 'add_responded_by_lookup.sql'
 export const EMAIL_RECEIVED_TIME_MIGRATION = 'add_email_received_time.sql'
 export const INCIDENT_UPDATED_BY_MIGRATION = 'add_incident_updated_by.sql'
+export const INCIDENT_DUPLICATE_EXEMPT_MIGRATION = 'add_incident_duplicate_exempt.sql'
 /** @deprecated Use INCIDENT_SENDER_MIGRATION or INCIDENT_NORMALIZATION_MIGRATION */
 export const INCIDENT_SCHEMA_MIGRATION = INCIDENT_SENDER_MIGRATION
 
@@ -76,6 +77,7 @@ const LOCATION_COORDS_SCHEMA_MARKERS = [
 ] as const
 const EMAIL_RECEIVED_TIME_MARKERS = ['email_received_time'] as const
 const UPDATED_BY_SCHEMA_MARKERS = ['updated_by', 'updated_by_name'] as const
+const DUPLICATE_EXEMPT_SCHEMA_MARKERS = ['duplicate_exempt'] as const
 
 function escapeRegExp(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -129,7 +131,11 @@ function getIncidentSchemaErrorMessage(error: { message?: string; code?: string 
 		return `Database migration required. Please apply ${INCIDENT_UPDATED_BY_MIGRATION}.`
 	}
 
-	return `Database schema mismatch. Please apply pending migrations: ${INCIDENT_NORMALIZATION_MIGRATION}, ${INCIDENT_SENDER_MIGRATION}, ${INCIDENT_LOCATION_MIGRATION}, ${INCIDENT_LOCATION_COORDS_MIGRATION}, ${EMAIL_RECEIVED_TIME_MIGRATION}, and ${INCIDENT_UPDATED_BY_MIGRATION}.`
+	if (messageMentionsAny(msg, DUPLICATE_EXEMPT_SCHEMA_MARKERS)) {
+		return `Database migration required. Please apply ${INCIDENT_DUPLICATE_EXEMPT_MIGRATION}.`
+	}
+
+	return `Database schema mismatch. Please apply pending migrations: ${INCIDENT_NORMALIZATION_MIGRATION}, ${INCIDENT_SENDER_MIGRATION}, ${INCIDENT_LOCATION_MIGRATION}, ${INCIDENT_LOCATION_COORDS_MIGRATION}, ${EMAIL_RECEIVED_TIME_MIGRATION}, ${INCIDENT_UPDATED_BY_MIGRATION}, and ${INCIDENT_DUPLICATE_EXEMPT_MIGRATION}.`
 }
 
 function parseCoord(value: unknown): number | null {
@@ -211,6 +217,7 @@ export function toIncidentInsert(
 		marked: incident.marked?.trim() ?? '',
 		source: 'ui',
 		status: 'Open',
+		duplicate_exempt: Boolean(incident.duplicateExempt),
 		user_id: userId || null,
 		updated_at: now,
 		updated_by: editorId,
@@ -274,6 +281,9 @@ export function toIncidentUpdate(
 	}
 	if (updates.sender !== undefined) payload.sender = updates.sender?.trim() ?? '';
 	if (updates.marked !== undefined) payload.marked = updates.marked?.trim() ?? '';
+	if (updates.duplicateExempt !== undefined) {
+		payload.duplicate_exempt = Boolean(updates.duplicateExempt);
+	}
 
 	return payload;
 }
@@ -608,7 +618,8 @@ export function createDb(supabase: SupabaseClient) {
 					action: row.incident_actions?.name || '',
 					updatedAt: row.updated_at || row.created_at || '',
 					updatedBy: row.updated_by ?? null,
-					updatedByName: row.updated_by_name?.trim() || ''
+					updatedByName: row.updated_by_name?.trim() || '',
+					duplicateExempt: Boolean(row.duplicate_exempt)
 				};
 			})
 		},

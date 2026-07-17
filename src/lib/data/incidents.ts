@@ -54,6 +54,11 @@ export interface Incident {
     marked: string;
     referenceNo: string;
     referenceText: string;
+    /**
+     * When true, do not treat this row as a DUPLICATE of another with the same
+     * reference number (user override). Dashboard metrics also include it.
+     */
+    duplicateExempt?: boolean;
     /** ID referencing drivers.id */
     driverId: string | null;
     /** Resolved name/username for display (joined from drivers) */

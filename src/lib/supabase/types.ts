@@ -143,6 +143,8 @@ export interface Database {
           updated_at?: string
           updated_by?: string | null
           updated_by_name?: string | null
+          /** User override: do not treat as DUPLICATE of same reference */
+          duplicate_exempt?: boolean
         }
         Insert: {
           id?: string
@@ -174,6 +176,7 @@ export interface Database {
           updated_at?: string
           updated_by?: string | null
           updated_by_name?: string | null
+          duplicate_exempt?: boolean
         }
         Update: {
           id?: string
@@ -203,6 +206,7 @@ export interface Database {
           updated_at?: string
           updated_by?: string | null
           updated_by_name?: string | null
+          duplicate_exempt?: boolean
         }
       }
     }

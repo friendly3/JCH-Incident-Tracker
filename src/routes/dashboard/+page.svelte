@@ -1576,9 +1576,81 @@
 			.slice(0, 48);
 	}
 
+	/** True when a CSS colour string uses functions html2canvas cannot parse. */
+	function cssColorNeedsRgbFallback(value: string): boolean {
+		return /oklab|oklch|\blab\(|\blch\(|color-mix\(|color\(/i.test(value);
+	}
+
 	/**
-	 * Capture the visible dashboard (charts, tables, map) and download a PDF.
-	 * Multi-page A4 portrait when content is taller than one page.
+	 * Convert any CSS colour (including Tailwind v4 oklab/oklch) to #rrggbb / rgba
+	 * via the canvas 2D parser — which browsers resolve to sRGB.
+	 */
+	function cssColorToRgb(color: string): string {
+		const v = color.trim();
+		if (!v || v === 'transparent' || v === 'none' || v === 'currentcolor') return v;
+		try {
+			const canvas = document.createElement('canvas');
+			canvas.width = canvas.height = 1;
+			const ctx = canvas.getContext('2d');
+			if (!ctx) return v;
+			ctx.fillStyle = '#010203';
+			ctx.fillStyle = v;
+			const parsed = String(ctx.fillStyle);
+			if (parsed && !cssColorNeedsRgbFallback(parsed)) return parsed;
+		} catch {
+			/* ignore */
+		}
+		// Fallbacks if canvas cannot parse modern colour functions
+		if (cssColorNeedsRgbFallback(v)) return '#3a3b3d';
+		return v;
+	}
+
+	/**
+	 * Snapshot computed paint onto inline styles as rgb so the clone is safe for capture.
+	 * sourceRoot is the live dashboard; cloneRoot is the html2canvas clone.
+	 */
+	function flattenCloneColorsToRgb(sourceRoot: HTMLElement, cloneRoot: HTMLElement) {
+		const sourceNodes = [sourceRoot, ...sourceRoot.querySelectorAll<HTMLElement>('*')];
+		const cloneNodes = [cloneRoot, ...cloneRoot.querySelectorAll<HTMLElement>('*')];
+		const n = Math.min(sourceNodes.length, cloneNodes.length);
+		const paintProps = [
+			'color',
+			'backgroundColor',
+			'borderTopColor',
+			'borderRightColor',
+			'borderBottomColor',
+			'borderLeftColor',
+			'outlineColor',
+			'textDecorationColor',
+			'caretColor',
+			'columnRuleColor',
+			'fill',
+			'stroke'
+		] as const;
+
+		for (let i = 0; i < n; i++) {
+			const src = sourceNodes[i];
+			const clone = cloneNodes[i];
+			if (!src || !clone) continue;
+			const computed = getComputedStyle(src);
+			for (const prop of paintProps) {
+				const raw = computed[prop];
+				if (!raw || raw === 'rgba(0, 0, 0, 0)' || raw === 'transparent') continue;
+				// Always bake to sRGB hex/rgba — avoids oklab parse errors in the capturer
+				const rgb = cssColorToRgb(raw);
+				(clone.style as unknown as Record<string, string>)[prop] = rgb;
+			}
+			// Box-shadow can embed oklab stops — drop rather than fail the export
+			const shadow = computed.boxShadow;
+			if (shadow && shadow !== 'none' && cssColorNeedsRgbFallback(shadow)) {
+				clone.style.boxShadow = 'none';
+			}
+		}
+	}
+
+	/**
+	 * Capture the dashboard and download a single A4 landscape PDF.
+	 * Content is densified in the clone, then scaled uniformly to fit one page.
 	 */
 	async function exportDashboardPdf() {
 		if (pdfExporting || typeof window === 'undefined') return;
@@ -1600,58 +1672,118 @@
 		await new Promise<void>((resolve) => setTimeout(resolve, 80));
 
 		try {
+			// html2canvas-pro handles more CSS; we still flatten oklab from Tailwind v4
 			const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-				import('html2canvas'),
+				import('html2canvas-pro'),
 				import('jspdf')
 			]);
 
+			// Capture at landscape A4 width (297mm ≈ 1123 CSS px at 96dpi) so the
+			// layout uses desktop multi-column grids rather than a narrow phone stack.
+			const landscapeCssWidth = 1400;
+
 			const canvas = await html2canvas(root, {
-				scale: Math.min(2, window.devicePixelRatio || 1.5),
+				scale: 1.5,
 				useCORS: true,
 				allowTaint: true,
 				backgroundColor: isDarkMode() ? '#141516' : '#f8f8f8',
 				logging: false,
 				scrollX: 0,
 				scrollY: 0,
-				windowWidth: root.scrollWidth,
+				width: landscapeCssWidth,
+				windowWidth: landscapeCssWidth,
 				windowHeight: root.scrollHeight,
-				onclone: (_doc, cloned) => {
+				onclone: (doc, cloned) => {
 					cloned.style.overflow = 'visible';
 					cloned.style.height = 'auto';
 					cloned.style.maxHeight = 'none';
-					// Hide the export button in the PDF itself
-					cloned
-						.querySelectorAll('[data-pdf-hide]')
-						.forEach((node) => {
-							(node as HTMLElement).style.display = 'none';
-						});
+					cloned.style.width = `${landscapeCssWidth}px`;
+					cloned.style.minWidth = `${landscapeCssWidth}px`;
+					cloned.style.boxSizing = 'border-box';
+
+					// Compact layout so charts + tables fit a landscape sheet when scaled
+					const style = doc.createElement('style');
+					style.textContent = `
+						#dashboard-pdf-root {
+							font-size: 11px !important;
+						}
+						#dashboard-pdf-root header {
+							padding: 0.4rem 0.75rem !important;
+						}
+						#dashboard-pdf-root .dashboard-summary {
+							margin-bottom: 0.35rem !important;
+						}
+						#dashboard-pdf-root .dashboard-chart-row {
+							gap: 0.35rem !important;
+						}
+						#dashboard-pdf-root .dashboard-chart-card {
+							padding: 0.4rem 0.55rem !important;
+						}
+						#dashboard-pdf-root .dashboard-chart-header {
+							min-height: 0 !important;
+							margin-bottom: 0.2rem !important;
+						}
+						#dashboard-pdf-root .dashboard-chart-plot,
+						#dashboard-pdf-root .dashboard-chart-plot canvas {
+							height: 9.5rem !important;
+							max-height: 9.5rem !important;
+							min-height: 9.5rem !important;
+						}
+						#dashboard-pdf-root .dashboard-chart-footer {
+							flex-basis: auto !important;
+							min-height: 0 !important;
+							max-height: none !important;
+							margin-top: 0.2rem !important;
+						}
+						#dashboard-pdf-root .map-chart-shell,
+						#dashboard-pdf-root .nsw-incident-map,
+						#dashboard-pdf-root .leaflet-container {
+							height: 14rem !important;
+							min-height: 14rem !important;
+							max-height: 14rem !important;
+						}
+						#dashboard-pdf-root table {
+							font-size: 10px !important;
+						}
+						#dashboard-pdf-root .max-h-\\[min\\(32\\.5rem\\,60vh\\)\\],
+						#dashboard-pdf-root [class*="max-h-"] {
+							max-height: 16rem !important;
+						}
+					`;
+					doc.head.appendChild(style);
+
+					// Hide the export button (and any other PDF-only chrome) in the PDF
+					cloned.querySelectorAll('[data-pdf-hide]').forEach((node) => {
+						(node as HTMLElement).style.display = 'none';
+					});
+
+					// Tailwind v4 uses oklab(); flatten to rgb on the clone
+					flattenCloneColorsToRgb(root, cloned);
 				}
 			});
 
 			const imgData = canvas.toDataURL('image/png', 1.0);
 			const pdf = new jsPDF({
-				orientation: 'portrait',
+				orientation: 'landscape',
 				unit: 'mm',
 				format: 'a4',
 				compress: true
 			});
 			const pageWidth = pdf.internal.pageSize.getWidth();
 			const pageHeight = pdf.internal.pageSize.getHeight();
-			const margin = 8;
-			const contentWidth = pageWidth - margin * 2;
-			const imgHeight = (canvas.height * contentWidth) / canvas.width;
-			let heightLeft = imgHeight;
-			let y = margin;
+			const margin = 6;
+			const maxW = pageWidth - margin * 2;
+			const maxH = pageHeight - margin * 2;
 
-			pdf.addImage(imgData, 'PNG', margin, y, contentWidth, imgHeight, undefined, 'FAST');
-			heightLeft -= pageHeight - margin * 2;
+			// Uniform scale-to-fit: entire dashboard on one landscape A4 page
+			// (canvas is pixels; page size is mm — fit keeps aspect ratio)
+			const fit = Math.min(maxW / canvas.width, maxH / canvas.height);
+			const imgWmm = canvas.width * fit;
+			const imgHmm = canvas.height * fit;
+			const x = margin + (maxW - imgWmm) / 2;
+			const y = margin + (maxH - imgHmm) / 2;
 
-			while (heightLeft > 0) {
-				y = margin - (imgHeight - heightLeft);
-				pdf.addPage();
-				pdf.addImage(imgData, 'PNG', margin, y, contentWidth, imgHeight, undefined, 'FAST');
-				heightLeft -= pageHeight - margin * 2;
-			}
+			pdf.addImage(imgData, 'PNG', x, y, imgWmm, imgHmm, undefined, 'FAST');
 
 			const periodSlug = pdfFilenameSlug(timeRangeLabel) || 'period';
 			const dateSlug = new Date().toISOString().slice(0, 10);

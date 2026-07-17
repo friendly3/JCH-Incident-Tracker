@@ -41,7 +41,10 @@
 		type MonthTimeRangeKey,
 		type TimeRangeKey
 	} from '$lib/dashboardPeriod.svelte';
-	import { getDuplicateIncidentIds } from '$lib/incidentDuplicates';
+	import {
+		getDuplicateIncidentIds,
+		sharesReferenceWithOther
+	} from '$lib/incidentDuplicates';
 
 	let { data } = $props();
 
@@ -132,6 +135,8 @@
 	/** Toast after copying a duplicate ref for search */
 	let copyToast = $state<string | null>(null);
 	let copyToastTimer: ReturnType<typeof setTimeout> | null = null;
+	/** Busy id while saving duplicate_exempt override */
+	let dupeToggleBusyId = $state<string | null>(null);
 
 	async function copyDupeRef(ref: string, event: MouseEvent) {
 		event.stopPropagation();
@@ -446,6 +451,35 @@
 	async function handleDelete(id: string) {
 		await incidentStore.delete(id);
 		deleteConfirmId = null;
+	}
+
+	/**
+	 * Mark / unmark a later same-reference row as a user-confirmed non-duplicate.
+	 * Persists `duplicate_exempt` and refreshes list + open editor.
+	 */
+	async function setDuplicateExempt(incident: Incident, exempt: boolean) {
+		if (dupeToggleBusyId) return;
+		dupeToggleBusyId = incident.id;
+		incidentStore.clearError();
+		try {
+			const audit = {
+				userId: data.user?.id ?? null,
+				userName: userDisplayName(data.user ?? data.session?.user)
+			};
+			const success = await incidentStore.update(
+				incident.id,
+				{ ...incident, duplicateExempt: exempt },
+				audit
+			);
+			if (success) {
+				const refreshed = incidentStore.list.find((i) => i.id === incident.id);
+				if (refreshed && editingIncident?.id === incident.id) {
+					editingIncident = refreshed;
+				}
+			}
+		} finally {
+			dupeToggleBusyId = null;
+		}
 	}
 
 	function closeModal() {
@@ -1011,8 +1045,33 @@
 											<button onclick={() => (deleteConfirmId = null)}
 												class="px-3 py-1 text-xs bg-warm-100 hover:bg-warm-200 text-warm-700 rounded">No</button>
 										{:else}
-											<button type="button" onclick={() => (deleteConfirmId = incident.id)}
-												class="px-3 py-1 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded">Delete</button>
+											<span class="inline-flex flex-wrap items-center justify-end gap-1">
+												{#if duplicateRefIds.has(incident.id)}
+													<button
+														type="button"
+														disabled={dupeToggleBusyId === incident.id}
+														onclick={() => setDuplicateExempt(incident, true)}
+														title="Stop treating this row as a duplicate of the same reference"
+														aria-label="Untag as duplicate"
+														class="px-2 py-1 text-xs font-medium rounded border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-100"
+													>
+														{dupeToggleBusyId === incident.id ? '…' : 'Not a duplicate'}
+													</button>
+												{:else if incident.duplicateExempt && sharesReferenceWithOther(incident, incidents)}
+													<button
+														type="button"
+														disabled={dupeToggleBusyId === incident.id}
+														onclick={() => setDuplicateExempt(incident, false)}
+														title="Treat this row as a duplicate of the same reference again"
+														aria-label="Mark as duplicate"
+														class="px-2 py-1 text-xs font-medium rounded border border-warm-300 bg-white text-warm-700 hover:bg-warm-50 disabled:opacity-50 dark:bg-warm-100"
+													>
+														{dupeToggleBusyId === incident.id ? '…' : 'Mark as duplicate'}
+													</button>
+												{/if}
+												<button type="button" onclick={() => (deleteConfirmId = incident.id)}
+													class="px-3 py-1 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded">Delete</button>
+											</span>
 										{/if}
 									</td>
 								</tr>
@@ -1095,6 +1154,29 @@
 						{/if}
 					</div>
 					<div class="flex shrink-0 items-center gap-2">
+						{#if mode === 'edit' && editingIncident}
+							{#if duplicateRefIds.has(editingIncident.id)}
+								<button
+									type="button"
+									disabled={dupeToggleBusyId === editingIncident.id}
+									onclick={() => setDuplicateExempt(editingIncident!, true)}
+									title="Stop treating this row as a duplicate of the same reference"
+									class="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-100"
+								>
+									{dupeToggleBusyId === editingIncident.id ? 'Saving…' : 'Not a duplicate'}
+								</button>
+							{:else if editingIncident.duplicateExempt && sharesReferenceWithOther(editingIncident, incidents)}
+								<button
+									type="button"
+									disabled={dupeToggleBusyId === editingIncident.id}
+									onclick={() => setDuplicateExempt(editingIncident!, false)}
+									title="Treat this row as a duplicate of the same reference again"
+									class="rounded-md border border-warm-300 bg-white px-3 py-1.5 text-sm font-medium text-warm-700 hover:bg-warm-50 disabled:opacity-50 dark:bg-warm-200"
+								>
+									{dupeToggleBusyId === editingIncident.id ? 'Saving…' : 'Mark as duplicate'}
+								</button>
+							{/if}
+						{/if}
 						{#if isFormExpanded}
 							<button
 								bind:this={backToListBtn}
