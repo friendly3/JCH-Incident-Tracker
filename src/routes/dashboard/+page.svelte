@@ -1606,13 +1606,13 @@
 	}
 
 	/**
-	 * Snapshot computed paint onto inline styles as rgb so the clone is safe for capture.
-	 * sourceRoot is the live dashboard; cloneRoot is the html2canvas clone.
+	 * Bake computed paint to sRGB on the clone tree only (no source pairing).
+	 * Pairing live↔clone by index breaks when the clone gains/removes nodes
+	 * (e.g. page-2 banner), which can paint table text the wrong colour.
 	 */
-	function flattenCloneColorsToRgb(sourceRoot: HTMLElement, cloneRoot: HTMLElement) {
-		const sourceNodes = [sourceRoot, ...sourceRoot.querySelectorAll<HTMLElement>('*')];
-		const cloneNodes = [cloneRoot, ...cloneRoot.querySelectorAll<HTMLElement>('*')];
-		const n = Math.min(sourceNodes.length, cloneNodes.length);
+	function flattenCloneTreeColorsToRgb(cloneRoot: HTMLElement) {
+		const win = cloneRoot.ownerDocument.defaultView;
+		if (!win) return;
 		const paintProps = [
 			'color',
 			'backgroundColor',
@@ -1628,22 +1628,21 @@
 			'stroke'
 		] as const;
 
-		for (let i = 0; i < n; i++) {
-			const src = sourceNodes[i];
-			const clone = cloneNodes[i];
-			if (!src || !clone) continue;
-			const computed = getComputedStyle(src);
+		const nodes = [cloneRoot, ...cloneRoot.querySelectorAll<HTMLElement>('*')];
+		for (const el of nodes) {
+			const computed = win.getComputedStyle(el);
 			for (const prop of paintProps) {
 				const raw = computed[prop];
 				if (!raw || raw === 'rgba(0, 0, 0, 0)' || raw === 'transparent') continue;
-				// Always bake to sRGB hex/rgba — avoids oklab parse errors in the capturer
+				if (!cssColorNeedsRgbFallback(raw) && !raw.startsWith('color')) {
+					// Still normalise via canvas when possible for consistent #rrggbb
+				}
 				const rgb = cssColorToRgb(raw);
-				(clone.style as unknown as Record<string, string>)[prop] = rgb;
+				(el.style as unknown as Record<string, string>)[prop] = rgb;
 			}
-			// Box-shadow can embed oklab stops — drop rather than fail the export
 			const shadow = computed.boxShadow;
 			if (shadow && shadow !== 'none' && cssColorNeedsRgbFallback(shadow)) {
-				clone.style.boxShadow = 'none';
+				el.style.boxShadow = 'none';
 			}
 		}
 	}
@@ -1651,6 +1650,7 @@
 	/**
 	 * Capture the dashboard as a 2-page A4 landscape PDF:
 	 * page 1 — KPIs + charts; page 2 — Incidents by Driver per Month (all rows).
+	 * High raster scale + lossless PNG to keep text sharp when fitted to the page.
 	 */
 	async function exportDashboardPdf() {
 		if (pdfExporting || typeof window === 'undefined') return;
@@ -1680,9 +1680,13 @@
 			]);
 
 			type PdfPage = 'overview' | 'driver-month';
-			const landscapeCssWidth = 1500;
+			// ~A4 landscape CSS width; higher scale → sharper type after page fit
+			const landscapeCssWidth = 1600;
+			const captureScale = 3;
 			const bg = isDarkMode() ? '#141516' : '#f8f8f8';
 			const periodLabel = timeRangeLabel;
+			const textInk = isDarkMode() ? '#e0e2e2' : '#3a3b3d';
+			const mutedInk = isDarkMode() ? '#9a9c9e' : '#6a6c6e';
 
 			function applyPdfCloneChrome(
 				doc: Document,
@@ -1695,13 +1699,19 @@
 				cloned.style.width = `${landscapeCssWidth}px`;
 				cloned.style.minWidth = `${landscapeCssWidth}px`;
 				cloned.style.boxSizing = 'border-box';
+				// Prefer crisp glyph edges in the rasteriser
+				cloned.style.setProperty('-webkit-font-smoothing', 'antialiased');
+				cloned.style.setProperty('text-rendering', 'geometricPrecision');
 
 				const plotH = '15.5rem';
-				const driverPlotH = `${15.5 * 1.3}rem`;
+				// Full-width driver bar: +30% then +50% vs base plot height
+				const driverPlotH = `${15.5 * 1.3 * 1.5}rem`;
 				const style = doc.createElement('style');
 				style.textContent = `
 					#dashboard-pdf-root {
 						padding-bottom: 0.5rem !important;
+						-webkit-font-smoothing: antialiased !important;
+						text-rendering: geometricPrecision !important;
 					}
 					#dashboard-pdf-root header {
 						padding: 0.5rem 0.85rem !important;
@@ -1733,11 +1743,14 @@
 						margin-bottom: 0.3rem !important;
 					}
 					#dashboard-pdf-root .dashboard-chart-header h2 {
-						font-size: 0.9rem !important;
+						font-size: 0.95rem !important;
+						font-weight: 700 !important;
+						color: ${textInk} !important;
 					}
 					#dashboard-pdf-root .dashboard-chart-meta {
-						font-size: 0.75rem !important;
+						font-size: 0.8rem !important;
 						min-height: 0 !important;
+						color: ${mutedInk} !important;
 					}
 					#dashboard-pdf-root .dashboard-chart-plot {
 						flex: 0 0 ${plotH} !important;
@@ -1748,6 +1761,7 @@
 					#dashboard-pdf-root .dashboard-chart-plot canvas {
 						height: 100% !important;
 						max-height: ${plotH} !important;
+						image-rendering: auto !important;
 					}
 					#dashboard-pdf-root .dashboard-chart-card[data-pdf-driver-chart] .dashboard-chart-plot {
 						flex: 0 0 ${driverPlotH} !important;
@@ -1766,7 +1780,7 @@
 						overflow: visible !important;
 					}
 					#dashboard-pdf-root .dashboard-legend-btn {
-						font-size: 11px !important;
+						font-size: 12px !important;
 						background: transparent !important;
 						background-color: transparent !important;
 						box-shadow: none !important;
@@ -1781,37 +1795,55 @@
 						border-radius: 0.12rem !important;
 						flex-shrink: 0 !important;
 					}
-					/* Page 2: full-height table — no scroll clip so every row paints */
+					/* Page 2: expand table fully so every data row is painted */
 					#dashboard-pdf-root .dashboard-table-map-row {
 						display: grid !important;
 						grid-template-columns: 1fr !important;
 						gap: 0 !important;
 						margin-top: 0 !important;
 						width: 100% !important;
+						overflow: visible !important;
 					}
 					#dashboard-pdf-root .dashboard-table-map-row > section {
 						max-height: none !important;
 						height: auto !important;
 						min-height: 0 !important;
 						overflow: visible !important;
+						display: block !important;
 					}
 					#dashboard-pdf-root .dashboard-table-map-row .overflow-auto,
-					#dashboard-pdf-root .dashboard-table-map-row [class*="max-h-"],
-					#dashboard-pdf-root .dashboard-table-map-row [class*="max-h-\\["] {
+					#dashboard-pdf-root .dashboard-table-map-row [class*="max-h-"] {
 						max-height: none !important;
 						height: auto !important;
+						min-height: 0 !important;
 						overflow: visible !important;
+						flex: none !important;
 					}
 					#dashboard-pdf-root .dashboard-table-map-row table {
-						font-size: 12px !important;
+						font-size: 13px !important;
 						width: 100% !important;
+						border-collapse: collapse !important;
+						color: ${textInk} !important;
+					}
+					#dashboard-pdf-root .dashboard-table-map-row th,
+					#dashboard-pdf-root .dashboard-table-map-row td {
+						color: ${textInk} !important;
+						position: static !important;
+						opacity: 1 !important;
+						visibility: visible !important;
 					}
 					#dashboard-pdf-root .dashboard-table-map-row thead th {
-						position: static !important;
+						background: #f0f1f1 !important;
+						font-weight: 700 !important;
+					}
+					#dashboard-pdf-root .dashboard-table-map-row tbody th {
+						background: #ffffff !important;
+						font-weight: 600 !important;
 					}
 					#dashboard-pdf-root .dashboard-table-map-row tfoot th,
 					#dashboard-pdf-root .dashboard-table-map-row tfoot td {
-						position: static !important;
+						background: #f0f1f1 !important;
+						font-weight: 700 !important;
 					}
 					#dashboard-pdf-root .dashboard-summary [style*="7.15rem"] {
 						height: 8.25rem !important;
@@ -1836,6 +1868,14 @@
 					#dashboard-pdf-root.dashboard-pdf-page-overview .dashboard-table-map-row {
 						display: none !important;
 					}
+					/* Drop sticky/transform that often softens raster text */
+					#dashboard-pdf-root * {
+						backdrop-filter: none !important;
+						-webkit-backdrop-filter: none !important;
+					}
+					#dashboard-pdf-root .sticky {
+						position: static !important;
+					}
 				`;
 				doc.head.appendChild(style);
 
@@ -1848,23 +1888,55 @@
 					const banner = doc.createElement('div');
 					banner.className = 'dashboard-pdf-page2-banner';
 					banner.innerHTML = `
-						<div style="font-size:1.05rem;font-weight:700;color:#3a3b3d;">
+						<div style="font-size:1.15rem;font-weight:700;color:${textInk};">
 							Incidents by Driver per Month
 						</div>
-						<div style="font-size:0.8rem;color:#6a6c6e;margin-top:0.2rem;">
+						<div style="font-size:0.85rem;color:${mutedInk};margin-top:0.2rem;">
 							${periodLabel.replace(/</g, '')} · all rows
 						</div>
 					`;
 					const first = cloned.firstElementChild;
 					if (first) cloned.insertBefore(banner, first);
 					else cloned.appendChild(banner);
+
+					// Force every nested scroller open so rows are not clipped at paint time
+					cloned.querySelectorAll<HTMLElement>('.dashboard-table-map-row *').forEach((el) => {
+						const cs = doc.defaultView?.getComputedStyle(el);
+						if (!cs) return;
+						if (cs.overflow === 'auto' || cs.overflow === 'scroll' || cs.overflowY === 'auto') {
+							el.style.setProperty('overflow', 'visible', 'important');
+							el.style.setProperty('max-height', 'none', 'important');
+							el.style.setProperty('height', 'auto', 'important');
+						}
+						if (cs.position === 'sticky' || cs.position === 'fixed') {
+							el.style.setProperty('position', 'static', 'important');
+						}
+					});
 				}
 
 				cloned.querySelectorAll('[data-pdf-hide]').forEach((node) => {
 					(node as HTMLElement).style.display = 'none';
 				});
 
-				flattenCloneColorsToRgb(root, cloned);
+				// Flatten colours on the clone only (after DOM mutations) so indices stay valid
+				flattenCloneTreeColorsToRgb(cloned);
+
+				// Ensure table body text stays high-contrast after flatten
+				if (page === 'driver-month') {
+					cloned
+						.querySelectorAll<HTMLElement>(
+							'.dashboard-table-map-row td, .dashboard-table-map-row th, .dashboard-table-map-row span, .dashboard-table-map-row button'
+						)
+						.forEach((el) => {
+							const isMuted =
+								el.className.includes('text-warm-400') ||
+								el.className.includes('text-warm-500') ||
+								(el.textContent || '').trim() === '—';
+							el.style.setProperty('color', isMuted ? mutedInk : textInk, 'important');
+							el.style.setProperty('opacity', '1', 'important');
+							el.style.setProperty('visibility', 'visible', 'important');
+						});
+				}
 
 				cloned.querySelectorAll<HTMLElement>('.dashboard-legend-btn').forEach((btn) => {
 					const spans = [...btn.querySelectorAll(':scope > span')] as HTMLElement[];
@@ -1873,14 +1945,13 @@
 					const seriesColor =
 						swatch?.style.background ||
 						swatch?.style.backgroundColor ||
-						getComputedStyle(swatch ?? btn).backgroundColor ||
-						'#666';
+						'#666666';
 					const rgb = cssColorToRgb(seriesColor);
 
 					btn.style.setProperty('background', 'transparent', 'important');
 					btn.style.setProperty('background-color', 'transparent', 'important');
 					btn.style.setProperty('box-shadow', 'none', 'important');
-					btn.style.color = isDarkMode() ? '#e0e2e2' : '#3a3b3d';
+					btn.style.color = textInk;
 
 					if (swatch) {
 						swatch.classList.add('dashboard-legend-swatch');
@@ -1892,6 +1963,7 @@
 						swatch.style.setProperty('border-radius', '0.12rem', 'important');
 					}
 					if (label) {
+						// Colour the label (front), not a filled legend background
 						label.style.setProperty('color', rgb, 'important');
 						label.style.setProperty('background', 'transparent', 'important');
 						label.style.setProperty('background-color', 'transparent', 'important');
@@ -1902,7 +1974,7 @@
 
 			async function capturePage(page: PdfPage): Promise<HTMLCanvasElement> {
 				return html2canvas(root, {
-					scale: 1.75,
+					scale: captureScale,
 					useCORS: true,
 					allowTaint: true,
 					backgroundColor: bg,
@@ -1911,7 +1983,8 @@
 					scrollY: 0,
 					width: landscapeCssWidth,
 					windowWidth: landscapeCssWidth,
-					windowHeight: root.scrollHeight,
+					// Let html2canvas measure after clone layout (hidden sections collapse)
+					windowHeight: Math.max(root.scrollHeight, 800),
 					onclone: (doc, cloned) => {
 						if (!(cloned instanceof HTMLElement)) return;
 						applyPdfCloneChrome(doc, cloned, page);
@@ -1926,30 +1999,32 @@
 				{ isFirst }: { isFirst: boolean }
 			) {
 				if (!isFirst) pdfDoc.addPage();
-				const pageWidth = pdfDoc.internal.pageSize.getWidth();
-				const pageHeight = pdfDoc.internal.pageSize.getHeight();
-				const margin = 6;
+				const pageWidth = pdfDoc.internal.pageSize.getWidth() as number;
+				const pageHeight = pdfDoc.internal.pageSize.getHeight() as number;
+				const margin = 5;
 				const maxW = pageWidth - margin * 2;
 				const maxH = pageHeight - margin * 2;
+				// Fit page; high captureScale keeps type crisp after this downscale
 				const fit = Math.min(maxW / canvas.width, maxH / canvas.height);
 				const imgWmm = canvas.width * fit;
 				const imgHmm = canvas.height * fit;
 				const x = margin + (maxW - imgWmm) / 2;
 				const y = margin + (maxH - imgHmm) / 2;
-				const imgData = canvas.toDataURL('image/png', 1.0);
-				pdfDoc.addImage(imgData, 'PNG', x, y, imgWmm, imgHmm, undefined, 'FAST');
+				// PNG + no compression — text stays sharp vs JPEG/FAST
+				const imgData = canvas.toDataURL('image/png');
+				pdfDoc.addImage(imgData, 'PNG', x, y, imgWmm, imgHmm, undefined, 'NONE');
 			}
 
-			const [overviewCanvas, driverMonthCanvas] = await Promise.all([
-				capturePage('overview'),
-				capturePage('driver-month')
-			]);
+			// Sequential capture avoids twin large canvases competing for memory
+			const overviewCanvas = await capturePage('overview');
+			const driverMonthCanvas = await capturePage('driver-month');
 
 			const pdf = new jsPDF({
 				orientation: 'landscape',
 				unit: 'mm',
 				format: 'a4',
-				compress: true
+				compress: false,
+				hotfixes: ['px_scaling']
 			});
 			addCanvasPage(pdf, overviewCanvas, { isFirst: true });
 			addCanvasPage(pdf, driverMonthCanvas, { isFirst: false });
