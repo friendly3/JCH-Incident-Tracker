@@ -1769,17 +1769,22 @@
 		driverMonthDetail = null;
 	}
 
-	function handleDriverMonthDetailKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			e.preventDefault();
-			e.stopPropagation();
-			closeDriverMonthDetail();
-		}
-	}
-
 	function handleDriverMonthDetailBackdrop(e: MouseEvent) {
 		if (e.target === e.currentTarget) closeDriverMonthDetail();
 	}
+
+	// Escape must listen on window — the overlay is not focused after open.
+	$effect(() => {
+		if (!driverMonthDetail) return;
+		const onKeydown = (e: KeyboardEvent) => {
+			if (e.key !== 'Escape') return;
+			e.preventDefault();
+			e.stopPropagation();
+			closeDriverMonthDetail();
+		};
+		window.addEventListener('keydown', onKeydown);
+		return () => window.removeEventListener('keydown', onKeydown);
+	});
 
 	/** Same filters as the driver×month tally for the selected cell. */
 	const driverMonthDetailIncidents = $derived.by(() => {
@@ -1795,8 +1800,9 @@
 			if (!dateKey || dateKey.slice(0, 7) !== sel.monthYm) continue;
 			list.push(incident);
 		}
+		// Newest date/time received first (match main incidents list)
 		list.sort((a, b) =>
-			`${a.dateReceived}T${a.time ?? ''}`.localeCompare(`${b.dateReceived}T${b.time ?? ''}`)
+			`${b.dateReceived}T${b.time ?? ''}`.localeCompare(`${a.dateReceived}T${a.time ?? ''}`)
 		);
 		return list;
 	});
@@ -2511,13 +2517,35 @@
 						aria-labelledby="driver-month-tally-title"
 						aria-describedby="driver-month-tally-summary"
 					>
-						<div class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-							<h2
-								id="driver-month-tally-title"
-								class="text-sm font-semibold text-warm-800"
-							>
-								Incidents by Driver per Month
-							</h2>
+						<div class="mb-2 flex flex-wrap items-start justify-between gap-2">
+							<div class="min-w-0">
+								<h2
+									id="driver-month-tally-title"
+									class="text-sm font-semibold text-warm-800"
+								>
+									Incidents by Driver per Month
+								</h2>
+								<p class="mt-0.5 text-xs text-warm-500">
+									<span class="inline-flex items-center gap-1">
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											class="h-3.5 w-3.5 shrink-0 text-accent-600"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke="currentColor"
+											stroke-width="2"
+											aria-hidden="true"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"
+											/>
+										</svg>
+										Click a count to view those incidents
+									</span>
+								</p>
+							</div>
 							<p class="text-xs text-warm-500">{driverMonthTally.periodLabel}</p>
 						</div>
 						<p id="driver-month-tally-summary" class="sr-only">{driverMonthTallyAriaLabel}</p>
@@ -2569,16 +2597,18 @@
 												</th>
 												{#each row.counts as count, i (`${row.key}-${driverMonthTally.months[i] ?? i}`)}
 													<td
-														class="px-2 py-1.5 text-center tabular-nums {count === 0
+														class="px-1.5 py-1.5 text-center tabular-nums {count === 0
 															? 'text-warm-400'
-															: 'font-medium text-warm-800'}"
+															: ''}"
 													>
 														{#if count === 0}
-															—
+															<span class="inline-block min-w-[2.25rem] text-warm-400"
+																>—</span
+															>
 														{:else}
 															<button
 																type="button"
-																class="rounded px-1.5 py-0.5 tabular-nums font-medium text-accent-700 underline-offset-2 hover:bg-accent-50 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-accent-600 dark:hover:bg-warm-200"
+																class="group inline-flex min-h-8 min-w-[2.5rem] items-center justify-center gap-0.5 rounded-full border border-accent-200 bg-accent-100 px-2.5 py-1 text-base font-semibold tabular-nums text-accent-700 shadow-sm transition hover:border-accent-500 hover:bg-accent-200 hover:text-accent-700 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-1 active:scale-[0.97] dark:border-accent-200 dark:bg-accent-200 dark:text-accent-600 dark:hover:border-accent-500 dark:hover:bg-accent-200"
 																title="View {count} incident{count === 1
 																	? ''
 																	: 's'} for {row.label} in {formatMonthYearLabel(
@@ -2597,7 +2627,22 @@
 																		count
 																	)}
 															>
-																{count}
+																<span>{count}</span>
+																<svg
+																	xmlns="http://www.w3.org/2000/svg"
+																	class="h-3 w-3 shrink-0 opacity-70 transition group-hover:translate-x-0.5 group-hover:opacity-100"
+																	fill="none"
+																	viewBox="0 0 24 24"
+																	stroke="currentColor"
+																	stroke-width="2.5"
+																	aria-hidden="true"
+																>
+																	<path
+																		stroke-linecap="round"
+																		stroke-linejoin="round"
+																		d="M9 5l7 7-7 7"
+																	/>
+																</svg>
 															</button>
 														{/if}
 													</td>
@@ -2665,7 +2710,6 @@
 		<div
 			class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
 			onclick={handleDriverMonthDetailBackdrop}
-			onkeydown={handleDriverMonthDetailKeydown}
 			role="presentation"
 		>
 			<div
