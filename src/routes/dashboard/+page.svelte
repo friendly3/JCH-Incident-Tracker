@@ -1982,8 +1982,7 @@
 						class="max-w-xl text-[0.825rem] leading-snug text-warm-500"
 						title="Dashboard charts, tables, and map exclude these rows"
 					>
-						Ignoring records with no reference number and later duplicates of the same reference
-						(earliest kept).
+						Dashboard data ignores records with no reference number and duplicates.
 					</p>
 				</div>
 			{/if}
