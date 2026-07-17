@@ -8,6 +8,7 @@
 		incidentsFromPageData,
 		syncIncidentStoreFromPageData
 	} from '$lib/syncIncidentStore';
+	import { getDuplicateIncidentIds } from '$lib/incidentDuplicates';
 	import CourierTruckIcon from '$lib/components/CourierTruckIcon.svelte';
 	import NswIncidentMap from '$lib/components/NswIncidentMap.svelte';
 	import {
@@ -1229,8 +1230,19 @@
 		return Boolean(incident.referenceNo?.trim());
 	}
 
-	/** All dashboard charts, KPIs, tables, and map use this set only. */
-	const dashboardIncidents = $derived(incidents.filter(hasIncidentReference));
+	/**
+	 * Later rows that share a reference with an earlier incident (same rule as list DUPE tag).
+	 * Computed from the full list so the original is correct even if outside the period filter.
+	 */
+	const duplicateRefIds = $derived(getDuplicateIncidentIds(incidents));
+
+	/**
+	 * All dashboard charts, KPIs, tables, and map use this set only:
+	 * has a reference number and is not a duplicate of an earlier row.
+	 */
+	const dashboardIncidents = $derived(
+		incidents.filter((i) => hasIncidentReference(i) && !duplicateRefIds.has(i.id))
+	);
 
 	let canvasElement: HTMLCanvasElement | undefined = $state();
 	let typeOverTimeCanvas: HTMLCanvasElement | undefined = $state();

@@ -41,6 +41,7 @@
 		type MonthTimeRangeKey,
 		type TimeRangeKey
 	} from '$lib/dashboardPeriod.svelte';
+	import { getDuplicateIncidentIds } from '$lib/incidentDuplicates';
 
 	let { data } = $props();
 
@@ -252,31 +253,9 @@
 
 	/**
 	 * Incident ids that share a reference number with an older row — show DUPE tag.
-	 * The earliest (date received + time) occurrence of each ref is left untagged.
+	 * Same rule as dashboard exclusion (earliest date received + time kept as original).
 	 */
-	const duplicateRefIds = $derived.by(() => {
-		const byRef = new Map<string, Incident[]>();
-		for (const i of incidents) {
-			const ref = i.referenceNo?.trim();
-			if (!ref) continue;
-			const key = ref.toUpperCase();
-			const list = byRef.get(key);
-			if (list) list.push(i);
-			else byRef.set(key, [i]);
-		}
-		const ids = new Set<string>();
-		for (const group of byRef.values()) {
-			if (group.length < 2) continue;
-			group.sort((a, b) =>
-				`${a.dateReceived}T${a.time}`.localeCompare(`${b.dateReceived}T${b.time}`)
-			);
-			// Skip index 0 (original); tag all later rows
-			for (let n = 1; n < group.length; n++) {
-				ids.add(group[n].id);
-			}
-		}
-		return ids;
-	});
+	const duplicateRefIds = $derived(getDuplicateIncidentIds(incidents));
 
 	function clearFilters() {
 		search = '';
