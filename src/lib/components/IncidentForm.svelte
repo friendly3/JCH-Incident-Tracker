@@ -285,32 +285,29 @@
 		onUnsavedChangesChange?.(hasUnsavedChanges);
 	});
 
-	// Reset form when incident prop changes (only track `incident`, not form edits)
-	let loadedIncidentKey = $state<string | null>(null);
+	// Reset form when incident prop changes.
+	// Important: only read `incident` here — reading form/dirty state and writing form
+	// back causes an infinite $effect loop that freezes the modal UI.
+	// Non-reactive last key so post-save refresh of the same id can keep the success notice.
+	let lastLoadedIncidentKey: string | null = null;
 	$effect(() => {
 		const source = incident;
-		// Stable key: id for edits, sentinel for new. Avoid wiping success toast when parent
-		// refreshes the same record after save (updatedAt / coords may change).
 		const key = source?.id ? `id:${source.id}` : 'new';
-		const isSameRecord = key === loadedIncidentKey;
-		loadedIncidentKey = key;
+		const switchedRecord = key !== lastLoadedIncidentKey;
+		lastLoadedIncidentKey = key;
 
-		if (!isSameRecord) {
+		if (switchedRecord) {
 			saveSuccessMessage = null;
-			submitError = null;
-			submitErrorField = null;
 			formTab = 'details';
 			openTimePickerField = null;
 			openDatePickerField = null;
 		}
 
+		submitError = null;
+		submitErrorField = null;
 		const initial = source ? normalizeIncident(source) : emptyIncident();
-		// Same record (e.g. post-save refresh): do not wipe in-progress edits.
-		// When clean, adopt the refreshed server copy (updatedAt, coords, etc.).
-		if (!isSameRecord || !computeHasUnsavedChanges()) {
-			form = initial;
-			baselineSnapshot = JSON.stringify(toSnapshot(initial));
-		}
+		form = initial;
+		baselineSnapshot = JSON.stringify(toSnapshot(initial));
 	});
 
 	async function handleSubmit() {
