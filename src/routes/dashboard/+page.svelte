@@ -1649,8 +1649,8 @@
 	}
 
 	/**
-	 * Capture the dashboard and download a single A4 landscape PDF.
-	 * Content is densified in the clone, then scaled uniformly to fit one page.
+	 * Capture the dashboard as a 2-page A4 landscape PDF:
+	 * page 1 — KPIs + charts; page 2 — Incidents by Driver per Month (all rows).
 	 */
 	async function exportDashboardPdf() {
 		if (pdfExporting || typeof window === 'undefined') return;
@@ -1678,152 +1678,279 @@
 				import('jspdf')
 			]);
 
-			// Wide capture so multi-column chart grids engage (2-up charts for PDF).
+			type PdfPage = 'overview' | 'driver-month';
 			const landscapeCssWidth = 1500;
+			const bg = isDarkMode() ? '#141516' : '#f8f8f8';
+			const periodLabel = timeRangeLabel;
 
-			const canvas = await html2canvas(root, {
-				scale: 1.75,
-				useCORS: true,
-				allowTaint: true,
-				backgroundColor: isDarkMode() ? '#141516' : '#f8f8f8',
-				logging: false,
-				scrollX: 0,
-				scrollY: 0,
-				width: landscapeCssWidth,
-				windowWidth: landscapeCssWidth,
-				windowHeight: root.scrollHeight,
-				onclone: (doc, cloned) => {
-					cloned.style.overflow = 'visible';
-					cloned.style.height = 'auto';
-					cloned.style.maxHeight = 'none';
-					cloned.style.width = `${landscapeCssWidth}px`;
-					cloned.style.minWidth = `${landscapeCssWidth}px`;
-					cloned.style.boxSizing = 'border-box';
+			function applyPdfCloneChrome(
+				doc: Document,
+				cloned: HTMLElement,
+				page: PdfPage
+			) {
+				cloned.style.overflow = 'visible';
+				cloned.style.height = 'auto';
+				cloned.style.maxHeight = 'none';
+				cloned.style.width = `${landscapeCssWidth}px`;
+				cloned.style.minWidth = `${landscapeCssWidth}px`;
+				cloned.style.boxSizing = 'border-box';
 
-					/*
-					 * PDF-only layout:
-					 * - KPI / call-out tiles left at on-screen size
-					 * - Main charts: 2 per row, taller plots for legibility
-					 * - Map omitted; driver×month table full width
-					 */
-					const style = doc.createElement('style');
-					style.textContent = `
-						#dashboard-pdf-root {
-							padding-bottom: 0.5rem !important;
-						}
-						#dashboard-pdf-root header {
-							padding: 0.5rem 0.85rem !important;
-						}
-						/* Call-out tiles: do not shrink KPI type or numbers */
-						#dashboard-pdf-root .dashboard-summary {
-							margin-bottom: 0.5rem !important;
-						}
-						#dashboard-pdf-root .dashboard-charts {
-							margin-top: 0.25rem !important;
-						}
-						/* 2 charts per row (was 3 on large screens) */
-						#dashboard-pdf-root .dashboard-chart-row {
-							display: grid !important;
-							grid-template-columns: 1fr 1fr !important;
-							gap: 0.65rem !important;
-							align-items: stretch !important;
-						}
-						#dashboard-pdf-root .dashboard-chart-card {
-							padding: 0.65rem 0.75rem !important;
-							height: auto !important;
-							min-height: 0 !important;
-						}
-						#dashboard-pdf-root .dashboard-chart-header {
-							min-height: 0 !important;
-							margin-bottom: 0.3rem !important;
-						}
-						#dashboard-pdf-root .dashboard-chart-header h2 {
-							font-size: 0.9rem !important;
-						}
-						#dashboard-pdf-root .dashboard-chart-meta {
-							font-size: 0.75rem !important;
-							min-height: 0 !important;
-						}
-						/* Taller plots so series / labels stay readable after page scale */
-						#dashboard-pdf-root .dashboard-chart-plot {
-							flex: 0 0 15.5rem !important;
-							height: 15.5rem !important;
-							min-height: 15.5rem !important;
-							max-height: 15.5rem !important;
-						}
-						#dashboard-pdf-root .dashboard-chart-plot canvas {
-							height: 100% !important;
-							max-height: 15.5rem !important;
-						}
-						#dashboard-pdf-root .dashboard-chart-footer {
-							flex: 0 0 auto !important;
-							min-height: 2.5rem !important;
-							max-height: none !important;
-							margin-top: 0.35rem !important;
-							overflow: visible !important;
-						}
-						#dashboard-pdf-root .dashboard-legend-btn {
-							font-size: 11px !important;
-						}
-						/* Driver×month table: full width once map is hidden */
-						#dashboard-pdf-root .dashboard-table-map-row {
-							display: grid !important;
-							grid-template-columns: 1fr !important;
-							gap: 0.5rem !important;
-							margin-top: 0.65rem !important;
-						}
-						#dashboard-pdf-root .dashboard-table-map-row > section {
-							max-height: none !important;
-						}
-						#dashboard-pdf-root .dashboard-table-map-row table {
-							font-size: 11px !important;
-						}
-						#dashboard-pdf-root .dashboard-table-map-row [class*="max-h-"],
-						#dashboard-pdf-root .dashboard-table-map-row .overflow-auto {
-							max-height: 18rem !important;
-						}
-						/* Resolution mini-chart in summary row: slightly taller for labels */
-						#dashboard-pdf-root .dashboard-summary [style*="7.15rem"] {
-							height: 8.25rem !important;
-							min-height: 8.25rem !important;
-						}
+				const plotH = '15.5rem';
+				const driverPlotH = `${15.5 * 1.3}rem`;
+				const style = doc.createElement('style');
+				style.textContent = `
+					#dashboard-pdf-root {
+						padding-bottom: 0.5rem !important;
+					}
+					#dashboard-pdf-root header {
+						padding: 0.5rem 0.85rem !important;
+					}
+					#dashboard-pdf-root .dashboard-summary {
+						margin-bottom: 0.5rem !important;
+					}
+					#dashboard-pdf-root .dashboard-charts {
+						margin-top: 0.25rem !important;
+					}
+					#dashboard-pdf-root .dashboard-chart-row {
+						display: grid !important;
+						grid-template-columns: 1fr 1fr !important;
+						gap: 0.65rem !important;
+						align-items: stretch !important;
+					}
+					#dashboard-pdf-root .dashboard-chart-card {
+						padding: 0.65rem 0.75rem !important;
+						height: auto !important;
+						min-height: 0 !important;
+					}
+					#dashboard-pdf-root .dashboard-chart-card[data-pdf-driver-chart] {
+						grid-column: 1 / -1 !important;
+						width: 100% !important;
+						max-width: 100% !important;
+					}
+					#dashboard-pdf-root .dashboard-chart-header {
+						min-height: 0 !important;
+						margin-bottom: 0.3rem !important;
+					}
+					#dashboard-pdf-root .dashboard-chart-header h2 {
+						font-size: 0.9rem !important;
+					}
+					#dashboard-pdf-root .dashboard-chart-meta {
+						font-size: 0.75rem !important;
+						min-height: 0 !important;
+					}
+					#dashboard-pdf-root .dashboard-chart-plot {
+						flex: 0 0 ${plotH} !important;
+						height: ${plotH} !important;
+						min-height: ${plotH} !important;
+						max-height: ${plotH} !important;
+					}
+					#dashboard-pdf-root .dashboard-chart-plot canvas {
+						height: 100% !important;
+						max-height: ${plotH} !important;
+					}
+					#dashboard-pdf-root .dashboard-chart-card[data-pdf-driver-chart] .dashboard-chart-plot {
+						flex: 0 0 ${driverPlotH} !important;
+						height: ${driverPlotH} !important;
+						min-height: ${driverPlotH} !important;
+						max-height: ${driverPlotH} !important;
+					}
+					#dashboard-pdf-root .dashboard-chart-card[data-pdf-driver-chart] .dashboard-chart-plot canvas {
+						max-height: ${driverPlotH} !important;
+					}
+					#dashboard-pdf-root .dashboard-chart-footer {
+						flex: 0 0 auto !important;
+						min-height: 2.5rem !important;
+						max-height: none !important;
+						margin-top: 0.35rem !important;
+						overflow: visible !important;
+					}
+					#dashboard-pdf-root .dashboard-legend-btn {
+						font-size: 11px !important;
+						background: transparent !important;
+						background-color: transparent !important;
+						box-shadow: none !important;
+						border: none !important;
+						padding: 0.1rem 0.15rem !important;
+					}
+					#dashboard-pdf-root .dashboard-legend-swatch {
+						display: inline-block !important;
+						width: 0.55rem !important;
+						height: 0.55rem !important;
+						min-width: 0.55rem !important;
+						border-radius: 0.12rem !important;
+						flex-shrink: 0 !important;
+					}
+					/* Page 2: full-height table — no scroll clip so every row paints */
+					#dashboard-pdf-root .dashboard-table-map-row {
+						display: grid !important;
+						grid-template-columns: 1fr !important;
+						gap: 0 !important;
+						margin-top: 0 !important;
+						width: 100% !important;
+					}
+					#dashboard-pdf-root .dashboard-table-map-row > section {
+						max-height: none !important;
+						height: auto !important;
+						min-height: 0 !important;
+						overflow: visible !important;
+					}
+					#dashboard-pdf-root .dashboard-table-map-row .overflow-auto,
+					#dashboard-pdf-root .dashboard-table-map-row [class*="max-h-"],
+					#dashboard-pdf-root .dashboard-table-map-row [class*="max-h-\\["] {
+						max-height: none !important;
+						height: auto !important;
+						overflow: visible !important;
+					}
+					#dashboard-pdf-root .dashboard-table-map-row table {
+						font-size: 12px !important;
+						width: 100% !important;
+					}
+					#dashboard-pdf-root .dashboard-table-map-row thead th {
+						position: static !important;
+					}
+					#dashboard-pdf-root .dashboard-table-map-row tfoot th,
+					#dashboard-pdf-root .dashboard-table-map-row tfoot td {
+						position: static !important;
+					}
+					#dashboard-pdf-root .dashboard-summary [style*="7.15rem"] {
+						height: 8.25rem !important;
+						min-height: 8.25rem !important;
+					}
+					#dashboard-pdf-root .dashboard-pdf-page2-banner {
+						display: none;
+						padding: 0.65rem 0.85rem !important;
+						border-bottom: 1px solid #e2e4e4 !important;
+						margin-bottom: 0.75rem !important;
+						background: ${bg} !important;
+					}
+					#dashboard-pdf-root.dashboard-pdf-page-driver-month .dashboard-pdf-page2-banner {
+						display: block !important;
+					}
+					#dashboard-pdf-root.dashboard-pdf-page-driver-month header,
+					#dashboard-pdf-root.dashboard-pdf-page-driver-month .dashboard-summary,
+					#dashboard-pdf-root.dashboard-pdf-page-driver-month .dashboard-charts,
+					#dashboard-pdf-root.dashboard-pdf-page-driver-month hr {
+						display: none !important;
+					}
+					#dashboard-pdf-root.dashboard-pdf-page-overview .dashboard-table-map-row {
+						display: none !important;
+					}
+				`;
+				doc.head.appendChild(style);
+
+				cloned.classList.add(
+					page === 'overview' ? 'dashboard-pdf-page-overview' : 'dashboard-pdf-page-driver-month'
+				);
+
+				// Page-2 title banner (main header is hidden on that page)
+				if (page === 'driver-month') {
+					const banner = doc.createElement('div');
+					banner.className = 'dashboard-pdf-page2-banner';
+					banner.innerHTML = `
+						<div style="font-size:1.05rem;font-weight:700;color:#3a3b3d;">
+							Incidents by Driver per Month
+						</div>
+						<div style="font-size:0.8rem;color:#6a6c6e;margin-top:0.2rem;">
+							${periodLabel.replace(/</g, '')} · all rows
+						</div>
 					`;
-					doc.head.appendChild(style);
-
-					// Hide Save PDF control, map, and any other PDF-only chrome
-					cloned.querySelectorAll('[data-pdf-hide]').forEach((node) => {
-						(node as HTMLElement).style.display = 'none';
-					});
-
-					// Tailwind v4 uses oklab(); flatten to rgb on the clone
-					flattenCloneColorsToRgb(root, cloned);
+					const first = cloned.firstElementChild;
+					if (first) cloned.insertBefore(banner, first);
+					else cloned.appendChild(banner);
 				}
-			});
 
-			const imgData = canvas.toDataURL('image/png', 1.0);
+				cloned.querySelectorAll('[data-pdf-hide]').forEach((node) => {
+					(node as HTMLElement).style.display = 'none';
+				});
+
+				flattenCloneColorsToRgb(root, cloned);
+
+				cloned.querySelectorAll<HTMLElement>('.dashboard-legend-btn').forEach((btn) => {
+					const spans = [...btn.querySelectorAll(':scope > span')] as HTMLElement[];
+					const swatch = spans[0];
+					const label = spans[1];
+					const seriesColor =
+						swatch?.style.background ||
+						swatch?.style.backgroundColor ||
+						getComputedStyle(swatch ?? btn).backgroundColor ||
+						'#666';
+					const rgb = cssColorToRgb(seriesColor);
+
+					btn.style.setProperty('background', 'transparent', 'important');
+					btn.style.setProperty('background-color', 'transparent', 'important');
+					btn.style.setProperty('box-shadow', 'none', 'important');
+					btn.style.color = isDarkMode() ? '#e0e2e2' : '#3a3b3d';
+
+					if (swatch) {
+						swatch.classList.add('dashboard-legend-swatch');
+						swatch.style.setProperty('background', rgb, 'important');
+						swatch.style.setProperty('background-color', rgb, 'important');
+						swatch.style.setProperty('border', 'none', 'important');
+						swatch.style.setProperty('width', '0.55rem', 'important');
+						swatch.style.setProperty('height', '0.55rem', 'important');
+						swatch.style.setProperty('border-radius', '0.12rem', 'important');
+					}
+					if (label) {
+						label.style.setProperty('color', rgb, 'important');
+						label.style.setProperty('background', 'transparent', 'important');
+						label.style.setProperty('background-color', 'transparent', 'important');
+						label.style.setProperty('font-weight', '600', 'important');
+					}
+				});
+			}
+
+			async function capturePage(page: PdfPage): Promise<HTMLCanvasElement> {
+				return html2canvas(root, {
+					scale: 1.75,
+					useCORS: true,
+					allowTaint: true,
+					backgroundColor: bg,
+					logging: false,
+					scrollX: 0,
+					scrollY: 0,
+					width: landscapeCssWidth,
+					windowWidth: landscapeCssWidth,
+					windowHeight: root.scrollHeight,
+					onclone: (doc, cloned) => applyPdfCloneChrome(doc, cloned, page)
+				});
+			}
+
+			function addCanvasPage(
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				pdfDoc: any,
+				canvas: HTMLCanvasElement,
+				{ isFirst }: { isFirst: boolean }
+			) {
+				if (!isFirst) pdfDoc.addPage();
+				const pageWidth = pdfDoc.internal.pageSize.getWidth();
+				const pageHeight = pdfDoc.internal.pageSize.getHeight();
+				const margin = 6;
+				const maxW = pageWidth - margin * 2;
+				const maxH = pageHeight - margin * 2;
+				const fit = Math.min(maxW / canvas.width, maxH / canvas.height);
+				const imgWmm = canvas.width * fit;
+				const imgHmm = canvas.height * fit;
+				const x = margin + (maxW - imgWmm) / 2;
+				const y = margin + (maxH - imgHmm) / 2;
+				const imgData = canvas.toDataURL('image/png', 1.0);
+				pdfDoc.addImage(imgData, 'PNG', x, y, imgWmm, imgHmm, undefined, 'FAST');
+			}
+
+			const [overviewCanvas, driverMonthCanvas] = await Promise.all([
+				capturePage('overview'),
+				capturePage('driver-month')
+			]);
+
 			const pdf = new jsPDF({
 				orientation: 'landscape',
 				unit: 'mm',
 				format: 'a4',
 				compress: true
 			});
-			const pageWidth = pdf.internal.pageSize.getWidth();
-			const pageHeight = pdf.internal.pageSize.getHeight();
-			const margin = 6;
-			const maxW = pageWidth - margin * 2;
-			const maxH = pageHeight - margin * 2;
+			addCanvasPage(pdf, overviewCanvas, { isFirst: true });
+			addCanvasPage(pdf, driverMonthCanvas, { isFirst: false });
 
-			// Uniform scale-to-fit: entire dashboard on one landscape A4 page
-			// (canvas is pixels; page size is mm — fit keeps aspect ratio)
-			const fit = Math.min(maxW / canvas.width, maxH / canvas.height);
-			const imgWmm = canvas.width * fit;
-			const imgHmm = canvas.height * fit;
-			const x = margin + (maxW - imgWmm) / 2;
-			const y = margin + (maxH - imgHmm) / 2;
-
-			pdf.addImage(imgData, 'PNG', x, y, imgWmm, imgHmm, undefined, 'FAST');
-
-			const periodSlug = pdfFilenameSlug(timeRangeLabel) || 'period';
+			const periodSlug = pdfFilenameSlug(periodLabel) || 'period';
 			const dateSlug = new Date().toISOString().slice(0, 10);
 			pdf.save(`jch-dashboard-${periodSlug}-${dateSlug}.pdf`);
 		} catch (err) {
@@ -3016,6 +3143,7 @@
 
 					<section
 						class="dashboard-chart-card min-w-0 overflow-hidden rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
+						data-pdf-driver-chart
 						aria-labelledby="driver-chart-title"
 						aria-describedby="driver-chart-summary"
 					>
