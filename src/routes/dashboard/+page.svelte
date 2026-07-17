@@ -1654,11 +1654,12 @@
 	 */
 	async function exportDashboardPdf() {
 		if (pdfExporting || typeof window === 'undefined') return;
-		const root = document.getElementById('dashboard-pdf-root');
-		if (!root) {
+		const rootEl = document.getElementById('dashboard-pdf-root');
+		if (!(rootEl instanceof HTMLElement)) {
 			pdfExportError = 'Dashboard content not ready to export.';
 			return;
 		}
+		const root: HTMLElement = rootEl;
 
 		pdfExporting = true;
 		pdfExportError = null;
@@ -1911,7 +1912,10 @@
 					width: landscapeCssWidth,
 					windowWidth: landscapeCssWidth,
 					windowHeight: root.scrollHeight,
-					onclone: (doc, cloned) => applyPdfCloneChrome(doc, cloned, page)
+					onclone: (doc, cloned) => {
+						if (!(cloned instanceof HTMLElement)) return;
+						applyPdfCloneChrome(doc, cloned, page);
+					}
 				});
 			}
 
