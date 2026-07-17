@@ -559,12 +559,17 @@
 		chart.update('none');
 	}
 
+	/** Solid slate greys — rgba can fail to repaint on multi-series line charts. */
+	function getDimmedSeriesColor(isDark = isDarkMode()): string {
+		return isDark ? '#64748B' : '#94A3B8';
+	}
+
 	/**
-	 * Color each type series and refresh axis/legend theme tokens.
-	 * When `focusLabel` is set (legend hover), other series are greyed so the
-	 * focused line stands out.
+	 * Apply full / dimmed colours for multi-series line datasets.
+	 * Mutates datasets in place (no array replace) so Chart.js line controllers
+	 * reliably pick up the stroke change on hover.
 	 */
-	function applyTypeOverTimeChartTheme(
+	function applyTypeOverTimeSeriesFocus(
 		chart: ChartJS<'line'>,
 		focusLabel: string | null = null
 	) {
@@ -575,36 +580,32 @@
 			chart.data.datasets.map((d) => String(d.label ?? '')),
 			isDark
 		);
-		chart.data.datasets.forEach((dataset) => {
-			// Unspecified / blank types always use medium gray (same as Unassigned)
+		chart.data.datasets.forEach((dataset, index) => {
 			const label = String(dataset.label ?? '');
 			const stroke =
 				colorMap.get(label) ?? getChartCategoryColor(dataset.label, 0, isDark);
 			const dimmed = focusLabel != null && focusLabel !== label;
+			const focused = focusLabel != null && focusLabel === label;
 			const lineColor = dimmed ? dimColor : stroke;
 			dataset.borderColor = lineColor;
 			dataset.backgroundColor = withAlpha(lineColor, dimmed ? 0.02 : 0.06);
 			dataset.pointBackgroundColor = lineColor;
-			dataset.pointBorderColor = dimmed ? lineColor : colors.pointBorder;
-			dataset.borderWidth = dimmed ? 1.5 : focusLabel === label ? 3.25 : 2.5;
-			dataset.pointRadius = dimmed ? 2 : focusLabel === label ? 5 : 4;
-			dataset.pointHoverRadius = dimmed ? 3 : 6;
+			dataset.pointBorderColor = dimmed ? dimColor : colors.pointBorder;
+			dataset.borderWidth = dimmed ? 1.25 : focused ? 3.5 : 2.5;
+			dataset.pointRadius = dimmed ? 1.5 : focused ? 5 : 4;
+			dataset.pointHoverRadius = dimmed ? 2.5 : 6;
 			dataset.pointBorderWidth = dimmed ? 1 : 2;
-			// Higher order draws later (on top)
-			dataset.order = dimmed ? 0 : focusLabel === label ? 10 : 1;
+			// Higher order draws later (on top) — line only; safe for non-stacked series
+			dataset.order = dimmed ? index : focused ? 1000 : 100 + index;
 		});
-		if (chart.options?.plugins?.legend) {
-			// Keep legend off-canvas so plot height matches the other two cards
-			chart.options.plugins.legend.display = false;
-		}
 		if (chart.options?.plugins?.datalabels) {
-			Object.assign(
-				chart.options.plugins.datalabels,
-				buildLineDataLabels(colors, { fontSize: 10, multiSeries: true })
-			);
-			// Hide point counts on dimmed series while focusing one legend item
+			const baseLabels = buildLineDataLabels(colors, {
+				fontSize: 10,
+				multiSeries: true
+			});
+			Object.assign(chart.options.plugins.datalabels, baseLabels);
 			if (focusLabel != null) {
-				const baseDisplay = chart.options.plugins.datalabels.display;
+				const baseDisplay = baseLabels.display;
 				chart.options.plugins.datalabels.display = (context) => {
 					const lbl = String(context.dataset.label ?? '');
 					if (lbl !== focusLabel) return false;
@@ -614,6 +615,23 @@
 					return baseDisplay !== false;
 				};
 			}
+		}
+	}
+
+	/**
+	 * Color each type series and refresh axis/legend theme tokens.
+	 * When `focusLabel` is set (legend hover), other series are greyed so the
+	 * focused line stands out.
+	 */
+	function applyTypeOverTimeChartTheme(
+		chart: ChartJS<'line'>,
+		focusLabel: string | null = null
+	) {
+		const colors = getChartTheme(theme.isDark);
+		applyTypeOverTimeSeriesFocus(chart, focusLabel);
+		if (chart.options?.plugins?.legend) {
+			// Keep legend off-canvas so plot height matches the other two cards
+			chart.options.plugins.legend.display = false;
 		}
 		if (chart.options?.scales?.y?.ticks) {
 			chart.options.scales.y.ticks.color = colors.ticks;
@@ -1550,11 +1568,6 @@
 		hiddenDriverTypeLabels = toggleLegendLabel(hiddenDriverTypeLabels, label);
 	}
 
-	/** Uniform slate for non-focused series while a legend item is hovered. */
-	function getDimmedSeriesColor(isDark = isDarkMode()): string {
-		return isDark ? 'rgba(148, 163, 184, 0.32)' : 'rgba(148, 163, 184, 0.38)';
-	}
-
 	/** Canonical YYYY-MM-DD from dateReceived (handles ISO datetimes). */
 	function dateReceivedKey(dateStr: string | undefined | null): string | null {
 		const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr?.trim() ?? '');
@@ -2161,19 +2174,32 @@
 		instance.update('none');
 	});
 
+	// Data / hide-filter updates (not legend hover — that is a separate recolour)
 	$effect(() => {
 		const instance = typeOverTimeChart;
 		if (!instance) return;
 		const next = typeOverTimeChartData;
 		const hidden = hiddenTypeOverTimeLabels;
-		const focus = hoveredTypeOverTimeLabel;
 		instance.data.labels = next.labels;
 		// Rebuild datasets so type set can grow/shrink; honour legend filter
 		instance.data.datasets = next.datasets.map((ds) => ({
 			...ds,
 			hidden: hidden.includes(ds.label)
 		}));
-		applyTypeOverTimeChartTheme(instance, focus);
+		// Apply current hover focus without depending on it here (untracked read)
+		applyTypeOverTimeChartTheme(
+			instance,
+			untrack(() => hoveredTypeOverTimeLabel)
+		);
+	});
+
+	// Legend hover: recolour lines only (avoid dataset array replace, which can
+	// leave multi-series line strokes on their previous colours).
+	$effect(() => {
+		const instance = typeOverTimeChart;
+		const focus = hoveredTypeOverTimeLabel;
+		if (!instance) return;
+		applyTypeOverTimeSeriesFocus(instance, focus);
 		instance.update('none');
 	});
 
@@ -2192,15 +2218,20 @@
 		if (!instance) return;
 		const next = driverStackedBarData;
 		const hidden = hiddenDriverTypeLabels;
-		const focus = hoveredDriverTypeLabel;
 		instance.data.labels = next.labels;
 		// Rebuild stacked type series; honour legend filter
 		instance.data.datasets = next.datasets.map((ds) => ({
 			...ds,
 			hidden: hidden.includes(ds.label)
 		}));
+		applyDriverBarTheme(instance, untrack(() => hoveredDriverTypeLabel));
+	});
+
+	$effect(() => {
+		const instance = driverChart;
+		const focus = hoveredDriverTypeLabel;
+		if (!instance) return;
 		applyDriverBarTheme(instance, focus);
-		instance.update('none');
 	});
 
 	$effect(() => {
@@ -2209,13 +2240,19 @@
 			applyChartTheme(chartInstance);
 		}
 		if (typeOverTimeChart) {
-			applyTypeOverTimeChartTheme(typeOverTimeChart, hoveredTypeOverTimeLabel);
+			applyTypeOverTimeChartTheme(
+				typeOverTimeChart,
+				untrack(() => hoveredTypeOverTimeLabel)
+			);
 		}
 		if (actionStatusChart) {
 			applyActionStatusBarTheme(actionStatusChart);
 		}
 		if (driverChart) {
-			applyDriverBarTheme(driverChart, hoveredDriverTypeLabel);
+			applyDriverBarTheme(
+				driverChart,
+				untrack(() => hoveredDriverTypeLabel)
+			);
 		}
 	});
 
@@ -2636,7 +2673,7 @@
 													? dimLegend
 														? 'opacity-35'
 														: activeLegend
-															? 'font-semibold text-warm-800 opacity-100'
+															? 'bg-warm-100 text-warm-800 opacity-100 ring-1 ring-warm-300/80 dark:bg-warm-200'
 															: ''
 													: 'opacity-40 line-through'}"
 												aria-pressed={visible}
@@ -2736,7 +2773,7 @@
 													? dimLegend
 														? 'opacity-35'
 														: activeLegend
-															? 'font-semibold text-warm-800 opacity-100'
+															? 'bg-warm-100 text-warm-800 opacity-100 ring-1 ring-warm-300/80 dark:bg-warm-200'
 															: ''
 													: 'opacity-40 line-through'}"
 												aria-pressed={visible}
