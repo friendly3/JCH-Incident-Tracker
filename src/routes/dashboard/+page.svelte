@@ -228,7 +228,8 @@
 			return pick('#2563EB', '#60A5FA'); // blue
 		}
 		if (key === 'DISPUTED DELIVERY' || key.includes('DISPUTED')) {
-			return pick('#EA580C', '#FB923C'); // orange
+			// Always black on line/bar legends (light and dark)
+			return '#000000';
 		}
 		if (key === 'REDELIVERY REQUEST' || key.includes('REDELIVERY')) {
 			return pick('#0284C7', '#38BDF8'); // sky
@@ -2217,7 +2218,7 @@
 					class="hidden h-9 w-px shrink-0 self-center bg-warm-300/70 dark:bg-warm-400/50 sm:block"
 					aria-hidden="true"
 				></span>
-				<div class="flex flex-wrap items-center gap-2.5">
+				<div class="flex min-w-0 flex-wrap items-center gap-2.5">
 					<label class="flex items-center gap-2 text-[0.9625rem] text-warm-600">
 						<span class="font-medium text-warm-700">Period</span>
 						<select
@@ -2245,11 +2246,15 @@
 						</select>
 					</label>
 					<span class="text-[0.825rem] text-warm-500">{timeRangeLabel}</span>
+					<span
+						class="h-7 w-px shrink-0 self-center bg-warm-300/60 dark:bg-warm-400/40"
+						aria-hidden="true"
+					></span>
 					<p
 						class="max-w-xl text-[0.825rem] leading-snug text-warm-500"
 						title="Dashboard charts, tables, and map exclude these rows"
 					>
-						Dashboard data ignores records with no reference number and duplicates.
+						Dashboard data ignores records with no reference number and duplicate records.
 					</p>
 				</div>
 			{/if}
@@ -2785,7 +2790,7 @@
 														{:else}
 															<button
 																type="button"
-																class="inline-flex min-h-8 min-w-[2.5rem] items-center justify-center rounded-full border border-accent-200 bg-accent-100 px-2.5 py-1 text-sm font-semibold tabular-nums text-accent-700 shadow-sm transition hover:border-accent-500 hover:bg-accent-200 hover:text-accent-700 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-1 active:scale-[0.97] dark:border-accent-200 dark:bg-accent-200 dark:text-accent-600 dark:hover:border-accent-500 dark:hover:bg-accent-200"
+																class="inline-flex min-h-8 min-w-[2.5rem] items-center justify-center rounded-md border border-accent-200 bg-accent-100 px-2.5 py-1 text-sm font-semibold tabular-nums text-accent-700 shadow-sm transition hover:border-accent-500 hover:bg-accent-200 hover:text-accent-700 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-1 active:scale-[0.97] dark:border-accent-200 dark:bg-accent-200 dark:text-accent-600 dark:hover:border-accent-500 dark:hover:bg-accent-200"
 																title="View {count} incident{count === 1
 																	? ''
 																	: 's'} for {row.label} in {formatMonthYearLabel(
