@@ -456,6 +456,7 @@
 	/**
 	 * Mark / unmark a later same-reference row as a user-confirmed non-duplicate.
 	 * Persists `duplicate_exempt` and refreshes list + open editor.
+	 * `exempt: true` → Not a duplicate (untag). `exempt: false` → Tag as duplicate again.
 	 */
 	async function setDuplicateExempt(incident: Incident, exempt: boolean) {
 		if (dupeToggleBusyId) return;
@@ -466,16 +467,14 @@
 				userId: data.user?.id ?? null,
 				userName: userDisplayName(data.user ?? data.session?.user)
 			};
-			const success = await incidentStore.update(
-				incident.id,
-				{ ...incident, duplicateExempt: exempt },
-				audit
-			);
-			if (success) {
+			const next: Incident = { ...incident, duplicateExempt: exempt };
+			const success = await incidentStore.update(incident.id, next, audit);
+			if (success && editingIncident?.id === incident.id) {
 				const refreshed = incidentStore.list.find((i) => i.id === incident.id);
-				if (refreshed && editingIncident?.id === incident.id) {
-					editingIncident = refreshed;
-				}
+				// Prefer store row; always keep the flag so Tag as duplicate stays available
+				editingIncident = refreshed
+					? { ...refreshed, duplicateExempt: Boolean(refreshed.duplicateExempt ?? exempt) }
+					: next;
 			}
 		} finally {
 			dupeToggleBusyId = null;
@@ -1045,32 +1044,36 @@
 											<button onclick={() => (deleteConfirmId = null)}
 												class="px-3 py-1 text-xs bg-warm-100 hover:bg-warm-200 text-warm-700 rounded">No</button>
 										{:else}
-											<span class="inline-flex flex-wrap items-center justify-end gap-1">
+											<span class="inline-flex flex-nowrap items-center justify-end gap-1.5 whitespace-nowrap">
 												{#if duplicateRefIds.has(incident.id)}
 													<button
 														type="button"
 														disabled={dupeToggleBusyId === incident.id}
 														onclick={() => setDuplicateExempt(incident, true)}
 														title="Stop treating this row as a duplicate of the same reference"
-														aria-label="Untag as duplicate"
-														class="px-2 py-1 text-xs font-medium rounded border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-100"
+														aria-label="Not a duplicate"
+														class="shrink-0 px-2.5 py-1 text-sm font-medium rounded border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-100"
 													>
-														{dupeToggleBusyId === incident.id ? '…' : 'Not a duplicate'}
+														{dupeToggleBusyId === incident.id ? '…' : 'Not Dupe'}
 													</button>
 												{:else if incident.duplicateExempt && sharesReferenceWithOther(incident, incidents)}
 													<button
 														type="button"
 														disabled={dupeToggleBusyId === incident.id}
 														onclick={() => setDuplicateExempt(incident, false)}
-														title="Treat this row as a duplicate of the same reference again"
-														aria-label="Mark as duplicate"
-														class="px-2 py-1 text-xs font-medium rounded border border-warm-300 bg-white text-warm-700 hover:bg-warm-50 disabled:opacity-50 dark:bg-warm-100"
+														title="Tag this row as a duplicate of the same reference again"
+														aria-label="Tag as duplicate"
+														class="shrink-0 px-2.5 py-1 text-sm font-medium rounded border border-amber-400 bg-white text-amber-900 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-600 dark:bg-warm-100 dark:text-amber-100"
 													>
-														{dupeToggleBusyId === incident.id ? '…' : 'Mark as duplicate'}
+														{dupeToggleBusyId === incident.id ? '…' : 'Tag Dupe'}
 													</button>
 												{/if}
-												<button type="button" onclick={() => (deleteConfirmId = incident.id)}
-													class="px-3 py-1 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded">Delete</button>
+												<button
+													type="button"
+													onclick={() => (deleteConfirmId = incident.id)}
+													class="shrink-0 px-3 py-1 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded"
+													>Delete</button
+												>
 											</span>
 										{/if}
 									</td>
@@ -1155,7 +1158,17 @@
 					</div>
 					<div class="flex shrink-0 items-center gap-2">
 						{#if mode === 'edit' && editingIncident}
-							{#if duplicateRefIds.has(editingIncident.id)}
+							{@const isTaggedDupe = duplicateRefIds.has(editingIncident.id)}
+							{@const canTagAsDupe =
+								Boolean(editingIncident.duplicateExempt) &&
+								sharesReferenceWithOther(editingIncident, incidents)}
+							{#if isTaggedDupe}
+								<span
+									class="hidden rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 sm:inline dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-200"
+									title="This row shares a reference with an earlier incident"
+								>
+									Duplicate
+								</span>
 								<button
 									type="button"
 									disabled={dupeToggleBusyId === editingIncident.id}
@@ -1165,15 +1178,15 @@
 								>
 									{dupeToggleBusyId === editingIncident.id ? 'Saving…' : 'Not a duplicate'}
 								</button>
-							{:else if editingIncident.duplicateExempt && sharesReferenceWithOther(editingIncident, incidents)}
+							{:else if canTagAsDupe}
 								<button
 									type="button"
 									disabled={dupeToggleBusyId === editingIncident.id}
 									onclick={() => setDuplicateExempt(editingIncident!, false)}
-									title="Treat this row as a duplicate of the same reference again"
-									class="rounded-md border border-warm-300 bg-white px-3 py-1.5 text-sm font-medium text-warm-700 hover:bg-warm-50 disabled:opacity-50 dark:bg-warm-200"
+									title="Tag this row as a duplicate of the same reference again"
+									class="rounded-md border border-amber-400 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-600 dark:bg-warm-100 dark:text-amber-100 dark:hover:bg-amber-950/30"
 								>
-									{dupeToggleBusyId === editingIncident.id ? 'Saving…' : 'Mark as duplicate'}
+									{dupeToggleBusyId === editingIncident.id ? 'Saving…' : 'Tag as duplicate'}
 								</button>
 							{/if}
 						{/if}

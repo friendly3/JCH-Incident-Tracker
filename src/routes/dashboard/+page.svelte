@@ -1678,12 +1678,11 @@
 				import('jspdf')
 			]);
 
-			// Capture at landscape A4 width (297mm ≈ 1123 CSS px at 96dpi) so the
-			// layout uses desktop multi-column grids rather than a narrow phone stack.
-			const landscapeCssWidth = 1400;
+			// Wide capture so multi-column chart grids engage (2-up charts for PDF).
+			const landscapeCssWidth = 1500;
 
 			const canvas = await html2canvas(root, {
-				scale: 1.5,
+				scale: 1.75,
 				useCORS: true,
 				allowTaint: true,
 				backgroundColor: isDarkMode() ? '#141516' : '#f8f8f8',
@@ -1701,58 +1700,97 @@
 					cloned.style.minWidth = `${landscapeCssWidth}px`;
 					cloned.style.boxSizing = 'border-box';
 
-					// Compact layout so charts + tables fit a landscape sheet when scaled
+					/*
+					 * PDF-only layout:
+					 * - KPI / call-out tiles left at on-screen size
+					 * - Main charts: 2 per row, taller plots for legibility
+					 * - Map omitted; driver×month table full width
+					 */
 					const style = doc.createElement('style');
 					style.textContent = `
 						#dashboard-pdf-root {
-							font-size: 11px !important;
+							padding-bottom: 0.5rem !important;
 						}
 						#dashboard-pdf-root header {
-							padding: 0.4rem 0.75rem !important;
+							padding: 0.5rem 0.85rem !important;
 						}
+						/* Call-out tiles: do not shrink KPI type or numbers */
 						#dashboard-pdf-root .dashboard-summary {
-							margin-bottom: 0.35rem !important;
+							margin-bottom: 0.5rem !important;
 						}
+						#dashboard-pdf-root .dashboard-charts {
+							margin-top: 0.25rem !important;
+						}
+						/* 2 charts per row (was 3 on large screens) */
 						#dashboard-pdf-root .dashboard-chart-row {
-							gap: 0.35rem !important;
+							display: grid !important;
+							grid-template-columns: 1fr 1fr !important;
+							gap: 0.65rem !important;
+							align-items: stretch !important;
 						}
 						#dashboard-pdf-root .dashboard-chart-card {
-							padding: 0.4rem 0.55rem !important;
+							padding: 0.65rem 0.75rem !important;
+							height: auto !important;
+							min-height: 0 !important;
 						}
 						#dashboard-pdf-root .dashboard-chart-header {
 							min-height: 0 !important;
-							margin-bottom: 0.2rem !important;
+							margin-bottom: 0.3rem !important;
 						}
-						#dashboard-pdf-root .dashboard-chart-plot,
+						#dashboard-pdf-root .dashboard-chart-header h2 {
+							font-size: 0.9rem !important;
+						}
+						#dashboard-pdf-root .dashboard-chart-meta {
+							font-size: 0.75rem !important;
+							min-height: 0 !important;
+						}
+						/* Taller plots so series / labels stay readable after page scale */
+						#dashboard-pdf-root .dashboard-chart-plot {
+							flex: 0 0 15.5rem !important;
+							height: 15.5rem !important;
+							min-height: 15.5rem !important;
+							max-height: 15.5rem !important;
+						}
 						#dashboard-pdf-root .dashboard-chart-plot canvas {
-							height: 9.5rem !important;
-							max-height: 9.5rem !important;
-							min-height: 9.5rem !important;
+							height: 100% !important;
+							max-height: 15.5rem !important;
 						}
 						#dashboard-pdf-root .dashboard-chart-footer {
-							flex-basis: auto !important;
-							min-height: 0 !important;
+							flex: 0 0 auto !important;
+							min-height: 2.5rem !important;
 							max-height: none !important;
-							margin-top: 0.2rem !important;
+							margin-top: 0.35rem !important;
+							overflow: visible !important;
 						}
-						#dashboard-pdf-root .map-chart-shell,
-						#dashboard-pdf-root .nsw-incident-map,
-						#dashboard-pdf-root .leaflet-container {
-							height: 14rem !important;
-							min-height: 14rem !important;
-							max-height: 14rem !important;
+						#dashboard-pdf-root .dashboard-legend-btn {
+							font-size: 11px !important;
 						}
-						#dashboard-pdf-root table {
-							font-size: 10px !important;
+						/* Driver×month table: full width once map is hidden */
+						#dashboard-pdf-root .dashboard-table-map-row {
+							display: grid !important;
+							grid-template-columns: 1fr !important;
+							gap: 0.5rem !important;
+							margin-top: 0.65rem !important;
 						}
-						#dashboard-pdf-root .max-h-\\[min\\(32\\.5rem\\,60vh\\)\\],
-						#dashboard-pdf-root [class*="max-h-"] {
-							max-height: 16rem !important;
+						#dashboard-pdf-root .dashboard-table-map-row > section {
+							max-height: none !important;
+						}
+						#dashboard-pdf-root .dashboard-table-map-row table {
+							font-size: 11px !important;
+						}
+						#dashboard-pdf-root .dashboard-table-map-row [class*="max-h-"],
+						#dashboard-pdf-root .dashboard-table-map-row .overflow-auto {
+							max-height: 18rem !important;
+						}
+						/* Resolution mini-chart in summary row: slightly taller for labels */
+						#dashboard-pdf-root .dashboard-summary [style*="7.15rem"] {
+							height: 8.25rem !important;
+							min-height: 8.25rem !important;
 						}
 					`;
 					doc.head.appendChild(style);
 
-					// Hide the export button (and any other PDF-only chrome) in the PDF
+					// Hide Save PDF control, map, and any other PDF-only chrome
 					cloned.querySelectorAll('[data-pdf-hide]').forEach((node) => {
 						(node as HTMLElement).style.display = 'none';
 					});
@@ -3079,7 +3117,7 @@
 
 				<!-- Driver × month tally + NSW map side by side (period filter applies to table) -->
 				<div
-					class="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2 lg:items-stretch"
+					class="dashboard-table-map-row mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2 lg:items-stretch"
 				>
 					<section
 						class="flex min-h-0 min-w-0 flex-col rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4 dark:bg-warm-100"
@@ -3242,7 +3280,7 @@
 						{/if}
 					</section>
 
-					<div class="flex min-h-0 min-w-0 flex-col">
+					<div class="flex min-h-0 min-w-0 flex-col" data-pdf-hide>
 						<div class="min-h-0 flex-1 [&_.map-chart-shell]:h-full">
 							<NswIncidentMap
 								incidents={periodIncidents}
