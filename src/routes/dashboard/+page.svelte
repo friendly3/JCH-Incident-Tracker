@@ -84,45 +84,56 @@
 	} as const;
 
 	/**
-	 * Categorical series palette (Okabe–Ito + Paul Tol extensions).
-	 * Distinct hues for pie slices and multi-line type series — avoids the old
-	 * teal/grey ramp that was hard to tell apart.
+	 * Categorical series palette — max pairwise distinction for line/bar legends.
+	 * Mix of Okabe–Ito, Paul Tol Bright, and Tableau accents. No greys (reserved
+	 * for Unassigned / Unspecified). Hue order alternates warm/cool so adjacent
+	 * hash slots stay far apart.
 	 */
 	const SERIES_PALETTE_LIGHT = [
 		'#0072B2', // blue
-		'#D55E00', // vermillion
+		'#E69F00', // orange / gold
 		'#009E73', // bluish green
-		'#CC79A7', // reddish purple
-		'#E69F00', // orange
-		'#56B4E9', // sky blue
-		'#882255', // wine
-		'#117733', // forest
+		'#CC3311', // strong red
 		'#332288', // indigo
-		'#AA4499', // purple
-		'#44AA99', // teal (separated from greys)
-		'#999933', // olive
+		'#EE7733', // bright orange
+		'#117733', // forest
+		'#AA3377', // magenta
+		'#56B4E9', // sky blue
 		'#661100', // brown
-		'#6699CC', // soft blue
-		'#AA4466' // rose
+		'#44AA99', // teal
+		'#882255', // wine
+		'#999933', // olive
+		'#DD4477', // rose
+		'#4477AA', // steel blue
+		'#228833', // mid green
+		'#CC79A7', // mauve
+		'#D55E00', // vermillion
+		'#88CCEE', // light cyan
+		'#6A3D9A' // deep purple
 	] as const;
 
-	/** Brighter variants for dark cards (same hue order as light). */
+	/** Brighter, high-chroma variants for dark cards (same semantic order). */
 	const SERIES_PALETTE_DARK = [
 		'#56B4E9', // sky
-		'#FF7A45', // bright vermillion
-		'#33D4A0', // bright green
-		'#F0A0D0', // pink
 		'#FFC14D', // gold
-		'#7DD3FC', // light blue
-		'#F472B6', // hot pink
-		'#4ADE80', // lime green
+		'#33D4A0', // bright green
+		'#FF6B6B', // coral red
 		'#A5B4FC', // periwinkle
-		'#E879F9', // fuchsia
+		'#FF9F43', // bright orange
+		'#4ADE80', // lime green
+		'#F472B6', // hot pink
+		'#7DD3FC', // light blue
+		'#D4A574', // tan
 		'#2DD4BF', // cyan
-		'#FDE047', // yellow
-		'#FB923C', // orange
+		'#E879F9', // fuchsia
+		'#C5D86D', // chartreuse
+		'#FDA4AF', // rose
 		'#93C5FD', // pale blue
-		'#FDA4AF' // rose
+		'#34D399', // emerald
+		'#F0A0D0', // soft pink
+		'#FF7A45', // vermillion
+		'#67E8F9', // ice cyan
+		'#C4B5FD' // lavender
 	] as const;
 
 	function getChartTheme(isDark = isDarkMode()) {
@@ -151,22 +162,29 @@
 		};
 	}
 
-	/** High-contrast colour for the n-th series / pie slice (0-based). */
-	function getSeriesColor(index: number, isDark = isDarkMode()): string {
-		const palette = isDark ? SERIES_PALETTE_DARK : SERIES_PALETTE_LIGHT;
-		const i = ((index % 10007) + 10007) % 10007; // keep non-negative for large hashes
-		if (i < palette.length) return palette[i];
-
-		// Beyond palette: spaced hues at strong saturation (still readable)
-		const hue = (i * 47 + 12) % 360;
-		const sat = isDark ? 0.72 : 0.68;
-		const light = isDark ? 0.62 : 0.42;
+	/** Golden-angle HSL fallback when more series exist than palette slots. */
+	function seriesColorBeyondPalette(extraIndex: number, isDark = isDarkMode()): string {
+		// 137.508° golden angle spreads hues evenly; step lightness so near-hues differ
+		const hue = (extraIndex * 137.508 + 18) % 360;
+		const tier = extraIndex % 3;
+		const sat = isDark ? 0.78 - tier * 0.06 : 0.72 - tier * 0.05;
+		const light = isDark ? 0.58 + tier * 0.08 : 0.38 + tier * 0.1;
 		const [r, g, b] = hslToRgb(hue, sat, light);
 		return rgbToHex(r, g, b);
 	}
 
+	/** High-contrast colour for the n-th series / pie slice (0-based, wraps palette). */
+	function getSeriesColor(index: number, isDark = isDarkMode()): string {
+		const palette = isDark ? SERIES_PALETTE_DARK : SERIES_PALETTE_LIGHT;
+		const n = palette.length;
+		// Always land in the designed palette (large FNV hashes used to skip it
+		// and fall into near-duplicate HSL hues — the main source of “same colour” legends).
+		const i = ((index % n) + n) % n;
+		return palette[i];
+	}
+
 	/**
-	 * FNV-1a hash → stable series index so a category keeps the same colour
+	 * FNV-1a hash → stable series index so a category prefers the same palette slot
 	 * when sort order, volume rank, or which peers appear in the period changes.
 	 */
 	function stableSeriesIndex(label: string): number {
@@ -197,8 +215,55 @@
 	}
 
 	/**
-	 * Series colour by category label (stable). `index` is unused for named series
-	 * but kept so call sites stay compatible.
+	 * Fixed colours for known incident types (aligned with type pill families).
+	 * Keeps the most common series far apart regardless of hash collisions.
+	 */
+	function knownTypeChartColor(label: string, isDark: boolean): string | null {
+		const key = label.trim().toUpperCase().replace(/\s+/g, ' ');
+		if (!key) return null;
+		// [light, dark] — high chroma, distinct from neighbours in the series palette
+		const pick = (light: string, dark: string) => (isDark ? dark : light);
+
+		if (key === 'DELIVERY COMPLAINT' || key.includes('DELIVERY COMPLAINT')) {
+			return pick('#2563EB', '#60A5FA'); // blue
+		}
+		if (key === 'DISPUTED DELIVERY' || key.includes('DISPUTED')) {
+			return pick('#EA580C', '#FB923C'); // orange
+		}
+		if (key === 'REDELIVERY REQUEST' || key.includes('REDELIVERY')) {
+			return pick('#0284C7', '#38BDF8'); // sky
+		}
+		if (key === 'DELIVERY REQUEST' || (key.includes('DELIVERY REQUEST') && !key.includes('RE'))) {
+			return pick('#4F46E5', '#818CF8'); // indigo
+		}
+		if (key === 'INCORRECT DELIVERY' || key.includes('INCORRECT')) {
+			return pick('#7C3AED', '#A78BFA'); // violet
+		}
+		if (key === 'STOP DELIVERY' || (key.includes('STOP') && key.includes('DELIVERY'))) {
+			return pick('#DC2626', '#F87171'); // red
+		}
+		if (key === 'CARDING ISSUE' || key.includes('CARDING')) {
+			return pick('#C026D3', '#E879F9'); // fuchsia
+		}
+		if (key === 'MISSING ITEM' || key.includes('MISSING')) {
+			return pick('#E11D48', '#FB7185'); // rose
+		}
+		if (key === 'INVESTIGATION' || key.includes('INVESTIGATION')) {
+			return pick('#D97706', '#FBBF24'); // amber
+		}
+		if (key === 'INCIDENT REPORT' || key.includes('INCIDENT REPORT') || key === 'INCIDENT') {
+			return pick('#9333EA', '#C084FC'); // purple
+		}
+		if (key === 'FEEDBACK' || key.includes('FEEDBACK')) {
+			return pick('#059669', '#34D399'); // emerald
+		}
+		return null;
+	}
+
+	/**
+	 * Series colour by category label (stable). Prefer known-type colours, else
+	 * palette slot from label hash. For multi-series charts prefer
+	 * {@link assignDistinctCategoryColors} so co-visible legend items never share a slot.
 	 */
 	function getChartCategoryColor(
 		label: string | undefined | null,
@@ -206,7 +271,97 @@
 		isDark = isDarkMode()
 	): string {
 		if (isUnassignedCategory(label)) return getUnassignedChartColor(isDark);
+		const known = knownTypeChartColor(label ?? '', isDark);
+		if (known) return known;
 		return getSeriesColor(stableSeriesIndex(label ?? ''), isDark);
+	}
+
+	/**
+	 * Assign mutually distinct colours to a set of category labels.
+	 * - Unassigned / Unspecified → fixed gray
+	 * - Known incident types → fixed pill-aligned hues
+	 * - Other labels → preferred palette slot from hash, walking forward if taken
+	 * Order of assignment is deterministic (hash, then name) so colours stay stable
+	 * when the peer set is unchanged.
+	 */
+	function assignDistinctCategoryColors(
+		labels: readonly string[],
+		isDark = isDarkMode()
+	): Map<string, string> {
+		const palette = isDark ? SERIES_PALETTE_DARK : SERIES_PALETTE_LIGHT;
+		const n = palette.length;
+		const result = new Map<string, string>();
+		const unique: string[] = [];
+		const seen = new Set<string>();
+		for (const raw of labels) {
+			const label = (raw ?? '').trim() || 'Unspecified';
+			if (seen.has(label)) continue;
+			seen.add(label);
+			unique.push(label);
+		}
+
+		for (const label of unique) {
+			if (isUnassignedCategory(label)) {
+				result.set(label, getUnassignedChartColor(isDark));
+			}
+		}
+
+		const named = unique.filter((l) => !isUnassignedCategory(l));
+		const ordered = [...named].sort((a, b) => {
+			const ha = stableSeriesIndex(a);
+			const hb = stableSeriesIndex(b);
+			if (ha !== hb) return ha < hb ? -1 : 1;
+			return a.localeCompare(b, undefined, { sensitivity: 'base' });
+		});
+
+		// Known types first so free-form labels avoid those hues when possible
+		const usedSlots = new Set<number>();
+		const nearestSlot = (hex: string): number => {
+			const parsed = parseHex(hex);
+			if (!parsed) return 0;
+			let best = 0;
+			let bestDist = Infinity;
+			for (let i = 0; i < n; i++) {
+				const p = parseHex(palette[i]);
+				if (!p) continue;
+				const d =
+					(parsed[0] - p[0]) ** 2 + (parsed[1] - p[1]) ** 2 + (parsed[2] - p[2]) ** 2;
+				if (d < bestDist) {
+					bestDist = d;
+					best = i;
+				}
+			}
+			return best;
+		};
+
+		for (const label of ordered) {
+			const known = knownTypeChartColor(label, isDark);
+			if (!known) continue;
+			result.set(label, known);
+			usedSlots.add(nearestSlot(known));
+		}
+
+		let extra = 0;
+		for (const label of ordered) {
+			if (result.has(label)) continue;
+			const preferred = stableSeriesIndex(label) % n;
+			let chosen = -1;
+			for (let k = 0; k < n; k++) {
+				const slot = (preferred + k) % n;
+				if (!usedSlots.has(slot)) {
+					chosen = slot;
+					break;
+				}
+			}
+			if (chosen >= 0) {
+				usedSlots.add(chosen);
+				result.set(label, palette[chosen]);
+			} else {
+				result.set(label, seriesColorBeyondPalette(extra++, isDark));
+			}
+		}
+
+		return result;
 	}
 
 	/** Always-visible counts on line points; hide zeros to reduce clutter. */
@@ -407,9 +562,15 @@
 	function applyTypeOverTimeChartTheme(chart: ChartJS<'line'>) {
 		const colors = getChartTheme(theme.isDark);
 		const isDark = theme.isDark;
-		chart.data.datasets.forEach((dataset, index) => {
+		const colorMap = assignDistinctCategoryColors(
+			chart.data.datasets.map((d) => String(d.label ?? '')),
+			isDark
+		);
+		chart.data.datasets.forEach((dataset) => {
 			// Unspecified / blank types always use medium gray (same as Unassigned)
-			const stroke = getChartCategoryColor(dataset.label, index, isDark);
+			const stroke =
+				colorMap.get(String(dataset.label ?? '')) ??
+				getChartCategoryColor(dataset.label, 0, isDark);
 			dataset.borderColor = stroke;
 			dataset.backgroundColor = withAlpha(stroke, 0.06);
 			dataset.pointBackgroundColor = stroke;
@@ -826,11 +987,12 @@
 		const dataset = chart.data.datasets[0];
 		if (!dataset) return;
 
-		dataset.backgroundColor =
-			chart.data.labels?.map((label, index) =>
-				getChartCategoryColor(String(label), index, theme.isDark)
-			) ?? [];
-		dataset.borderColor = chart.data.labels?.map(() => sliceBorder) ?? sliceBorder;
+		const pieLabels = (chart.data.labels ?? []).map((label) => String(label));
+		const pieColors = assignDistinctCategoryColors(pieLabels, theme.isDark);
+		dataset.backgroundColor = pieLabels.map(
+			(label) => pieColors.get(label) ?? getChartCategoryColor(label, 0, theme.isDark)
+		);
+		dataset.borderColor = pieLabels.map(() => sliceBorder);
 		dataset.borderWidth = 3;
 
 		if (chart.options?.plugins?.legend) {
@@ -1194,10 +1356,15 @@
 	function applyDriverBarTheme(chart: ChartJS<'bar'>) {
 		const colors = getChartTheme(theme.isDark);
 		const isDark = theme.isDark;
+		const colorMap = assignDistinctCategoryColors(
+			chart.data.datasets.map((d) => String(d.label ?? '')),
+			isDark
+		);
 
-		chart.data.datasets.forEach((dataset, index) => {
+		chart.data.datasets.forEach((dataset) => {
 			const typeLabel = String(dataset.label ?? '');
-			const solid = getChartCategoryColor(typeLabel, index, isDark);
+			const solid =
+				colorMap.get(typeLabel) ?? getChartCategoryColor(typeLabel, 0, isDark);
 			dataset.backgroundColor = withAlpha(solid, 0.82);
 			dataset.borderColor = solid;
 			dataset.borderWidth = 1;
@@ -1480,28 +1647,35 @@
 			dateKeys,
 			/** Active time window label for legends / a11y */
 			periodLabel: timeRangeLabel,
-			datasets: sortedTypes.map(([key, label], index) => {
-				const color = getChartCategoryColor(label, index, dark);
-				const data = dateKeys.map((d) => counts.get(key)?.get(d) ?? 0);
-				// Prefer explicit period total (same filter as time picker)
-				const total =
-					typeTotals.get(key) ?? data.reduce((sum, n) => sum + n, 0);
-				return {
-					label,
-					/** Total incidents for this type in the selected period (legend). */
-					total,
-					data,
-					borderColor: color,
-					backgroundColor: withAlpha(color, 0.06),
-					pointBackgroundColor: color,
-					borderWidth: 2,
-					fill: false,
-					tension: 0.35,
-					pointRadius: 3,
-					pointBorderWidth: 2,
-					pointHoverRadius: 5
-				};
-			})
+			datasets: (() => {
+				const colorMap = assignDistinctCategoryColors(
+					sortedTypes.map(([, label]) => label),
+					dark
+				);
+				return sortedTypes.map(([key, label]) => {
+					const color =
+						colorMap.get(label) ?? getChartCategoryColor(label, 0, dark);
+					const data = dateKeys.map((d) => counts.get(key)?.get(d) ?? 0);
+					// Prefer explicit period total (same filter as time picker)
+					const total =
+						typeTotals.get(key) ?? data.reduce((sum, n) => sum + n, 0);
+					return {
+						label,
+						/** Total incidents for this type in the selected period (legend). */
+						total,
+						data,
+						borderColor: color,
+						backgroundColor: withAlpha(color, 0.06),
+						pointBackgroundColor: color,
+						borderWidth: 2,
+						fill: false,
+						tension: 0.35,
+						pointRadius: 3,
+						pointBorderWidth: 2,
+						pointHoverRadius: 5
+					};
+				});
+			})()
 		};
 	});
 
@@ -1595,9 +1769,12 @@
 		);
 
 		const labels = drivers.map((d) => d.label);
-		const datasets = typeKeys.map((typeKey, index) => {
+		const typeLabels = typeKeys.map((k) => typeMeta.get(k) ?? k);
+		const colorMap = assignDistinctCategoryColors(typeLabels, dark);
+		const datasets = typeKeys.map((typeKey) => {
 			const typeLabel = typeMeta.get(typeKey) ?? typeKey;
-			const solid = getChartCategoryColor(typeLabel, index, dark);
+			const solid =
+				colorMap.get(typeLabel) ?? getChartCategoryColor(typeLabel, 0, dark);
 			const data = drivers.map((d) => d.types.get(typeKey) ?? 0);
 			const total = typeTotals.get(typeKey) ?? data.reduce((sum, n) => sum + n, 0);
 			return {
@@ -2608,7 +2785,7 @@
 														{:else}
 															<button
 																type="button"
-																class="group inline-flex min-h-8 min-w-[2.5rem] items-center justify-center gap-0.5 rounded-full border border-accent-200 bg-accent-100 px-2.5 py-1 text-base font-semibold tabular-nums text-accent-700 shadow-sm transition hover:border-accent-500 hover:bg-accent-200 hover:text-accent-700 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-1 active:scale-[0.97] dark:border-accent-200 dark:bg-accent-200 dark:text-accent-600 dark:hover:border-accent-500 dark:hover:bg-accent-200"
+																class="inline-flex min-h-8 min-w-[2.5rem] items-center justify-center rounded-full border border-accent-200 bg-accent-100 px-2.5 py-1 text-sm font-semibold tabular-nums text-accent-700 shadow-sm transition hover:border-accent-500 hover:bg-accent-200 hover:text-accent-700 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-1 active:scale-[0.97] dark:border-accent-200 dark:bg-accent-200 dark:text-accent-600 dark:hover:border-accent-500 dark:hover:bg-accent-200"
 																title="View {count} incident{count === 1
 																	? ''
 																	: 's'} for {row.label} in {formatMonthYearLabel(
@@ -2627,22 +2804,7 @@
 																		count
 																	)}
 															>
-																<span>{count}</span>
-																<svg
-																	xmlns="http://www.w3.org/2000/svg"
-																	class="h-3 w-3 shrink-0 opacity-70 transition group-hover:translate-x-0.5 group-hover:opacity-100"
-																	fill="none"
-																	viewBox="0 0 24 24"
-																	stroke="currentColor"
-																	stroke-width="2.5"
-																	aria-hidden="true"
-																>
-																	<path
-																		stroke-linecap="round"
-																		stroke-linejoin="round"
-																		d="M9 5l7 7-7 7"
-																	/>
-																</svg>
+																{count}
 															</button>
 														{/if}
 													</td>
