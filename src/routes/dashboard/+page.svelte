@@ -1576,606 +1576,542 @@
 			.slice(0, 48);
 	}
 
-	/** True when a CSS colour string uses functions html2canvas cannot parse. */
-	function cssColorNeedsRgbFallback(value: string): boolean {
-		return /oklab|oklch|\blab\(|\blch\(|color-mix\(|color\(/i.test(value);
-	}
-
 	/**
-	 * Convert any CSS colour (including Tailwind v4 oklab/oklch) to #rrggbb / rgba
-	 * via the canvas 2D parser — which browsers resolve to sRGB.
-	 */
-	function cssColorToRgb(color: string): string {
-		const v = color.trim();
-		if (!v || v === 'transparent' || v === 'none' || v === 'currentcolor') return v;
-		try {
-			const canvas = document.createElement('canvas');
-			canvas.width = canvas.height = 1;
-			const ctx = canvas.getContext('2d');
-			if (!ctx) return v;
-			ctx.fillStyle = '#010203';
-			ctx.fillStyle = v;
-			const parsed = String(ctx.fillStyle);
-			if (parsed && !cssColorNeedsRgbFallback(parsed)) return parsed;
-		} catch {
-			/* ignore */
-		}
-		// Fallbacks if canvas cannot parse modern colour functions
-		if (cssColorNeedsRgbFallback(v)) return '#3a3b3d';
-		return v;
-	}
-
-	/**
-	 * Bake computed paint to sRGB on the clone tree only (no source pairing).
-	 * Pairing live↔clone by index breaks when the clone gains/removes nodes
-	 * (e.g. page-2 banner), which can paint table text the wrong colour.
-	 */
-	function flattenCloneTreeColorsToRgb(cloneRoot: HTMLElement) {
-		const win = cloneRoot.ownerDocument.defaultView;
-		if (!win) return;
-		const paintProps = [
-			'color',
-			'backgroundColor',
-			'borderTopColor',
-			'borderRightColor',
-			'borderBottomColor',
-			'borderLeftColor',
-			'outlineColor',
-			'textDecorationColor',
-			'caretColor',
-			'columnRuleColor',
-			'fill',
-			'stroke'
-		] as const;
-
-		const nodes = [cloneRoot, ...cloneRoot.querySelectorAll<HTMLElement>('*')];
-		for (const el of nodes) {
-			const computed = win.getComputedStyle(el);
-			for (const prop of paintProps) {
-				const raw = computed[prop];
-				if (!raw || raw === 'rgba(0, 0, 0, 0)' || raw === 'transparent') continue;
-				if (!cssColorNeedsRgbFallback(raw) && !raw.startsWith('color')) {
-					// Still normalise via canvas when possible for consistent #rrggbb
-				}
-				const rgb = cssColorToRgb(raw);
-				(el.style as unknown as Record<string, string>)[prop] = rgb;
-			}
-			const shadow = computed.boxShadow;
-			if (shadow && shadow !== 'none' && cssColorNeedsRgbFallback(shadow)) {
-				el.style.boxShadow = 'none';
-			}
-		}
-	}
-
-	/**
-	 * Capture the dashboard as a 2-page A4 landscape PDF:
-	 * page 1 — KPIs + charts; page 2 — Incidents by Driver per Month (all rows).
-	 * High raster scale + lossless PNG to keep text sharp when fitted to the page.
+	 * Data-driven dashboard PDF (not a pixel clone of the live UI).
+	 * Page 1: vector KPIs + offscreen Chart.js images.
+	 * Page 2+: driver×month table with auto page breaks (vector text).
 	 */
 	async function exportDashboardPdf() {
 		if (pdfExporting || typeof window === 'undefined') return;
-		const rootEl = document.getElementById('dashboard-pdf-root');
-		if (!(rootEl instanceof HTMLElement)) {
-			pdfExportError = 'Dashboard content not ready to export.';
-			return;
-		}
-		const root: HTMLElement = rootEl;
 
 		pdfExporting = true;
 		pdfExportError = null;
-		// Clear legend hover so export is not stuck in a dimmed focus state
 		hoveredTypeOverTimeLabel = null;
 		hoveredDriverTypeLabel = null;
 		closeDriverMonthDetail();
 
-		// Let charts repaint after clearing hover before capture
 		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-		await new Promise<void>((resolve) => setTimeout(resolve, 80));
 
 		try {
-			// html2canvas-pro handles more CSS; we still flatten oklab from Tailwind v4
-			const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-				import('html2canvas-pro'),
-				import('jspdf')
-			]);
+			const { jsPDF } = await import('jspdf');
 
-			type PdfPage = 'overview' | 'driver-month';
-			// ~A4 landscape CSS width; higher scale → sharper type after page fit
-			const landscapeCssWidth = 1600;
-			const captureScale = 3;
-			const bg = isDarkMode() ? '#141516' : '#f8f8f8';
 			const periodLabel = timeRangeLabel;
-			const textInk = isDarkMode() ? '#e0e2e2' : '#3a3b3d';
-			const mutedInk = isDarkMode() ? '#9a9c9e' : '#6a6c6e';
+			const total = totalIncidents;
+			const unresolved = unresolvedIncidents;
+			const resolved = resolvedIncidents;
+			const resPct = resolvedPct;
+			const unresPct = unresolvedPct;
+			const overTime = chartData;
+			const byType = typeOverTimeChartData;
+			const byDriver = driverStackedBarData;
+			const byStatus = incidentsByActionStatus;
+			const tally = driverMonthTally;
+			const showMonthTotals = tally.months.length > 1;
+			const dark = isDarkMode();
 
-			function applyPdfCloneChrome(
-				doc: Document,
-				cloned: HTMLElement,
-				page: PdfPage
-			) {
-				cloned.style.overflow = 'visible';
-				cloned.style.height = 'auto';
-				cloned.style.maxHeight = 'none';
-				cloned.style.width = `${landscapeCssWidth}px`;
-				cloned.style.minWidth = `${landscapeCssWidth}px`;
-				cloned.style.boxSizing = 'border-box';
-				// Prefer crisp glyph edges in the rasteriser
-				cloned.style.setProperty('-webkit-font-smoothing', 'antialiased');
-				cloned.style.setProperty('text-rendering', 'geometricPrecision');
+			// Print-friendly palette (sRGB only)
+			const ink = dark ? '#e8e8e8' : '#1a1a1a';
+			const muted = dark ? '#a0a0a0' : '#555555';
+			const rule = dark ? '#3a3a3a' : '#d0d0d0';
+			const cardFill = dark ? '#1c1c1c' : '#ffffff';
+			const pageFill = dark ? '#121212' : '#ffffff';
+			const accent = '#038676';
+			const amber = '#b45309';
+			const emerald = '#047857';
 
-				const plotH = '15.5rem';
-				// Full-width driver bar: +30% then +50% vs base plot height
-				const driverPlotH = `${15.5 * 1.3 * 1.5}rem`;
-				const style = doc.createElement('style');
-				style.textContent = `
-					#dashboard-pdf-root {
-						padding-bottom: 0.5rem !important;
-						-webkit-font-smoothing: antialiased !important;
-						text-rendering: geometricPrecision !important;
-					}
-					#dashboard-pdf-root header {
-						padding: 0.5rem 0.85rem !important;
-					}
-					#dashboard-pdf-root .dashboard-summary {
-						margin-bottom: 0.5rem !important;
-					}
-					#dashboard-pdf-root .dashboard-charts {
-						margin-top: 0.25rem !important;
-					}
-					#dashboard-pdf-root .dashboard-chart-row {
-						display: grid !important;
-						grid-template-columns: 1fr 1fr !important;
-						gap: 0.65rem !important;
-						align-items: stretch !important;
-					}
-					#dashboard-pdf-root .dashboard-chart-card {
-						padding: 0.65rem 0.75rem !important;
-						height: auto !important;
-						min-height: 0 !important;
-					}
-					#dashboard-pdf-root .dashboard-chart-card[data-pdf-driver-chart] {
-						grid-column: 1 / -1 !important;
-						width: 100% !important;
-						max-width: 100% !important;
-					}
-					#dashboard-pdf-root .dashboard-chart-header {
-						min-height: 0 !important;
-						margin-bottom: 0.3rem !important;
-					}
-					#dashboard-pdf-root .dashboard-chart-header h2 {
-						font-size: 0.95rem !important;
-						font-weight: 700 !important;
-						color: ${textInk} !important;
-					}
-					#dashboard-pdf-root .dashboard-chart-meta {
-						font-size: 0.8rem !important;
-						min-height: 0 !important;
-						color: ${mutedInk} !important;
-					}
-					#dashboard-pdf-root .dashboard-chart-plot {
-						flex: 0 0 ${plotH} !important;
-						height: ${plotH} !important;
-						min-height: ${plotH} !important;
-						max-height: ${plotH} !important;
-					}
-					#dashboard-pdf-root .dashboard-chart-plot canvas {
-						height: 100% !important;
-						max-height: ${plotH} !important;
-						image-rendering: auto !important;
-					}
-					#dashboard-pdf-root .dashboard-chart-card[data-pdf-driver-chart] .dashboard-chart-plot {
-						flex: 0 0 ${driverPlotH} !important;
-						height: ${driverPlotH} !important;
-						min-height: ${driverPlotH} !important;
-						max-height: ${driverPlotH} !important;
-					}
-					#dashboard-pdf-root .dashboard-chart-card[data-pdf-driver-chart] .dashboard-chart-plot canvas {
-						max-height: ${driverPlotH} !important;
-					}
-					#dashboard-pdf-root .dashboard-chart-footer {
-						flex: 0 0 auto !important;
-						min-height: 2.5rem !important;
-						max-height: none !important;
-						margin-top: 0.35rem !important;
-						overflow: visible !important;
-					}
-					#dashboard-pdf-root .dashboard-legend-btn {
-						font-size: 12px !important;
-						background: transparent !important;
-						background-color: transparent !important;
-						box-shadow: none !important;
-						border: none !important;
-						padding: 0.1rem 0.15rem !important;
-					}
-					#dashboard-pdf-root .dashboard-legend-swatch {
-						display: inline-block !important;
-						width: 0.55rem !important;
-						height: 0.55rem !important;
-						min-width: 0.55rem !important;
-						border-radius: 0.12rem !important;
-						flex-shrink: 0 !important;
-					}
-					/* Page 2: expand table fully so every data row is painted */
-					#dashboard-pdf-root .dashboard-table-map-row {
-						display: grid !important;
-						grid-template-columns: 1fr !important;
-						gap: 0 !important;
-						margin-top: 0 !important;
-						width: 100% !important;
-						overflow: visible !important;
-					}
-					#dashboard-pdf-root .dashboard-table-map-row > section {
-						max-height: none !important;
-						height: auto !important;
-						min-height: 0 !important;
-						overflow: visible !important;
-						display: block !important;
-					}
-					#dashboard-pdf-root .dashboard-table-map-row .overflow-auto,
-					#dashboard-pdf-root .dashboard-table-map-row [class*="max-h-"] {
-						max-height: none !important;
-						height: auto !important;
-						min-height: 0 !important;
-						overflow: visible !important;
-						flex: none !important;
-					}
-					#dashboard-pdf-root .dashboard-table-map-row table {
-						font-size: 13px !important;
-						width: 100% !important;
-						border-collapse: collapse !important;
-						color: ${textInk} !important;
-					}
-					#dashboard-pdf-root .dashboard-table-map-row th,
-					#dashboard-pdf-root .dashboard-table-map-row td {
-						color: ${textInk} !important;
-						position: static !important;
-						opacity: 1 !important;
-						visibility: visible !important;
-					}
-					#dashboard-pdf-root .dashboard-table-map-row thead th {
-						background: #f0f1f1 !important;
-						font-weight: 700 !important;
-					}
-					#dashboard-pdf-root .dashboard-table-map-row tbody th {
-						background: #ffffff !important;
-						font-weight: 600 !important;
-					}
-					#dashboard-pdf-root .dashboard-table-map-row tfoot th,
-					#dashboard-pdf-root .dashboard-table-map-row tfoot td {
-						background: #f0f1f1 !important;
-						font-weight: 700 !important;
-					}
-					#dashboard-pdf-root .dashboard-summary [style*="7.15rem"] {
-						height: 8.25rem !important;
-						min-height: 8.25rem !important;
-					}
-					#dashboard-pdf-root .dashboard-pdf-page2-banner {
-						display: none;
-						padding: 0.65rem 0.85rem !important;
-						border-bottom: 1px solid #e2e4e4 !important;
-						margin-bottom: 0.75rem !important;
-						background: ${bg} !important;
-					}
-					#dashboard-pdf-root.dashboard-pdf-page-driver-month .dashboard-pdf-page2-banner {
-						display: block !important;
-					}
-					#dashboard-pdf-root.dashboard-pdf-page-driver-month header,
-					#dashboard-pdf-root.dashboard-pdf-page-driver-month .dashboard-summary,
-					#dashboard-pdf-root.dashboard-pdf-page-driver-month .dashboard-charts,
-					#dashboard-pdf-root.dashboard-pdf-page-driver-month hr {
-						display: none !important;
-					}
-					#dashboard-pdf-root.dashboard-pdf-page-overview .dashboard-table-map-row {
-						display: none !important;
-					}
-					/* Drop sticky/transform that often softens raster text */
-					#dashboard-pdf-root * {
-						backdrop-filter: none !important;
-						-webkit-backdrop-filter: none !important;
-					}
-					#dashboard-pdf-root .sticky {
-						position: static !important;
-					}
-				`;
-				doc.head.appendChild(style);
-
-				cloned.classList.add(
-					page === 'overview' ? 'dashboard-pdf-page-overview' : 'dashboard-pdf-page-driver-month'
-				);
-
-				// Page-2 title banner (main header is hidden on that page)
-				if (page === 'driver-month') {
-					const banner = doc.createElement('div');
-					banner.className = 'dashboard-pdf-page2-banner';
-					banner.innerHTML = `
-						<div style="font-size:1.15rem;font-weight:700;color:${textInk};">
-							Incidents by Driver per Month
-						</div>
-						<div style="font-size:0.85rem;color:${mutedInk};margin-top:0.2rem;">
-							${periodLabel.replace(/</g, '')} · all rows
-						</div>
-					`;
-					const first = cloned.firstElementChild;
-					if (first) cloned.insertBefore(banner, first);
-					else cloned.appendChild(banner);
-
-					// Force every nested scroller open so rows are not clipped at paint time
-					cloned.querySelectorAll<HTMLElement>('.dashboard-table-map-row *').forEach((el) => {
-						const cs = doc.defaultView?.getComputedStyle(el);
-						if (!cs) return;
-						if (cs.overflow === 'auto' || cs.overflow === 'scroll' || cs.overflowY === 'auto') {
-							el.style.setProperty('overflow', 'visible', 'important');
-							el.style.setProperty('max-height', 'none', 'important');
-							el.style.setProperty('height', 'auto', 'important');
-						}
-						if (cs.position === 'sticky' || cs.position === 'fixed') {
-							el.style.setProperty('position', 'static', 'important');
-						}
-					});
-				}
-
-				cloned.querySelectorAll('[data-pdf-hide]').forEach((node) => {
-					(node as HTMLElement).style.display = 'none';
-				});
-
-				// Flatten colours on the clone only (after DOM mutations) so indices stay valid
-				flattenCloneTreeColorsToRgb(cloned);
-
-				// Ensure table body text stays high-contrast after flatten
-				if (page === 'driver-month') {
-					cloned
-						.querySelectorAll<HTMLElement>(
-							'.dashboard-table-map-row td, .dashboard-table-map-row th, .dashboard-table-map-row span, .dashboard-table-map-row button'
-						)
-						.forEach((el) => {
-							const isMuted =
-								el.className.includes('text-warm-400') ||
-								el.className.includes('text-warm-500') ||
-								(el.textContent || '').trim() === '—';
-							el.style.setProperty('color', isMuted ? mutedInk : textInk, 'important');
-							el.style.setProperty('opacity', '1', 'important');
-							el.style.setProperty('visibility', 'visible', 'important');
-						});
-				}
-
-				cloned.querySelectorAll<HTMLElement>('.dashboard-legend-btn').forEach((btn) => {
-					const spans = [...btn.querySelectorAll(':scope > span')] as HTMLElement[];
-					const swatch = spans[0];
-					const label = spans[1];
-					const seriesColor =
-						swatch?.style.background ||
-						swatch?.style.backgroundColor ||
-						'#666666';
-					const rgb = cssColorToRgb(seriesColor);
-
-					btn.style.setProperty('background', 'transparent', 'important');
-					btn.style.setProperty('background-color', 'transparent', 'important');
-					btn.style.setProperty('box-shadow', 'none', 'important');
-					btn.style.color = textInk;
-
-					if (swatch) {
-						swatch.classList.add('dashboard-legend-swatch');
-						swatch.style.setProperty('background', rgb, 'important');
-						swatch.style.setProperty('background-color', rgb, 'important');
-						swatch.style.setProperty('border', 'none', 'important');
-						swatch.style.setProperty('width', '0.55rem', 'important');
-						swatch.style.setProperty('height', '0.55rem', 'important');
-						swatch.style.setProperty('border-radius', '0.12rem', 'important');
-					}
-					if (label) {
-						// Colour the label (front), not a filled legend background
-						label.style.setProperty('color', rgb, 'important');
-						label.style.setProperty('background', 'transparent', 'important');
-						label.style.setProperty('background-color', 'transparent', 'important');
-						label.style.setProperty('font-weight', '600', 'important');
-					}
-				});
-			}
-
-			function escapeHtml(value: string): string {
-				return value
-					.replace(/&/g, '&amp;')
-					.replace(/</g, '&lt;')
-					.replace(/>/g, '&gt;')
-					.replace(/"/g, '&quot;');
-			}
-
-			/**
-			 * Build page 2 from tally data (not a live-DOM clone). The on-screen table
-			 * uses sticky/overflow/Tailwind stacks that html2canvas often paints empty;
-			 * a plain off-screen sheet with only #hex colours is reliable.
-			 */
-			function buildDriverMonthPdfSheet(): HTMLElement {
-				const tally = driverMonthTally;
-				const showTotals = tally.months.length > 1;
-				const sheet = document.createElement('div');
-				sheet.id = 'dashboard-pdf-driver-month-sheet';
-				sheet.setAttribute('data-pdf-driver-month-sheet', '1');
-				const sheetBg = isDarkMode() ? '#141516' : '#f8f8f8';
-				const cardBg = isDarkMode() ? '#1e1f21' : '#ffffff';
-				const headBg = isDarkMode() ? '#2e3032' : '#f0f1f1';
-				const border = isDarkMode() ? '#4a4c4e' : '#e2e4e4';
-				const ink = isDarkMode() ? '#e0e2e2' : '#3a3b3d';
-				const muted = isDarkMode() ? '#9a9c9e' : '#6a6c6e';
-				const accent = isDarkMode() ? '#1dd4be' : '#026b5c';
-
-				sheet.style.cssText = [
-					'position:fixed',
-					'left:-12000px',
-					'top:0',
-					`width:${landscapeCssWidth}px`,
-					`background:${sheetBg}`,
-					'padding:28px 32px',
-					'box-sizing:border-box',
-					'font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif',
-					`color:${ink}`,
-					'z-index:0',
-					'pointer-events:none'
-				].join(';');
-
-				const monthHeaders = tally.monthLabels
-					.map(
-						(label, i) =>
-							`<th style="padding:10px 8px;text-align:center;font-size:12px;font-weight:700;color:${muted};white-space:nowrap;border-bottom:1px solid ${border};background:${headBg};" title="${escapeHtml(formatMonthYearLabel(tally.months[i] ?? ''))}">${escapeHtml(label)}</th>`
-					)
-					.join('');
-				const totalHeader = showTotals
-					? `<th style="padding:10px 12px;text-align:center;font-size:12px;font-weight:700;color:${ink};border-bottom:1px solid ${border};background:${headBg};">Total</th>`
-					: '';
-
-				const bodyRows =
-					tally.rows.length === 0
-						? `<tr><td colspan="${1 + tally.months.length + (showTotals ? 1 : 0)}" style="padding:28px;text-align:center;color:${muted};font-size:14px;">No incidents in this period.</td></tr>`
-						: tally.rows
-								.map((row) => {
-									const cells = row.counts
-										.map((count) => {
-											const empty = count === 0;
-											const cellInk = empty ? muted : ink;
-											const weight = empty ? '400' : '600';
-											const display = empty ? '—' : String(count);
-											return `<td style="padding:8px 6px;text-align:center;font-size:13px;font-variant-numeric:tabular-nums;color:${cellInk};font-weight:${weight};border-bottom:1px solid ${border};background:${cardBg};">${display}</td>`;
-										})
-										.join('');
-									const totalCell = showTotals
-										? `<td style="padding:8px 12px;text-align:center;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;color:${ink};border-bottom:1px solid ${border};background:${cardBg};">${row.total}</td>`
-										: '';
-									return `<tr>
-										<th scope="row" style="padding:8px 12px;text-align:left;font-size:13px;font-weight:600;color:${ink};border-bottom:1px solid ${border};background:${cardBg};white-space:nowrap;">${escapeHtml(row.label)}</th>
-										${cells}${totalCell}
-									</tr>`;
-								})
-								.join('');
-
-				const footCells = tally.monthTotals
-					.map((total) => {
-						const display = total === 0 ? '—' : String(total);
-						return `<td style="padding:10px 6px;text-align:center;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;color:${ink};background:${headBg};border-top:2px solid ${border};">${display}</td>`;
-					})
-					.join('');
-				const footTotal = showTotals
-					? `<td style="padding:10px 12px;text-align:center;font-size:14px;font-weight:800;font-variant-numeric:tabular-nums;color:${ink};background:${headBg};border-top:2px solid ${border};">${tally.grandTotal}</td>`
-					: '';
-
-				sheet.innerHTML = `
-					<div style="margin-bottom:16px;">
-						<div style="font-size:20px;font-weight:800;color:${ink};letter-spacing:-0.01em;">Incidents by Driver per Month</div>
-						<div style="margin-top:4px;font-size:13px;color:${muted};">${escapeHtml(tally.periodLabel)} · ${tally.rows.length} driver${tally.rows.length === 1 ? '' : 's'} · ${tally.grandTotal} total</div>
-					</div>
-					<div style="background:${cardBg};border:1px solid ${border};border-radius:10px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.04);">
-						<table style="width:100%;border-collapse:collapse;table-layout:auto;">
-							<thead>
-								<tr>
-									<th scope="col" style="padding:10px 12px;text-align:left;font-size:12px;font-weight:700;color:${muted};text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid ${border};background:${headBg};">Driver</th>
-									${monthHeaders}${totalHeader}
-								</tr>
-							</thead>
-							<tbody>${bodyRows}</tbody>
-							${
-								tally.rows.length > 0
-									? `<tfoot>
-								<tr>
-									<th scope="row" style="padding:10px 12px;text-align:left;font-size:12px;font-weight:700;color:${ink};text-transform:uppercase;letter-spacing:0.04em;background:${headBg};border-top:2px solid ${border};">All drivers</th>
-									${footCells}${footTotal}
-								</tr>
-							</tfoot>`
-									: ''
-							}
-						</table>
-					</div>
-					<div style="margin-top:10px;font-size:11px;color:${muted};">JCH Incident Tracker · counts use the selected period filter</div>
-					<div style="margin-top:2px;font-size:11px;color:${accent};">Generated for PDF export</div>
-				`;
-
-				document.body.appendChild(sheet);
-				return sheet;
-			}
-
-			async function capturePage(page: PdfPage): Promise<HTMLCanvasElement> {
-				return html2canvas(root, {
-					scale: captureScale,
-					useCORS: true,
-					allowTaint: true,
-					backgroundColor: bg,
-					logging: false,
-					scrollX: 0,
-					scrollY: 0,
-					width: landscapeCssWidth,
-					windowWidth: landscapeCssWidth,
-					// Let html2canvas measure after clone layout (hidden sections collapse)
-					windowHeight: Math.max(root.scrollHeight, 800),
-					onclone: (doc, cloned) => {
-						if (!(cloned instanceof HTMLElement)) return;
-						applyPdfCloneChrome(doc, cloned, page);
-					}
-				});
-			}
-
-			async function captureDriverMonthSheet(): Promise<HTMLCanvasElement> {
-				const sheet = buildDriverMonthPdfSheet();
-				// Wait a frame so layout/geometry is final before rasterising
-				await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-				try {
-					return await html2canvas(sheet, {
-						scale: captureScale,
-						useCORS: true,
-						allowTaint: true,
-						backgroundColor: bg,
-						logging: false,
-						scrollX: 0,
-						scrollY: 0,
-						width: sheet.offsetWidth || landscapeCssWidth,
-						windowWidth: sheet.offsetWidth || landscapeCssWidth,
-						windowHeight: Math.max(sheet.scrollHeight, sheet.offsetHeight, 400),
-						onclone: (_doc, cloned) => {
-							if (!(cloned instanceof HTMLElement)) return;
-							// Ensure off-screen offset is not applied in the clone
-							cloned.style.left = '0';
-							cloned.style.position = 'static';
-							cloned.style.width = `${landscapeCssWidth}px`;
-						}
-					});
-				} finally {
-					sheet.remove();
-				}
-			}
-
-			function addCanvasPage(
+			/** Render a Chart.js chart off-DOM → PNG data URL (high DPR, no animation). */
+			function chartToPng(
+				type: 'line' | 'bar',
+				width: number,
+				height: number,
+				data: { labels?: unknown; datasets: unknown[] },
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				pdfDoc: any,
-				canvas: HTMLCanvasElement,
-				{ isFirst }: { isFirst: boolean }
-			) {
-				if (!isFirst) pdfDoc.addPage();
-				const pageWidth = pdfDoc.internal.pageSize.getWidth() as number;
-				const pageHeight = pdfDoc.internal.pageSize.getHeight() as number;
-				const margin = 5;
-				const maxW = pageWidth - margin * 2;
-				const maxH = pageHeight - margin * 2;
-				// Fit page; high captureScale keeps type crisp after this downscale
-				const fit = Math.min(maxW / canvas.width, maxH / canvas.height);
-				const imgWmm = canvas.width * fit;
-				const imgHmm = canvas.height * fit;
-				const x = margin + (maxW - imgWmm) / 2;
-				const y = margin + (maxH - imgHmm) / 2;
-				// PNG + no compression — text stays sharp vs JPEG/FAST
-				const imgData = canvas.toDataURL('image/png');
-				pdfDoc.addImage(imgData, 'PNG', x, y, imgWmm, imgHmm, undefined, 'NONE');
+				extraOptions: Record<string, any> = {}
+			): string {
+				const canvas = document.createElement('canvas');
+				const dpr = 2;
+				// Chart.js owns backing-store size via devicePixelRatio
+				canvas.style.width = `${width}px`;
+				canvas.style.height = `${height}px`;
+				canvas.width = Math.round(width * dpr);
+				canvas.height = Math.round(height * dpr);
+				const chart = new Chart(canvas, {
+					type,
+					data: data as never,
+					options: {
+						responsive: false,
+						maintainAspectRatio: false,
+						animation: false,
+						devicePixelRatio: dpr,
+						layout: { padding: { top: 8, right: 10, bottom: 4, left: 4 } },
+						plugins: {
+							legend: {
+								display: Boolean(extraOptions.showLegend),
+								position: 'bottom',
+								labels: {
+									boxWidth: 10,
+									boxHeight: 10,
+									font: { size: 10, weight: 600 },
+									color: ink,
+									padding: 8,
+									usePointStyle: true,
+									pointStyle: 'rectRounded'
+								}
+							},
+							datalabels: { display: false },
+							tooltip: { enabled: false }
+						},
+						scales: extraOptions.scales ?? {
+							x: {
+								ticks: { color: muted, font: { size: 9, weight: 500 }, maxRotation: 40 },
+								grid: { color: rule, drawBorder: false }
+							},
+							y: {
+								beginAtZero: true,
+								ticks: {
+									color: muted,
+									font: { size: 9, weight: 500 },
+									precision: 0,
+									stepSize: 1
+								},
+								grid: { color: rule, drawBorder: false }
+							}
+						},
+						...extraOptions.chartOptions
+					} as never
+				});
+				const url = canvas.toDataURL('image/png');
+				chart.destroy();
+				return url;
 			}
 
-			// Page 1: live dashboard clone (KPIs + charts). Page 2: data-built table sheet.
-			const overviewCanvas = await capturePage('overview');
-			const driverMonthCanvas = await captureDriverMonthSheet();
+			// —— Build chart images ————————————————————————————————
+			const overTimePng = chartToPng(
+				'line',
+				720,
+				320,
+				{
+					labels: overTime.labels,
+					datasets: overTime.datasets.map((ds) => ({
+						...ds,
+						borderColor: accent,
+						backgroundColor: 'rgba(3, 134, 118, 0.12)',
+						pointBackgroundColor: accent,
+						pointBorderColor: '#ffffff',
+						borderWidth: 2.5,
+						pointRadius: 3,
+						tension: 0.35,
+						fill: true
+					}))
+				},
+				{ showLegend: false }
+			);
 
+			const typePng = chartToPng(
+				'line',
+				720,
+				320,
+				{
+					labels: byType.labels,
+					datasets: byType.datasets
+						.filter((ds) => !hiddenTypeOverTimeLabels.includes(ds.label))
+						.map((ds) => ({
+							label: ds.label,
+							data: ds.data,
+							borderColor: ds.borderColor,
+							backgroundColor: 'transparent',
+							pointBackgroundColor: ds.borderColor,
+							borderWidth: 2,
+							pointRadius: 2,
+							tension: 0.3,
+							fill: false
+						}))
+				},
+				{ showLegend: true }
+			);
+
+			const driverPng = chartToPng(
+				'bar',
+				1480,
+				420,
+				{
+					labels: byDriver.labels,
+					datasets: byDriver.datasets
+						.filter((ds) => !hiddenDriverTypeLabels.includes(ds.label))
+						.map((ds) => ({
+							label: ds.label,
+							data: ds.data,
+							backgroundColor: ds.backgroundColor,
+							borderColor: ds.borderColor,
+							borderWidth: 1,
+							stack: 'types'
+						}))
+				},
+				{
+					showLegend: true,
+					scales: {
+						x: {
+							stacked: true,
+							ticks: { color: muted, font: { size: 9, weight: 500 } },
+							grid: { display: false }
+						},
+						y: {
+							stacked: true,
+							beginAtZero: true,
+							ticks: {
+								color: muted,
+								font: { size: 9, weight: 500 },
+								precision: 0,
+								stepSize: 1
+							},
+							grid: { color: rule, drawBorder: false }
+						}
+					}
+				}
+			);
+
+			const statusPng =
+				byStatus.length > 0
+					? chartToPng(
+							'bar',
+							900,
+							220,
+							{
+								labels: byStatus.map(([l]) => l),
+								datasets: [
+									{
+										label: 'Incidents',
+										data: byStatus.map(([, c]) => c),
+										backgroundColor: byStatus.map(([label]) =>
+											getActionStatusChartColor(label, dark)
+										),
+										borderColor: byStatus.map(([label]) =>
+											getActionStatusChartColor(label, dark)
+										),
+										borderWidth: 1
+									}
+								]
+							},
+							{ showLegend: false }
+						)
+					: '';
+
+			// —— PDF document ——————————————————————————————————————
 			const pdf = new jsPDF({
 				orientation: 'landscape',
 				unit: 'mm',
 				format: 'a4',
-				compress: false,
-				hotfixes: ['px_scaling']
+				compress: false
 			});
-			addCanvasPage(pdf, overviewCanvas, { isFirst: true });
-			addCanvasPage(pdf, driverMonthCanvas, { isFirst: false });
+			const pageW = pdf.internal.pageSize.getWidth() as number;
+			const pageH = pdf.internal.pageSize.getHeight() as number;
+			const m = 10;
+			const contentW = pageW - m * 2;
+
+			function setFill(hex: string) {
+				const h = hex.replace('#', '');
+				const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
+				pdf.setFillColor((n >> 16) & 255, (n >> 8) & 255, n & 255);
+			}
+			function setDraw(hex: string) {
+				const h = hex.replace('#', '');
+				const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
+				pdf.setDrawColor((n >> 16) & 255, (n >> 8) & 255, n & 255);
+			}
+			function setText(hex: string) {
+				const h = hex.replace('#', '');
+				const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
+				pdf.setTextColor((n >> 16) & 255, (n >> 8) & 255, n & 255);
+			}
+			function roundedCard(x: number, y: number, w: number, h: number) {
+				setFill(cardFill);
+				setDraw(rule);
+				pdf.setLineWidth(0.2);
+				pdf.roundedRect(x, y, w, h, 2, 2, 'FD');
+			}
+
+			// Page background
+			setFill(pageFill);
+			pdf.rect(0, 0, pageW, pageH, 'F');
+
+			// Header
+			setText(ink);
+			pdf.setFont('helvetica', 'bold');
+			pdf.setFontSize(16);
+			pdf.text('JCH Incident Dashboard', m, m + 5);
+			pdf.setFont('helvetica', 'normal');
+			pdf.setFontSize(10);
+			setText(muted);
+			pdf.text(`Period: ${periodLabel}`, m, m + 11);
+			pdf.text(`Generated ${new Date().toLocaleString()}`, pageW - m, m + 5, { align: 'right' });
+
+			// KPI tiles
+			const kpiY = m + 16;
+			const kpiH = 26;
+			const kpiGap = 4;
+			const kpiW = (contentW - kpiGap * 2) / 3;
+			const kpis: { title: string; value: string; sub: string; accent: string }[] = [
+				{
+					title: 'TOTAL',
+					value: String(total),
+					sub: total > 0 ? `${resPct}% resolved · ${periodLabel}` : periodLabel,
+					accent
+				},
+				{
+					title: 'UNRESOLVED',
+					value: String(unresolved),
+					sub: total > 0 ? `${unresPct}% of period` : '—',
+					accent: amber
+				},
+				{
+					title: 'RESOLVED',
+					value: String(resolved),
+					sub: total > 0 ? `${resPct}% of period` : '—',
+					accent: emerald
+				}
+			];
+			kpis.forEach((kpi, i) => {
+				const x = m + i * (kpiW + kpiGap);
+				roundedCard(x, kpiY, kpiW, kpiH);
+				setDraw(kpi.accent);
+				pdf.setLineWidth(0.8);
+				pdf.line(x, kpiY, x, kpiY + kpiH);
+				setText(muted);
+				pdf.setFont('helvetica', 'bold');
+				pdf.setFontSize(8);
+				pdf.text(kpi.title, x + 4, kpiY + 6);
+				setText(kpi.accent);
+				pdf.setFontSize(18);
+				pdf.text(kpi.value, x + 4, kpiY + 15);
+				setText(muted);
+				pdf.setFont('helvetica', 'normal');
+				pdf.setFontSize(7.5);
+				const sub = pdf.splitTextToSize(kpi.sub, kpiW - 8);
+				pdf.text(sub, x + 4, kpiY + 21);
+			});
+
+			// Resolution status chart
+			let y = kpiY + kpiH + 6;
+			roundedCard(m, y, contentW, 42);
+			setText(ink);
+			pdf.setFont('helvetica', 'bold');
+			pdf.setFontSize(9);
+			pdf.text('By Resolution Status', m + 3, y + 5);
+			setText(muted);
+			pdf.setFont('helvetica', 'normal');
+			pdf.setFontSize(7.5);
+			pdf.text(periodLabel, pageW - m - 3, y + 5, { align: 'right' });
+			if (statusPng) {
+				pdf.addImage(statusPng, 'PNG', m + 3, y + 7, contentW - 6, 32, undefined, 'NONE');
+			} else {
+				setText(muted);
+				pdf.text('No resolution status data', m + 3, y + 22);
+			}
+
+			// Two charts side by side
+			y += 46;
+			const halfW = (contentW - 4) / 2;
+			const midChartH = 58;
+			roundedCard(m, y, halfW, midChartH + 8);
+			roundedCard(m + halfW + 4, y, halfW, midChartH + 8);
+			setText(ink);
+			pdf.setFont('helvetica', 'bold');
+			pdf.setFontSize(9);
+			pdf.text('Incidents Over Time', m + 3, y + 5);
+			pdf.text('Incidents by Type Over Time', m + halfW + 7, y + 5);
+			setText(muted);
+			pdf.setFont('helvetica', 'normal');
+			pdf.setFontSize(7);
+			pdf.text(periodLabel, m + 3, y + 9);
+			pdf.text(periodLabel, m + halfW + 7, y + 9);
+			if (overTimePng) {
+				pdf.addImage(overTimePng, 'PNG', m + 2, y + 11, halfW - 4, midChartH - 4, undefined, 'NONE');
+			}
+			if (typePng) {
+				pdf.addImage(
+					typePng,
+					'PNG',
+					m + halfW + 6,
+					y + 11,
+					halfW - 4,
+					midChartH - 4,
+					undefined,
+					'NONE'
+				);
+			}
+
+			// Full-width driver chart
+			y += midChartH + 12;
+			const driverChartH = 72;
+			roundedCard(m, y, contentW, driverChartH + 8);
+			setText(ink);
+			pdf.setFont('helvetica', 'bold');
+			pdf.setFontSize(9);
+			pdf.text('Incidents by Driver (stacked by type)', m + 3, y + 5);
+			setText(muted);
+			pdf.setFont('helvetica', 'normal');
+			pdf.setFontSize(7);
+			pdf.text(`${periodLabel}`, m + 3, y + 9);
+			if (driverPng && byDriver.labels.length > 0) {
+				pdf.addImage(driverPng, 'PNG', m + 2, y + 11, contentW - 4, driverChartH - 4, undefined, 'NONE');
+			} else {
+				setText(muted);
+				pdf.text('No driver data in this period', m + 3, y + 30);
+			}
+
+			// Page footer
+			setText(muted);
+			pdf.setFontSize(7);
+			pdf.text('Page 1 · Dashboard overview (map omitted) · JCH Incident Tracker', m, pageH - 5);
+
+			// —— Page 2+: driver × month table (vector text) ——————
+			function drawTableHeader(startY: number): number {
+				setText(ink);
+				pdf.setFont('helvetica', 'bold');
+				pdf.setFontSize(14);
+				pdf.text('Incidents by Driver per Month', m, startY);
+				setText(muted);
+				pdf.setFont('helvetica', 'normal');
+				pdf.setFontSize(9);
+				pdf.text(
+					`${tally.periodLabel} · ${tally.rows.length} driver${tally.rows.length === 1 ? '' : 's'} · ${tally.grandTotal} total`,
+					m,
+					startY + 6
+				);
+				return startY + 12;
+			}
+
+			pdf.addPage();
+			setFill(pageFill);
+			pdf.rect(0, 0, pageW, pageH, 'F');
+
+			let ty = drawTableHeader(m + 4);
+			const cols = 1 + tally.months.length + (showMonthTotals ? 1 : 0);
+			// Column widths: driver label flexible, months equal, optional total
+			const driverColW = Math.min(48, contentW * 0.22);
+			const restW = contentW - driverColW;
+			const monthColW =
+				tally.months.length > 0
+					? restW / (tally.months.length + (showMonthTotals ? 1 : 0))
+					: restW;
+			const rowH = 6;
+			const fontSize = tally.months.length > 10 ? 7 : tally.months.length > 6 ? 7.5 : 8;
+
+			function colX(i: number): number {
+				if (i === 0) return m;
+				return m + driverColW + (i - 1) * monthColW;
+			}
+			function colW(i: number): number {
+				if (i === 0) return driverColW;
+				return monthColW;
+			}
+
+			function paintHeaderRow(y0: number) {
+				setFill(dark ? '#2a2a2a' : '#f0f0f0');
+				pdf.rect(m, y0 - 3.5, contentW, rowH, 'F');
+				setText(muted);
+				pdf.setFont('helvetica', 'bold');
+				pdf.setFontSize(fontSize);
+				pdf.text('Driver', colX(0) + 1, y0);
+				tally.monthLabels.forEach((label, i) => {
+					pdf.text(label, colX(i + 1) + colW(i + 1) / 2, y0, { align: 'center' });
+				});
+				if (showMonthTotals) {
+					pdf.text('Total', colX(cols - 1) + colW(cols - 1) / 2, y0, { align: 'center' });
+				}
+			}
+
+			paintHeaderRow(ty);
+			ty += rowH;
+
+			const rows =
+				tally.rows.length > 0
+					? tally.rows
+					: [{ key: '_empty', label: 'No incidents in this period', total: 0, counts: tally.months.map(() => 0) }];
+
+			pdf.setFont('helvetica', 'normal');
+			for (const row of rows) {
+				if (ty > pageH - 14) {
+					setText(muted);
+					pdf.setFontSize(7);
+					pdf.text('JCH Incident Tracker · continued', m, pageH - 5);
+					pdf.addPage();
+					setFill(pageFill);
+					pdf.rect(0, 0, pageW, pageH, 'F');
+					ty = drawTableHeader(m + 4);
+					paintHeaderRow(ty);
+					ty += rowH;
+					pdf.setFont('helvetica', 'normal');
+				}
+
+				setText(ink);
+				pdf.setFontSize(fontSize);
+				pdf.setFont('helvetica', 'bold');
+				const driverName = pdf.splitTextToSize(row.label, driverColW - 2);
+				pdf.text(driverName[0] ?? row.label, colX(0) + 1, ty);
+				pdf.setFont('helvetica', 'normal');
+				row.counts.forEach((count, i) => {
+					const t = count === 0 ? '—' : String(count);
+					setText(count === 0 ? muted : ink);
+					pdf.text(t, colX(i + 1) + colW(i + 1) / 2, ty, { align: 'center' });
+				});
+				if (showMonthTotals) {
+					setText(ink);
+					pdf.setFont('helvetica', 'bold');
+					pdf.text(String(row.total), colX(cols - 1) + colW(cols - 1) / 2, ty, {
+						align: 'center'
+					});
+					pdf.setFont('helvetica', 'normal');
+				}
+				// light rule
+				setDraw(rule);
+				pdf.setLineWidth(0.1);
+				pdf.line(m, ty + 1.8, m + contentW, ty + 1.8);
+				ty += rowH;
+			}
+
+			// Footer totals
+			if (tally.rows.length > 0) {
+				if (ty > pageH - 14) {
+					pdf.addPage();
+					setFill(pageFill);
+					pdf.rect(0, 0, pageW, pageH, 'F');
+					ty = m + 10;
+				}
+				setFill(dark ? '#2a2a2a' : '#f0f0f0');
+				pdf.rect(m, ty - 3.5, contentW, rowH + 1, 'F');
+				setText(ink);
+				pdf.setFont('helvetica', 'bold');
+				pdf.setFontSize(fontSize);
+				pdf.text('All drivers', colX(0) + 1, ty);
+				tally.monthTotals.forEach((total, i) => {
+					pdf.text(total === 0 ? '—' : String(total), colX(i + 1) + colW(i + 1) / 2, ty, {
+						align: 'center'
+					});
+				});
+				if (showMonthTotals) {
+					pdf.text(String(tally.grandTotal), colX(cols - 1) + colW(cols - 1) / 2, ty, {
+						align: 'center'
+					});
+				}
+			}
+
+			const pageCount = pdf.getNumberOfPages();
+			for (let p = 1; p <= pageCount; p++) {
+				pdf.setPage(p);
+				setText(muted);
+				pdf.setFont('helvetica', 'normal');
+				pdf.setFontSize(7);
+				if (p === 1) {
+					// already wrote page 1 footer
+				} else {
+					pdf.text(
+						`Page ${p} of ${pageCount} · Driver × month · JCH Incident Tracker`,
+						m,
+						pageH - 5
+					);
+				}
+			}
 
 			const periodSlug = pdfFilenameSlug(periodLabel) || 'period';
 			const dateSlug = new Date().toISOString().slice(0, 10);
@@ -2183,7 +2119,9 @@
 		} catch (err) {
 			console.error('Dashboard PDF export failed', err);
 			pdfExportError =
-				err instanceof Error ? err.message : 'Could not create PDF. Try again or use the browser print dialog.';
+				err instanceof Error
+					? err.message
+					: 'Could not create PDF. Try again.';
 		} finally {
 			pdfExporting = false;
 		}

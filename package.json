@@ -29,7 +29,6 @@
 		"@supabase/supabase-js": "^2.100.0",
 		"chart.js": "^4.5.1",
 		"chartjs-plugin-datalabels": "^2.2.0",
-		"html2canvas-pro": "^2.2.4",
 		"jspdf": "^4.2.1",
 		"leaflet": "^1.9.4",
 		"uuid": "^13.0.0"
