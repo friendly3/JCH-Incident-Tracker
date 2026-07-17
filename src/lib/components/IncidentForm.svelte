@@ -55,7 +55,6 @@
 	}: Props = $props();
 
 	const isEdit = $derived(!!incident);
-	let showConfirm = $state(false);
 	let submitError = $state<string | null>(null);
 	type SubmitErrorField = 'dateReceived' | 'dateResponse' | 'type' | 'action' | 'location';
 	let submitErrorField = $state<SubmitErrorField | null>(null);
@@ -220,7 +219,7 @@
 		sender: '',
 		teamLeaderId: null,
 		typeId: null,
-		marked: '',
+		marked: 'Normal',
 		referenceNo: '',
 		referenceText: '',
 		driverId: null,
@@ -279,7 +278,6 @@
 
 	// Reset form when incident prop changes (only track `incident`, not form edits)
 	$effect(() => {
-		showConfirm = false;
 		submitError = null;
 		submitErrorField = null;
 		formTab = 'details';
@@ -384,12 +382,7 @@
 			timeResponse: normalizeTimeField(form.timeResponse)
 		};
 
-		if (isEdit && !showConfirm) {
-			showConfirm = true;
-			return;
-		}
 		onSubmit(payload);
-		showConfirm = false;
 	}
 
 	function handleCancel() {
@@ -1381,7 +1374,7 @@
 
 	<footer class="sn-form-footer shrink-0 bg-white px-6 py-4 dark:bg-warm-100">
 		<div class="mx-auto w-full max-w-3xl space-y-3">
-			{#if submitError && !showConfirm}
+			{#if submitError}
 				<p
 					id="incident-submit-error"
 					class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
@@ -1408,58 +1401,6 @@
 			</div>
 		</div>
 	</footer>
-
-	{#if isEdit && showConfirm}
-		<!-- Full takeover over the editor: confirm save or return to editing -->
-		<div
-			class="absolute inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
-			role="presentation"
-		>
-			<div
-				class="w-full max-w-md rounded-lg border border-warm-200 bg-white p-6 shadow-xl dark:bg-warm-100"
-				role="alertdialog"
-				aria-modal="true"
-				aria-labelledby="confirm-changes-title"
-				aria-describedby="confirm-changes-desc"
-			>
-				<h3 id="confirm-changes-title" class="mb-2 text-lg font-semibold text-warm-800">
-					Confirm changes
-				</h3>
-				<p id="confirm-changes-desc" class="mb-6 text-sm leading-relaxed text-warm-600">
-					Save your updates to this incident? You can cancel to keep editing without saving.
-				</p>
-				{#if submitError}
-					<p
-						id="incident-submit-error"
-						class="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-						role="alert"
-					>
-						{submitError}
-					</p>
-				{/if}
-				<div class="flex flex-wrap justify-end gap-3">
-					<button
-						type="button"
-						onclick={() => {
-							showConfirm = false;
-							submitError = null;
-							submitErrorField = null;
-						}}
-						class="rounded-md border border-warm-300 bg-white px-5 py-2 text-sm font-medium text-warm-700 hover:bg-warm-50 {footerBtnFocus} dark:bg-warm-200"
-					>
-						Cancel
-					</button>
-					<button
-						type="button"
-						onclick={handleSubmit}
-						class="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-					>
-						Confirm changes
-					</button>
-				</div>
-			</div>
-		</div>
-	{/if}
 </form>
 
 <style>
