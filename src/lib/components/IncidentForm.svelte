@@ -806,7 +806,7 @@
 		<div class="mx-auto w-full max-w-3xl px-6 {showTitle ? 'py-6' : 'pb-6 pt-0'}">
 			{#if showTitle}
 				<h2 id="incident-form-title" class="mb-6 text-xl font-semibold text-warm-800">
-					{isEdit ? 'Edit Incident' : 'New Incident'}
+					{isEdit ? 'Incident' : 'New Incident'}
 				</h2>
 			{/if}
 

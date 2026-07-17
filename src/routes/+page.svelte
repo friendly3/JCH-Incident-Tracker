@@ -1087,16 +1087,16 @@
 				>
 					<div class="min-w-0">
 						<h2 id="incident-form-title" class="truncate text-lg font-semibold text-warm-800">
-							{mode === 'edit' ? 'Edit Incident' : 'New Incident'}
+							{mode === 'edit' ? 'Incident' : 'New Incident'}
 							{#if editingIncident?.referenceNo?.trim()}
 								<span class="ml-2 font-mono text-base font-normal text-accent-600">
 									{editingIncident.referenceNo}
 								</span>
 							{/if}
 						</h2>
-						<p class="mt-0.5 text-xs text-warm-500">
-							{mode === 'edit' ? 'Update incident record' : 'Create a new incident record'}
-						</p>
+						{#if mode !== 'edit'}
+							<p class="mt-0.5 text-xs text-warm-500">Create a new incident record</p>
+						{/if}
 						{#if mode === 'edit' && editingIncident}
 							{@const lastUpdated = formatTimestampLocal(editingIncident.updatedAt)}
 							{@const lastBy = editingIncident.updatedByName?.trim()}
