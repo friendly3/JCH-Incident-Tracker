@@ -1563,6 +1563,108 @@
 	let hoveredTypeOverTimeLabel = $state<string | null>(null);
 	let hoveredDriverTypeLabel = $state<string | null>(null);
 
+	/** PDF export (html2canvas + jsPDF). */
+	let pdfExporting = $state(false);
+	let pdfExportError = $state<string | null>(null);
+
+	function pdfFilenameSlug(label: string): string {
+		return label
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-|-$/g, '')
+			.slice(0, 48);
+	}
+
+	/**
+	 * Capture the visible dashboard (charts, tables, map) and download a PDF.
+	 * Multi-page A4 portrait when content is taller than one page.
+	 */
+	async function exportDashboardPdf() {
+		if (pdfExporting || typeof window === 'undefined') return;
+		const root = document.getElementById('dashboard-pdf-root');
+		if (!root) {
+			pdfExportError = 'Dashboard content not ready to export.';
+			return;
+		}
+
+		pdfExporting = true;
+		pdfExportError = null;
+		// Clear legend hover so export is not stuck in a dimmed focus state
+		hoveredTypeOverTimeLabel = null;
+		hoveredDriverTypeLabel = null;
+		closeDriverMonthDetail();
+
+		// Let charts repaint after clearing hover before capture
+		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+		await new Promise<void>((resolve) => setTimeout(resolve, 80));
+
+		try {
+			const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+				import('html2canvas'),
+				import('jspdf')
+			]);
+
+			const canvas = await html2canvas(root, {
+				scale: Math.min(2, window.devicePixelRatio || 1.5),
+				useCORS: true,
+				allowTaint: true,
+				backgroundColor: isDarkMode() ? '#141516' : '#f8f8f8',
+				logging: false,
+				scrollX: 0,
+				scrollY: 0,
+				windowWidth: root.scrollWidth,
+				windowHeight: root.scrollHeight,
+				onclone: (_doc, cloned) => {
+					cloned.style.overflow = 'visible';
+					cloned.style.height = 'auto';
+					cloned.style.maxHeight = 'none';
+					// Hide the export button in the PDF itself
+					cloned
+						.querySelectorAll('[data-pdf-hide]')
+						.forEach((node) => {
+							(node as HTMLElement).style.display = 'none';
+						});
+				}
+			});
+
+			const imgData = canvas.toDataURL('image/png', 1.0);
+			const pdf = new jsPDF({
+				orientation: 'portrait',
+				unit: 'mm',
+				format: 'a4',
+				compress: true
+			});
+			const pageWidth = pdf.internal.pageSize.getWidth();
+			const pageHeight = pdf.internal.pageSize.getHeight();
+			const margin = 8;
+			const contentWidth = pageWidth - margin * 2;
+			const imgHeight = (canvas.height * contentWidth) / canvas.width;
+			let heightLeft = imgHeight;
+			let y = margin;
+
+			pdf.addImage(imgData, 'PNG', margin, y, contentWidth, imgHeight, undefined, 'FAST');
+			heightLeft -= pageHeight - margin * 2;
+
+			while (heightLeft > 0) {
+				y = margin - (imgHeight - heightLeft);
+				pdf.addPage();
+				pdf.addImage(imgData, 'PNG', margin, y, contentWidth, imgHeight, undefined, 'FAST');
+				heightLeft -= pageHeight - margin * 2;
+			}
+
+			const periodSlug = pdfFilenameSlug(timeRangeLabel) || 'period';
+			const dateSlug = new Date().toISOString().slice(0, 10);
+			pdf.save(`jch-dashboard-${periodSlug}-${dateSlug}.pdf`);
+		} catch (err) {
+			console.error('Dashboard PDF export failed', err);
+			pdfExportError =
+				err instanceof Error ? err.message : 'Could not create PDF. Try again or use the browser print dialog.';
+		} finally {
+			pdfExporting = false;
+		}
+	}
+
 	function isLegendVisible(hidden: string[], label: string): boolean {
 		return !hidden.includes(label);
 	}
@@ -2295,6 +2397,7 @@
 </svelte:head>
 
 <div class="flex-1 flex flex-col bg-warm-50 text-warm-900 overflow-hidden">
+	<div id="dashboard-pdf-root" class="flex min-h-0 flex-1 flex-col overflow-auto bg-warm-50">
 	<header class="border-b border-warm-200 bg-white/80 px-4 py-3 backdrop-blur flex-shrink-0">
 		<!-- Period sits immediately to the right of the title block (not page right-aligned) -->
 		<div class="flex w-full min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
@@ -2310,7 +2413,7 @@
 					class="hidden h-9 w-px shrink-0 self-center bg-warm-300/70 dark:bg-warm-400/50 sm:block"
 					aria-hidden="true"
 				></span>
-				<div class="flex min-w-0 flex-wrap items-center gap-2.5">
+				<div class="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">
 					<label class="flex items-center gap-2 text-[0.9625rem] text-warm-600">
 						<span class="font-medium text-warm-700">Period</span>
 						<select
@@ -2348,9 +2451,38 @@
 					>
 						Dashboard data ignores records with no reference number and duplicate records.
 					</p>
+					<button
+						type="button"
+						data-pdf-hide
+						onclick={exportDashboardPdf}
+						disabled={pdfExporting}
+						title="Download the dashboard as a PDF"
+						aria-label="Save dashboard as PDF"
+						class="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-warm-200 bg-white px-3 py-1.5 text-sm font-medium text-warm-700 shadow-sm transition hover:bg-warm-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:cursor-wait disabled:opacity-60 dark:bg-warm-100 dark:hover:bg-warm-200"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							class="h-4 w-4 shrink-0 text-warm-600"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke="currentColor"
+							stroke-width="2"
+							aria-hidden="true"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+							/>
+						</svg>
+						{pdfExporting ? 'Saving…' : 'Save PDF'}
+					</button>
 				</div>
 			{/if}
 		</div>
+		{#if pdfExportError}
+			<p class="mt-2 text-xs text-red-600" role="alert" data-pdf-hide>{pdfExportError}</p>
+		{/if}
 	</header>
 
 	{#if data.loadError}
@@ -2399,8 +2531,7 @@
 			</button>
 		</div>
 	{:else}
-		<div class="flex-1 overflow-auto">
-			<div class="w-full px-3 py-3 sm:px-4">
+		<div class="w-full flex-1 px-3 py-3 sm:px-4">
 				<!-- Summary row: KPIs + status chart (plot 6.5rem × 1.1 ≈ 7.15rem) -->
 				<section
 					class="dashboard-summary mb-2"
@@ -2992,9 +3123,9 @@
 					</div>
 				</div>
 				</section>
-			</div>
 		</div>
 	{/if}
+	</div>
 
 	<!-- Driver × month cell drill-down: list incidents for that data point -->
 	{#if driverMonthDetail}
