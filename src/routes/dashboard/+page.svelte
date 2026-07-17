@@ -559,27 +559,39 @@
 		chart.update('none');
 	}
 
-	/** Color each type series and refresh axis/legend theme tokens. */
-	function applyTypeOverTimeChartTheme(chart: ChartJS<'line'>) {
+	/**
+	 * Color each type series and refresh axis/legend theme tokens.
+	 * When `focusLabel` is set (legend hover), other series are greyed so the
+	 * focused line stands out.
+	 */
+	function applyTypeOverTimeChartTheme(
+		chart: ChartJS<'line'>,
+		focusLabel: string | null = null
+	) {
 		const colors = getChartTheme(theme.isDark);
 		const isDark = theme.isDark;
+		const dimColor = getDimmedSeriesColor(isDark);
 		const colorMap = assignDistinctCategoryColors(
 			chart.data.datasets.map((d) => String(d.label ?? '')),
 			isDark
 		);
 		chart.data.datasets.forEach((dataset) => {
 			// Unspecified / blank types always use medium gray (same as Unassigned)
+			const label = String(dataset.label ?? '');
 			const stroke =
-				colorMap.get(String(dataset.label ?? '')) ??
-				getChartCategoryColor(dataset.label, 0, isDark);
-			dataset.borderColor = stroke;
-			dataset.backgroundColor = withAlpha(stroke, 0.06);
-			dataset.pointBackgroundColor = stroke;
-			dataset.pointBorderColor = colors.pointBorder;
-			dataset.borderWidth = 2.5;
-			dataset.pointRadius = 4;
-			dataset.pointHoverRadius = 6;
-			dataset.pointBorderWidth = 2;
+				colorMap.get(label) ?? getChartCategoryColor(dataset.label, 0, isDark);
+			const dimmed = focusLabel != null && focusLabel !== label;
+			const lineColor = dimmed ? dimColor : stroke;
+			dataset.borderColor = lineColor;
+			dataset.backgroundColor = withAlpha(lineColor, dimmed ? 0.02 : 0.06);
+			dataset.pointBackgroundColor = lineColor;
+			dataset.pointBorderColor = dimmed ? lineColor : colors.pointBorder;
+			dataset.borderWidth = dimmed ? 1.5 : focusLabel === label ? 3.25 : 2.5;
+			dataset.pointRadius = dimmed ? 2 : focusLabel === label ? 5 : 4;
+			dataset.pointHoverRadius = dimmed ? 3 : 6;
+			dataset.pointBorderWidth = dimmed ? 1 : 2;
+			// Higher order draws later (on top)
+			dataset.order = dimmed ? 0 : focusLabel === label ? 10 : 1;
 		});
 		if (chart.options?.plugins?.legend) {
 			// Keep legend off-canvas so plot height matches the other two cards
@@ -590,6 +602,18 @@
 				chart.options.plugins.datalabels,
 				buildLineDataLabels(colors, { fontSize: 10, multiSeries: true })
 			);
+			// Hide point counts on dimmed series while focusing one legend item
+			if (focusLabel != null) {
+				const baseDisplay = chart.options.plugins.datalabels.display;
+				chart.options.plugins.datalabels.display = (context) => {
+					const lbl = String(context.dataset.label ?? '');
+					if (lbl !== focusLabel) return false;
+					if (typeof baseDisplay === 'function') {
+						return (baseDisplay as (c: typeof context) => boolean)(context);
+					}
+					return baseDisplay !== false;
+				};
+			}
 		}
 		if (chart.options?.scales?.y?.ticks) {
 			chart.options.scales.y.ticks.color = colors.ticks;
@@ -1354,9 +1378,17 @@
 		};
 	}
 
-	function applyDriverBarTheme(chart: ChartJS<'bar'>) {
+	/**
+	 * Stacked driver bar theme. When `focusLabel` is set (legend hover), other
+	 * type segments grey out so the focused stack colour is prominent.
+	 */
+	function applyDriverBarTheme(
+		chart: ChartJS<'bar'>,
+		focusLabel: string | null = null
+	) {
 		const colors = getChartTheme(theme.isDark);
 		const isDark = theme.isDark;
+		const dimColor = getDimmedSeriesColor(isDark);
 		const colorMap = assignDistinctCategoryColors(
 			chart.data.datasets.map((d) => String(d.label ?? '')),
 			isDark
@@ -1366,13 +1398,16 @@
 			const typeLabel = String(dataset.label ?? '');
 			const solid =
 				colorMap.get(typeLabel) ?? getChartCategoryColor(typeLabel, 0, isDark);
-			dataset.backgroundColor = withAlpha(solid, 0.82);
-			dataset.borderColor = solid;
-			dataset.borderWidth = 1;
+			const dimmed = focusLabel != null && focusLabel !== typeLabel;
+			const paint = dimmed ? dimColor : solid;
+			dataset.backgroundColor = withAlpha(paint, dimmed ? 0.28 : 0.82);
+			dataset.borderColor = paint;
+			dataset.borderWidth = dimmed ? 0.5 : focusLabel === typeLabel ? 1.5 : 1;
 			dataset.borderRadius = 2;
 			dataset.barPercentage = 0.8;
 			dataset.categoryPercentage = 0.85;
-			// Ensure stacking key is stable across updates
+			// Ensure stacking key is stable across updates (do not change `order` on
+			// hover — Chart.js order also reorders stack segments).
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			(dataset as any).stack = 'types';
 		});
@@ -1493,6 +1528,9 @@
 	 */
 	let hiddenTypeOverTimeLabels = $state<string[]>([]);
 	let hiddenDriverTypeLabels = $state<string[]>([]);
+	/** Legend hover focus — other series dim on the matching chart. */
+	let hoveredTypeOverTimeLabel = $state<string | null>(null);
+	let hoveredDriverTypeLabel = $state<string | null>(null);
 
 	function isLegendVisible(hidden: string[], label: string): boolean {
 		return !hidden.includes(label);
@@ -1510,6 +1548,11 @@
 
 	function toggleDriverTypeLegend(label: string) {
 		hiddenDriverTypeLabels = toggleLegendLabel(hiddenDriverTypeLabels, label);
+	}
+
+	/** Uniform slate for non-focused series while a legend item is hovered. */
+	function getDimmedSeriesColor(isDark = isDarkMode()): string {
+		return isDark ? 'rgba(148, 163, 184, 0.32)' : 'rgba(148, 163, 184, 0.38)';
 	}
 
 	/** Canonical YYYY-MM-DD from dateReceived (handles ISO datetimes). */
@@ -2123,13 +2166,14 @@
 		if (!instance) return;
 		const next = typeOverTimeChartData;
 		const hidden = hiddenTypeOverTimeLabels;
+		const focus = hoveredTypeOverTimeLabel;
 		instance.data.labels = next.labels;
 		// Rebuild datasets so type set can grow/shrink; honour legend filter
 		instance.data.datasets = next.datasets.map((ds) => ({
 			...ds,
 			hidden: hidden.includes(ds.label)
 		}));
-		applyTypeOverTimeChartTheme(instance);
+		applyTypeOverTimeChartTheme(instance, focus);
 		instance.update('none');
 	});
 
@@ -2148,13 +2192,14 @@
 		if (!instance) return;
 		const next = driverStackedBarData;
 		const hidden = hiddenDriverTypeLabels;
+		const focus = hoveredDriverTypeLabel;
 		instance.data.labels = next.labels;
 		// Rebuild stacked type series; honour legend filter
 		instance.data.datasets = next.datasets.map((ds) => ({
 			...ds,
 			hidden: hidden.includes(ds.label)
 		}));
-		applyDriverBarTheme(instance);
+		applyDriverBarTheme(instance, focus);
 		instance.update('none');
 	});
 
@@ -2164,13 +2209,13 @@
 			applyChartTheme(chartInstance);
 		}
 		if (typeOverTimeChart) {
-			applyTypeOverTimeChartTheme(typeOverTimeChart);
+			applyTypeOverTimeChartTheme(typeOverTimeChart, hoveredTypeOverTimeLabel);
 		}
 		if (actionStatusChart) {
 			applyActionStatusBarTheme(actionStatusChart);
 		}
 		if (driverChart) {
-			applyDriverBarTheme(driverChart);
+			applyDriverBarTheme(driverChart, hoveredDriverTypeLabel);
 		}
 	});
 
@@ -2573,24 +2618,40 @@
 							{#if hasTypeOverTimeData}
 								<ul
 									class="flex flex-wrap gap-x-1.5 gap-y-1"
-									aria-label="Incident type legend for {typeOverTimeChartData.periodLabel}. Click to show or hide a series."
+									aria-label="Incident type legend for {typeOverTimeChartData.periodLabel}. Click to show or hide a series. Hover to highlight a series."
+									onpointerleave={() => {
+										hoveredTypeOverTimeLabel = null;
+									}}
 								>
 									{#each typeOverTimeChartData.datasets as ds (`${ds.label}-${ds.total}-${timeRange}`)}
 										{@const visible = isLegendVisible(hiddenTypeOverTimeLabels, ds.label)}
+										{@const focus = hoveredTypeOverTimeLabel}
+										{@const dimLegend =
+											visible && focus != null && focus !== ds.label}
+										{@const activeLegend = visible && focus === ds.label}
 										<li>
 											<button
 												type="button"
 												class="dashboard-legend-btn flex max-w-full items-center gap-1 text-[12px] leading-tight text-warm-600 {visible
-													? ''
+													? dimLegend
+														? 'opacity-35'
+														: activeLegend
+															? 'font-semibold text-warm-800 opacity-100'
+															: ''
 													: 'opacity-40 line-through'}"
 												aria-pressed={visible}
 												title={visible
 													? `Hide ${ds.label} on chart`
 													: `Show ${ds.label} on chart`}
+												onpointerenter={() => {
+													hoveredTypeOverTimeLabel = ds.label;
+												}}
 												onclick={() => toggleTypeOverTimeLegend(ds.label)}
 											>
 												<span
-													class="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+													class="inline-block h-2.5 w-2.5 shrink-0 rounded-full {dimLegend
+														? 'opacity-50'
+														: ''}"
 													style="background: {typeof ds.borderColor === 'string'
 														? ds.borderColor
 														: '#666'}"
@@ -2657,24 +2718,40 @@
 							{#if hasDriverData}
 								<ul
 									class="flex flex-wrap gap-x-1.5 gap-y-1"
-									aria-label="Incident type legend for {driverStackedBarData.periodLabel}. Click to show or hide a series."
+									aria-label="Incident type legend for {driverStackedBarData.periodLabel}. Click to show or hide a series. Hover to highlight a series."
+									onpointerleave={() => {
+										hoveredDriverTypeLabel = null;
+									}}
 								>
 									{#each driverStackedBarData.datasets as ds (`${ds.label}-${ds.total}-${timeRange}`)}
 										{@const visible = isLegendVisible(hiddenDriverTypeLabels, ds.label)}
+										{@const focus = hoveredDriverTypeLabel}
+										{@const dimLegend =
+											visible && focus != null && focus !== ds.label}
+										{@const activeLegend = visible && focus === ds.label}
 										<li>
 											<button
 												type="button"
 												class="dashboard-legend-btn flex max-w-full items-center gap-1 text-[12px] leading-tight text-warm-600 {visible
-													? ''
+													? dimLegend
+														? 'opacity-35'
+														: activeLegend
+															? 'font-semibold text-warm-800 opacity-100'
+															: ''
 													: 'opacity-40 line-through'}"
 												aria-pressed={visible}
 												title={visible
 													? `Hide ${ds.label} on chart`
 													: `Show ${ds.label} on chart`}
+												onpointerenter={() => {
+													hoveredDriverTypeLabel = ds.label;
+												}}
 												onclick={() => toggleDriverTypeLegend(ds.label)}
 											>
 												<span
-													class="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+													class="inline-block h-2.5 w-2.5 shrink-0 rounded-full {dimLegend
+														? 'opacity-50'
+														: ''}"
 													style="background: {typeof ds.borderColor === 'string'
 														? ds.borderColor
 														: '#666'}"
@@ -2790,7 +2867,7 @@
 														{:else}
 															<button
 																type="button"
-																class="inline-flex min-h-8 min-w-[2.5rem] items-center justify-center rounded-md border border-accent-200 bg-accent-100 px-2.5 py-1 text-sm font-semibold tabular-nums text-accent-700 shadow-sm transition hover:border-accent-500 hover:bg-accent-200 hover:text-accent-700 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-1 active:scale-[0.97] dark:border-accent-200 dark:bg-accent-200 dark:text-accent-600 dark:hover:border-accent-500 dark:hover:bg-accent-200"
+																class="inline-flex min-h-[1.6rem] min-w-[2.5rem] items-center justify-center rounded-md border border-accent-200 bg-accent-100 px-2.5 py-0.5 text-sm font-semibold tabular-nums text-accent-700 shadow-sm transition hover:border-accent-500 hover:bg-accent-200 hover:text-accent-700 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-1 active:scale-[0.97] dark:border-accent-200 dark:bg-accent-200 dark:text-accent-600 dark:hover:border-accent-500 dark:hover:bg-accent-200"
 																title="View {count} incident{count === 1
 																	? ''
 																	: 's'} for {row.label} in {formatMonthYearLabel(
