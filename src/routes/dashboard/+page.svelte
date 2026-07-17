@@ -559,9 +559,17 @@
 		chart.update('none');
 	}
 
-	/** Solid slate greys — rgba can fail to repaint on multi-series line charts. */
+	/**
+	 * Non-focused series paint — same grey as chart axis gridlines
+	 * (`MAP_GRID_GRAY` / theme `grid` token).
+	 */
 	function getDimmedSeriesColor(isDark = isDarkMode()): string {
-		return isDark ? '#64748B' : '#94A3B8';
+		// Light: solid grid grey. Dark: grid uses the same hue at low alpha.
+		return isDark ? withAlpha(MAP_GRID_GRAY, 0.35) : MAP_GRID_GRAY;
+	}
+
+	function getDimmedSeriesBorderColor(isDark = isDarkMode()): string {
+		return isDark ? withAlpha(MAP_GRID_GRAY, 0.45) : MAP_GRID_GRAY;
 	}
 
 	/**
@@ -1397,16 +1405,16 @@
 	}
 
 	/**
-	 * Stacked driver bar theme. When `focusLabel` is set (legend hover), other
-	 * type segments grey out so the focused stack colour is prominent.
+	 * Apply full / dimmed fills for stacked driver-type bar datasets in place.
+	 * (Same hover path as the line chart — avoid relying on a full theme rebuild alone.)
 	 */
-	function applyDriverBarTheme(
+	function applyDriverBarSeriesFocus(
 		chart: ChartJS<'bar'>,
 		focusLabel: string | null = null
 	) {
-		const colors = getChartTheme(theme.isDark);
 		const isDark = theme.isDark;
-		const dimColor = getDimmedSeriesColor(isDark);
+		const dimFill = getDimmedSeriesColor(isDark);
+		const dimBorder = getDimmedSeriesBorderColor(isDark);
 		const colorMap = assignDistinctCategoryColors(
 			chart.data.datasets.map((d) => String(d.label ?? '')),
 			isDark
@@ -1417,18 +1425,31 @@
 			const solid =
 				colorMap.get(typeLabel) ?? getChartCategoryColor(typeLabel, 0, isDark);
 			const dimmed = focusLabel != null && focusLabel !== typeLabel;
-			const paint = dimmed ? dimColor : solid;
-			dataset.backgroundColor = withAlpha(paint, dimmed ? 0.28 : 0.82);
-			dataset.borderColor = paint;
-			dataset.borderWidth = dimmed ? 0.5 : focusLabel === typeLabel ? 1.5 : 1;
+			const focused = focusLabel != null && focusLabel === typeLabel;
+			// Solid light grey when dimmed (more visible than low-alpha slate)
+			dataset.backgroundColor = dimmed ? dimFill : withAlpha(solid, 0.82);
+			dataset.borderColor = dimmed ? dimBorder : solid;
+			dataset.borderWidth = dimmed ? 0.5 : focused ? 1.5 : 1;
 			dataset.borderRadius = 2;
 			dataset.barPercentage = 0.8;
 			dataset.categoryPercentage = 0.85;
-			// Ensure stacking key is stable across updates (do not change `order` on
-			// hover — Chart.js order also reorders stack segments).
+			// Do not change `order` on hover — Chart.js order reorders stack segments.
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			(dataset as any).stack = 'types';
 		});
+	}
+
+	/**
+	 * Stacked driver bar theme. When `focusLabel` is set (legend hover), other
+	 * type segments grey out so the focused stack colour is prominent.
+	 */
+	function applyDriverBarTheme(
+		chart: ChartJS<'bar'>,
+		focusLabel: string | null = null
+	) {
+		const colors = getChartTheme(theme.isDark);
+		const isDark = theme.isDark;
+		applyDriverBarSeriesFocus(chart, focusLabel);
 
 		// Refresh total label chrome for theme
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2213,6 +2234,7 @@
 		instance.update('none');
 	});
 
+	// Data / hide-filter updates (hover recolour is separate, like the line chart)
 	$effect(() => {
 		const instance = driverChart;
 		if (!instance) return;
@@ -2227,11 +2249,13 @@
 		applyDriverBarTheme(instance, untrack(() => hoveredDriverTypeLabel));
 	});
 
+	// Legend hover: recolour bar segments in place only
 	$effect(() => {
 		const instance = driverChart;
 		const focus = hoveredDriverTypeLabel;
 		if (!instance) return;
-		applyDriverBarTheme(instance, focus);
+		applyDriverBarSeriesFocus(instance, focus);
+		instance.update('none');
 	});
 
 	$effect(() => {
