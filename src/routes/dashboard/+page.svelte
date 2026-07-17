@@ -1972,6 +1972,125 @@
 				});
 			}
 
+			function escapeHtml(value: string): string {
+				return value
+					.replace(/&/g, '&amp;')
+					.replace(/</g, '&lt;')
+					.replace(/>/g, '&gt;')
+					.replace(/"/g, '&quot;');
+			}
+
+			/**
+			 * Build page 2 from tally data (not a live-DOM clone). The on-screen table
+			 * uses sticky/overflow/Tailwind stacks that html2canvas often paints empty;
+			 * a plain off-screen sheet with only #hex colours is reliable.
+			 */
+			function buildDriverMonthPdfSheet(): HTMLElement {
+				const tally = driverMonthTally;
+				const showTotals = tally.months.length > 1;
+				const sheet = document.createElement('div');
+				sheet.id = 'dashboard-pdf-driver-month-sheet';
+				sheet.setAttribute('data-pdf-driver-month-sheet', '1');
+				const sheetBg = isDarkMode() ? '#141516' : '#f8f8f8';
+				const cardBg = isDarkMode() ? '#1e1f21' : '#ffffff';
+				const headBg = isDarkMode() ? '#2e3032' : '#f0f1f1';
+				const border = isDarkMode() ? '#4a4c4e' : '#e2e4e4';
+				const ink = isDarkMode() ? '#e0e2e2' : '#3a3b3d';
+				const muted = isDarkMode() ? '#9a9c9e' : '#6a6c6e';
+				const accent = isDarkMode() ? '#1dd4be' : '#026b5c';
+
+				sheet.style.cssText = [
+					'position:fixed',
+					'left:-12000px',
+					'top:0',
+					`width:${landscapeCssWidth}px`,
+					`background:${sheetBg}`,
+					'padding:28px 32px',
+					'box-sizing:border-box',
+					'font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif',
+					`color:${ink}`,
+					'z-index:0',
+					'pointer-events:none'
+				].join(';');
+
+				const monthHeaders = tally.monthLabels
+					.map(
+						(label, i) =>
+							`<th style="padding:10px 8px;text-align:center;font-size:12px;font-weight:700;color:${muted};white-space:nowrap;border-bottom:1px solid ${border};background:${headBg};" title="${escapeHtml(formatMonthYearLabel(tally.months[i] ?? ''))}">${escapeHtml(label)}</th>`
+					)
+					.join('');
+				const totalHeader = showTotals
+					? `<th style="padding:10px 12px;text-align:center;font-size:12px;font-weight:700;color:${ink};border-bottom:1px solid ${border};background:${headBg};">Total</th>`
+					: '';
+
+				const bodyRows =
+					tally.rows.length === 0
+						? `<tr><td colspan="${1 + tally.months.length + (showTotals ? 1 : 0)}" style="padding:28px;text-align:center;color:${muted};font-size:14px;">No incidents in this period.</td></tr>`
+						: tally.rows
+								.map((row) => {
+									const cells = row.counts
+										.map((count) => {
+											const empty = count === 0;
+											const cellInk = empty ? muted : ink;
+											const weight = empty ? '400' : '600';
+											const display = empty ? '—' : String(count);
+											return `<td style="padding:8px 6px;text-align:center;font-size:13px;font-variant-numeric:tabular-nums;color:${cellInk};font-weight:${weight};border-bottom:1px solid ${border};background:${cardBg};">${display}</td>`;
+										})
+										.join('');
+									const totalCell = showTotals
+										? `<td style="padding:8px 12px;text-align:center;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;color:${ink};border-bottom:1px solid ${border};background:${cardBg};">${row.total}</td>`
+										: '';
+									return `<tr>
+										<th scope="row" style="padding:8px 12px;text-align:left;font-size:13px;font-weight:600;color:${ink};border-bottom:1px solid ${border};background:${cardBg};white-space:nowrap;">${escapeHtml(row.label)}</th>
+										${cells}${totalCell}
+									</tr>`;
+								})
+								.join('');
+
+				const footCells = tally.monthTotals
+					.map((total) => {
+						const display = total === 0 ? '—' : String(total);
+						return `<td style="padding:10px 6px;text-align:center;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;color:${ink};background:${headBg};border-top:2px solid ${border};">${display}</td>`;
+					})
+					.join('');
+				const footTotal = showTotals
+					? `<td style="padding:10px 12px;text-align:center;font-size:14px;font-weight:800;font-variant-numeric:tabular-nums;color:${ink};background:${headBg};border-top:2px solid ${border};">${tally.grandTotal}</td>`
+					: '';
+
+				sheet.innerHTML = `
+					<div style="margin-bottom:16px;">
+						<div style="font-size:20px;font-weight:800;color:${ink};letter-spacing:-0.01em;">Incidents by Driver per Month</div>
+						<div style="margin-top:4px;font-size:13px;color:${muted};">${escapeHtml(tally.periodLabel)} · ${tally.rows.length} driver${tally.rows.length === 1 ? '' : 's'} · ${tally.grandTotal} total</div>
+					</div>
+					<div style="background:${cardBg};border:1px solid ${border};border-radius:10px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+						<table style="width:100%;border-collapse:collapse;table-layout:auto;">
+							<thead>
+								<tr>
+									<th scope="col" style="padding:10px 12px;text-align:left;font-size:12px;font-weight:700;color:${muted};text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid ${border};background:${headBg};">Driver</th>
+									${monthHeaders}${totalHeader}
+								</tr>
+							</thead>
+							<tbody>${bodyRows}</tbody>
+							${
+								tally.rows.length > 0
+									? `<tfoot>
+								<tr>
+									<th scope="row" style="padding:10px 12px;text-align:left;font-size:12px;font-weight:700;color:${ink};text-transform:uppercase;letter-spacing:0.04em;background:${headBg};border-top:2px solid ${border};">All drivers</th>
+									${footCells}${footTotal}
+								</tr>
+							</tfoot>`
+									: ''
+							}
+						</table>
+					</div>
+					<div style="margin-top:10px;font-size:11px;color:${muted};">JCH Incident Tracker · counts use the selected period filter</div>
+					<div style="margin-top:2px;font-size:11px;color:${accent};">Generated for PDF export</div>
+				`;
+
+				document.body.appendChild(sheet);
+				return sheet;
+			}
+
 			async function capturePage(page: PdfPage): Promise<HTMLCanvasElement> {
 				return html2canvas(root, {
 					scale: captureScale,
@@ -1990,6 +2109,35 @@
 						applyPdfCloneChrome(doc, cloned, page);
 					}
 				});
+			}
+
+			async function captureDriverMonthSheet(): Promise<HTMLCanvasElement> {
+				const sheet = buildDriverMonthPdfSheet();
+				// Wait a frame so layout/geometry is final before rasterising
+				await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+				try {
+					return await html2canvas(sheet, {
+						scale: captureScale,
+						useCORS: true,
+						allowTaint: true,
+						backgroundColor: bg,
+						logging: false,
+						scrollX: 0,
+						scrollY: 0,
+						width: sheet.offsetWidth || landscapeCssWidth,
+						windowWidth: sheet.offsetWidth || landscapeCssWidth,
+						windowHeight: Math.max(sheet.scrollHeight, sheet.offsetHeight, 400),
+						onclone: (_doc, cloned) => {
+							if (!(cloned instanceof HTMLElement)) return;
+							// Ensure off-screen offset is not applied in the clone
+							cloned.style.left = '0';
+							cloned.style.position = 'static';
+							cloned.style.width = `${landscapeCssWidth}px`;
+						}
+					});
+				} finally {
+					sheet.remove();
+				}
 			}
 
 			function addCanvasPage(
@@ -2015,9 +2163,9 @@
 				pdfDoc.addImage(imgData, 'PNG', x, y, imgWmm, imgHmm, undefined, 'NONE');
 			}
 
-			// Sequential capture avoids twin large canvases competing for memory
+			// Page 1: live dashboard clone (KPIs + charts). Page 2: data-built table sheet.
 			const overviewCanvas = await capturePage('overview');
-			const driverMonthCanvas = await capturePage('driver-month');
+			const driverMonthCanvas = await captureDriverMonthSheet();
 
 			const pdf = new jsPDF({
 				orientation: 'landscape',
