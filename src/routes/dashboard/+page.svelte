@@ -148,14 +148,29 @@
 	/** High-contrast colour for the n-th series / pie slice (0-based). */
 	function getSeriesColor(index: number, isDark = isDarkMode()): string {
 		const palette = isDark ? SERIES_PALETTE_DARK : SERIES_PALETTE_LIGHT;
-		if (index < palette.length) return palette[index];
+		const i = ((index % 10007) + 10007) % 10007; // keep non-negative for large hashes
+		if (i < palette.length) return palette[i];
 
 		// Beyond palette: spaced hues at strong saturation (still readable)
-		const hue = (index * 47 + 12) % 360;
+		const hue = (i * 47 + 12) % 360;
 		const sat = isDark ? 0.72 : 0.68;
 		const light = isDark ? 0.62 : 0.42;
 		const [r, g, b] = hslToRgb(hue, sat, light);
 		return rgbToHex(r, g, b);
+	}
+
+	/**
+	 * FNV-1a hash → stable series index so a category keeps the same colour
+	 * when sort order, volume rank, or which peers appear in the period changes.
+	 */
+	function stableSeriesIndex(label: string): number {
+		const s = label.trim().toLowerCase();
+		let h = 2166136261;
+		for (let i = 0; i < s.length; i++) {
+			h ^= s.charCodeAt(i);
+			h = Math.imul(h, 16777619);
+		}
+		return h >>> 0;
 	}
 
 	/**
@@ -175,14 +190,17 @@
 		return isDark ? '#D1D5DB' : '#9CA3AF';
 	}
 
-	/** Series colour by category label when special; otherwise palette by index. */
+	/**
+	 * Series colour by category label (stable). `index` is unused for named series
+	 * but kept so call sites stay compatible.
+	 */
 	function getChartCategoryColor(
 		label: string | undefined | null,
-		index: number,
+		_index: number = 0,
 		isDark = isDarkMode()
 	): string {
 		if (isUnassignedCategory(label)) return getUnassignedChartColor(isDark);
-		return getSeriesColor(index, isDark);
+		return getSeriesColor(stableSeriesIndex(label ?? ''), isDark);
 	}
 
 	/** Always-visible counts on line points; hide zeros to reduce clutter. */
