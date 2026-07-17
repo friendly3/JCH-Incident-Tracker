@@ -442,20 +442,26 @@
 		await focusIncidentDialog();
 	}
 
-	async function handleSubmit(incident: Incident) {
+	async function handleSubmit(incident: Incident): Promise<boolean> {
 		const audit = {
 			userId: data.user?.id ?? null,
 			userName: userDisplayName(data.user ?? data.session?.user)
 		};
-		let success = false;
 		if (mode === 'edit' && editingIncident) {
-			success = await incidentStore.update(editingIncident.id, incident, audit);
-		} else {
-			success = await incidentStore.add(incident, data.user?.id, audit);
+			const id = editingIncident.id;
+			const success = await incidentStore.update(id, incident, audit);
+			if (success) {
+				// Keep the modal open; refresh props so Last updated / list stay in sync.
+				const refreshed = incidentStore.list.find((i) => i.id === id);
+				if (refreshed) editingIncident = refreshed;
+			}
+			return success;
 		}
+		const success = await incidentStore.add(incident, data.user?.id, audit);
 		if (success) {
 			closeModal();
 		}
+		return success;
 	}
 
 	async function handleDelete(id: string) {

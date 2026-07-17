@@ -30,17 +30,22 @@
 		mode = 'edit';
 	}
 
-	async function handleSubmit(incident: Incident) {
-		let success = false;
+	async function handleSubmit(incident: Incident): Promise<boolean> {
 		if (mode === 'edit' && editingIncident) {
-			success = await incidentStore.update(editingIncident.id, incident);
-		} else {
-			success = await incidentStore.add(incident, data.user?.id);
+			const id = editingIncident.id;
+			const success = await incidentStore.update(id, incident);
+			if (success) {
+				const refreshed = incidentStore.list.find((i) => i.id === id);
+				if (refreshed) editingIncident = refreshed;
+			}
+			return success;
 		}
+		const success = await incidentStore.add(incident, data.user?.id);
 		if (success) {
 			mode = 'list';
 			editingIncident = undefined;
 		}
+		return success;
 	}
 
 	async function handleDelete(id: string) {

@@ -31,7 +31,8 @@
 		teamLeaders: TeamLeader[];
 		/** Managed Responded By dropdown options (Configuration). */
 		respondedByOptions?: RespondedByOption[];
-		onSubmit: (incident: Incident) => void;
+		/** Return true when the save succeeded. Edit stays open; parent may close on create. */
+		onSubmit: (incident: Incident) => boolean | void | Promise<boolean | void>;
 		onCancel: (hasUnsavedChanges: boolean) => void;
 		onUnsavedChangesChange?: (hasChanges: boolean) => void;
 		/** When false, parent shell renders the form title (modal/fullscreen header). */
@@ -56,6 +57,9 @@
 
 	const isEdit = $derived(!!incident);
 	let submitError = $state<string | null>(null);
+	/** Shown in the footer after a successful update (edit mode stays open). */
+	let saveSuccessMessage = $state<string | null>(null);
+	let isSubmitting = $state(false);
 	type SubmitErrorField = 'dateReceived' | 'dateResponse' | 'type' | 'action' | 'location';
 	let submitErrorField = $state<SubmitErrorField | null>(null);
 	/** Main form tabs: details (default) vs map + subject detect. */
@@ -244,6 +248,11 @@
 
 	const hasUnsavedChanges = $derived(computeHasUnsavedChanges());
 
+	// Clear the post-save notice once the user edits again.
+	$effect(() => {
+		if (hasUnsavedChanges) saveSuccessMessage = null;
+	});
+
 	/** Which custom time/date popover is open (null = closed). Declared early for requestClose/reset. */
 	type TimePickerField = 'time' | 'timeResponse';
 	type DatePickerField = 'dateReceived' | 'dateResponse';
@@ -277,21 +286,38 @@
 	});
 
 	// Reset form when incident prop changes (only track `incident`, not form edits)
+	let loadedIncidentKey = $state<string | null>(null);
 	$effect(() => {
-		submitError = null;
-		submitErrorField = null;
-		formTab = 'details';
-		openTimePickerField = null;
-		openDatePickerField = null;
 		const source = incident;
+		// Stable key: id for edits, sentinel for new. Avoid wiping success toast when parent
+		// refreshes the same record after save (updatedAt / coords may change).
+		const key = source?.id ? `id:${source.id}` : 'new';
+		const isSameRecord = key === loadedIncidentKey;
+		loadedIncidentKey = key;
+
+		if (!isSameRecord) {
+			saveSuccessMessage = null;
+			submitError = null;
+			submitErrorField = null;
+			formTab = 'details';
+			openTimePickerField = null;
+			openDatePickerField = null;
+		}
+
 		const initial = source ? normalizeIncident(source) : emptyIncident();
-		form = initial;
-		baselineSnapshot = JSON.stringify(toSnapshot(initial));
+		// Same record (e.g. post-save refresh): do not wipe in-progress edits.
+		// When clean, adopt the refreshed server copy (updatedAt, coords, etc.).
+		if (!isSameRecord || !computeHasUnsavedChanges()) {
+			form = initial;
+			baselineSnapshot = JSON.stringify(toSnapshot(initial));
+		}
 	});
 
-	function handleSubmit() {
+	async function handleSubmit() {
+		if (isSubmitting) return;
 		submitError = null;
 		submitErrorField = null;
+		saveSuccessMessage = null;
 
 		const typeId = normalizeFkId(form.typeId);
 		const dateReceived = normalizeDateOnly(form.dateReceived);
@@ -382,7 +408,19 @@
 			timeResponse: normalizeTimeField(form.timeResponse)
 		};
 
-		onSubmit(payload);
+		isSubmitting = true;
+		try {
+			const result = await onSubmit(payload);
+			// void/undefined treated as success for callers that do not return a value
+			const success = result !== false;
+			if (success && isEdit) {
+				// Treat current values as saved so Cancel does not prompt discard.
+				baselineSnapshot = JSON.stringify(toSnapshot(form));
+				saveSuccessMessage = 'Changes have been saved';
+			}
+		} finally {
+			isSubmitting = false;
+		}
 	}
 
 	function handleCancel() {
@@ -1387,17 +1425,28 @@
 			<div class="flex flex-wrap items-center gap-3">
 				<button
 					type="submit"
-					class="rounded-md bg-accent-600 px-5 py-2 text-sm font-medium text-white hover:bg-accent-500 {footerBtnFocus}"
+					disabled={isSubmitting}
+					class="rounded-md bg-accent-600 px-5 py-2 text-sm font-medium text-white hover:bg-accent-500 disabled:cursor-not-allowed disabled:opacity-60 {footerBtnFocus}"
 				>
-					{isEdit ? 'Update' : 'Add'} Incident
+					{isSubmitting ? 'Saving…' : isEdit ? 'Update' : 'Add'} Incident
 				</button>
 				<button
 					type="button"
 					onclick={handleCancel}
-					class="rounded-md border border-warm-300 bg-white px-5 py-2 text-sm text-warm-700 hover:bg-warm-50 dark:bg-warm-200 {footerBtnFocus}"
+					disabled={isSubmitting}
+					class="rounded-md border border-warm-300 bg-white px-5 py-2 text-sm text-warm-700 hover:bg-warm-50 dark:bg-warm-200 disabled:cursor-not-allowed disabled:opacity-60 {footerBtnFocus}"
 				>
 					Cancel
 				</button>
+				{#if saveSuccessMessage}
+					<p
+						class="text-sm font-medium text-emerald-700"
+						role="status"
+						aria-live="polite"
+					>
+						{saveSuccessMessage}
+					</p>
+				{/if}
 			</div>
 		</div>
 	</footer>
