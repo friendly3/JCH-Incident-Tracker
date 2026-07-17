@@ -1978,6 +1978,13 @@
 						</select>
 					</label>
 					<span class="text-[0.825rem] text-warm-500">{timeRangeLabel}</span>
+					<p
+						class="max-w-xl text-[0.825rem] leading-snug text-warm-500"
+						title="Dashboard charts, tables, and map exclude these rows"
+					>
+						Ignoring records with no reference number and later duplicates of the same reference
+						(earliest kept).
+					</p>
 				</div>
 			{/if}
 		</div>
