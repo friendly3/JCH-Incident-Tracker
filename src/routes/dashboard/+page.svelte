@@ -1578,8 +1578,9 @@
 
 	/**
 	 * Data-driven dashboard PDF (not a pixel clone of the live UI).
-	 * Page 1: vector KPIs + offscreen Chart.js images.
-	 * Page 2+: driver×month table with auto page breaks (vector text).
+	 * Page 1: KPIs + resolution + line charts.
+	 * Page 2: Incidents by Driver bar chart (full page).
+	 * Page 3+: driver×month table with auto page breaks (vector text).
 	 */
 	async function exportDashboardPdf() {
 		if (pdfExporting || typeof window === 'undefined') return;
@@ -1730,10 +1731,11 @@
 				{ showLegend: true }
 			);
 
+			// Full-page chart raster (wide + tall) so page-2 fit keeps labels/legend readable
 			const driverPng = chartToPng(
 				'bar',
-				1480,
-				420,
+				1600,
+				900,
 				{
 					labels: byDriver.labels,
 					datasets: byDriver.datasets
@@ -1752,7 +1754,13 @@
 					scales: {
 						x: {
 							stacked: true,
-							ticks: { color: muted, font: { size: 9, weight: 500 } },
+							ticks: {
+								color: muted,
+								font: { size: 11, weight: 500 },
+								maxRotation: 45,
+								minRotation: 0,
+								autoSkip: true
+							},
 							grid: { display: false }
 						},
 						y: {
@@ -1760,11 +1768,31 @@
 							beginAtZero: true,
 							ticks: {
 								color: muted,
-								font: { size: 9, weight: 500 },
+								font: { size: 11, weight: 500 },
 								precision: 0,
 								stepSize: 1
 							},
 							grid: { color: rule, drawBorder: false }
+						}
+					},
+					chartOptions: {
+						layout: { padding: { top: 12, right: 16, bottom: 8, left: 8 } },
+						plugins: {
+							legend: {
+								display: true,
+								position: 'bottom',
+								labels: {
+									boxWidth: 12,
+									boxHeight: 12,
+									font: { size: 12, weight: 600 },
+									color: ink,
+									padding: 12,
+									usePointStyle: true,
+									pointStyle: 'rectRounded'
+								}
+							},
+							datalabels: { display: false },
+							tooltip: { enabled: false }
 						}
 					}
 				}
@@ -1830,9 +1858,22 @@
 				pdf.roundedRect(x, y, w, h, 2, 2, 'FD');
 			}
 
-			// Page background
-			setFill(pageFill);
-			pdf.rect(0, 0, pageW, pageH, 'F');
+			function fillPage() {
+				setFill(pageFill);
+				pdf.rect(0, 0, pageW, pageH, 'F');
+			}
+
+			function pageFooter(label: string) {
+				setText(muted);
+				pdf.setFont('helvetica', 'normal');
+				pdf.setFontSize(7);
+				pdf.text(label, m, pageH - 5);
+			}
+
+			// ═══════════════════════════════════════════════════════════
+			// PAGE 1 — KPIs + resolution + line charts (fits fully in bounds)
+			// ═══════════════════════════════════════════════════════════
+			fillPage();
 
 			// Header
 			setText(ink);
@@ -1847,7 +1888,7 @@
 
 			// KPI tiles
 			const kpiY = m + 16;
-			const kpiH = 26;
+			const kpiH = 24;
 			const kpiGap = 4;
 			const kpiW = (contentW - kpiGap * 2) / 3;
 			const kpis: { title: string; value: string; sub: string; accent: string }[] = [
@@ -1881,18 +1922,19 @@
 				pdf.setFontSize(8);
 				pdf.text(kpi.title, x + 4, kpiY + 6);
 				setText(kpi.accent);
-				pdf.setFontSize(18);
-				pdf.text(kpi.value, x + 4, kpiY + 15);
+				pdf.setFontSize(17);
+				pdf.text(kpi.value, x + 4, kpiY + 14.5);
 				setText(muted);
 				pdf.setFont('helvetica', 'normal');
-				pdf.setFontSize(7.5);
+				pdf.setFontSize(7);
 				const sub = pdf.splitTextToSize(kpi.sub, kpiW - 8);
-				pdf.text(sub, x + 4, kpiY + 21);
+				pdf.text(sub, x + 4, kpiY + 20);
 			});
 
-			// Resolution status chart
-			let y = kpiY + kpiH + 6;
-			roundedCard(m, y, contentW, 42);
+			// Resolution status — fixed band
+			let y = kpiY + kpiH + 5;
+			const statusH = 38;
+			roundedCard(m, y, contentW, statusH);
 			setText(ink);
 			pdf.setFont('helvetica', 'bold');
 			pdf.setFontSize(9);
@@ -1902,18 +1944,20 @@
 			pdf.setFontSize(7.5);
 			pdf.text(periodLabel, pageW - m - 3, y + 5, { align: 'right' });
 			if (statusPng) {
-				pdf.addImage(statusPng, 'PNG', m + 3, y + 7, contentW - 6, 32, undefined, 'NONE');
+				pdf.addImage(statusPng, 'PNG', m + 3, y + 7, contentW - 6, statusH - 10, undefined, 'NONE');
 			} else {
 				setText(muted);
-				pdf.text('No resolution status data', m + 3, y + 22);
+				pdf.text('No resolution status data', m + 3, y + 20);
 			}
 
-			// Two charts side by side
-			y += 46;
+			// Two line charts — use remaining page height (leave footer)
+			y += statusH + 5;
+			const footerReserve = 10;
+			const remaining = pageH - y - footerReserve;
 			const halfW = (contentW - 4) / 2;
-			const midChartH = 58;
-			roundedCard(m, y, halfW, midChartH + 8);
-			roundedCard(m + halfW + 4, y, halfW, midChartH + 8);
+			const midChartH = Math.max(50, remaining - 2);
+			roundedCard(m, y, halfW, midChartH);
+			roundedCard(m + halfW + 4, y, halfW, midChartH);
 			setText(ink);
 			pdf.setFont('helvetica', 'bold');
 			pdf.setFontSize(9);
@@ -1924,47 +1968,71 @@
 			pdf.setFontSize(7);
 			pdf.text(periodLabel, m + 3, y + 9);
 			pdf.text(periodLabel, m + halfW + 7, y + 9);
-			if (overTimePng) {
-				pdf.addImage(overTimePng, 'PNG', m + 2, y + 11, halfW - 4, midChartH - 4, undefined, 'NONE');
+			const plotH = midChartH - 12;
+			if (overTimePng && plotH > 20) {
+				pdf.addImage(overTimePng, 'PNG', m + 2, y + 11, halfW - 4, plotH, undefined, 'NONE');
 			}
-			if (typePng) {
+			if (typePng && plotH > 20) {
 				pdf.addImage(
 					typePng,
 					'PNG',
 					m + halfW + 6,
 					y + 11,
 					halfW - 4,
-					midChartH - 4,
+					plotH,
 					undefined,
 					'NONE'
 				);
 			}
 
-			// Full-width driver chart
-			y += midChartH + 12;
-			const driverChartH = 72;
-			roundedCard(m, y, contentW, driverChartH + 8);
+			pageFooter('Page 1 of 3 · Overview · JCH Incident Tracker');
+
+			// ═══════════════════════════════════════════════════════════
+			// PAGE 2 — Incidents by Driver (full-page chart, correct aspect)
+			// ═══════════════════════════════════════════════════════════
+			pdf.addPage();
+			fillPage();
+
 			setText(ink);
 			pdf.setFont('helvetica', 'bold');
-			pdf.setFontSize(9);
-			pdf.text('Incidents by Driver (stacked by type)', m + 3, y + 5);
+			pdf.setFontSize(14);
+			pdf.text('Incidents by Driver', m, m + 5);
 			setText(muted);
 			pdf.setFont('helvetica', 'normal');
-			pdf.setFontSize(7);
-			pdf.text(`${periodLabel}`, m + 3, y + 9);
+			pdf.setFontSize(9);
+			pdf.text(`${periodLabel} · stacked by type`, m, m + 11);
+
+			const chartTop = m + 16;
+			const chartBottom = pageH - m - 6;
+			const chartBoxH = chartBottom - chartTop;
+			roundedCard(m, chartTop, contentW, chartBoxH);
+
 			if (driverPng && byDriver.labels.length > 0) {
-				pdf.addImage(driverPng, 'PNG', m + 2, y + 11, contentW - 4, driverChartH - 4, undefined, 'NONE');
+				// Preserve chart aspect ratio inside the card (do not stretch/crop)
+				const imgPad = 4;
+				const maxImgW = contentW - imgPad * 2;
+				const maxImgH = chartBoxH - imgPad * 2 - 2;
+				// Source raster is 1600×900
+				const srcW = 1600;
+				const srcH = 900;
+				const scale = Math.min(maxImgW / srcW, maxImgH / srcH);
+				const drawW = srcW * scale;
+				const drawH = srcH * scale;
+				const imgX = m + (contentW - drawW) / 2;
+				const imgY = chartTop + (chartBoxH - drawH) / 2;
+				pdf.addImage(driverPng, 'PNG', imgX, imgY, drawW, drawH, undefined, 'NONE');
 			} else {
 				setText(muted);
-				pdf.text('No driver data in this period', m + 3, y + 30);
+				pdf.setFontSize(11);
+				pdf.text('No driver data in this period', m + 6, chartTop + chartBoxH / 2);
 			}
 
-			// Page footer
-			setText(muted);
-			pdf.setFontSize(7);
-			pdf.text('Page 1 · Dashboard overview (map omitted) · JCH Incident Tracker', m, pageH - 5);
+			pageFooter('Page 2 of 3 · Incidents by Driver · JCH Incident Tracker');
 
-			// —— Page 2+: driver × month table (vector text) ——————
+			// ═══════════════════════════════════════════════════════════
+			// PAGE 3+ — driver × month table (vector text)
+			// ═══════════════════════════════════════════════════════════
+			// —— Page 3+: driver × month table (vector text) ——————
 			function drawTableHeader(startY: number): number {
 				setText(ink);
 				pdf.setFont('helvetica', 'bold');
@@ -1982,8 +2050,7 @@
 			}
 
 			pdf.addPage();
-			setFill(pageFill);
-			pdf.rect(0, 0, pageW, pageH, 'F');
+			fillPage();
 
 			let ty = drawTableHeader(m + 4);
 			const cols = 1 + tally.months.length + (showMonthTotals ? 1 : 0);
@@ -2032,12 +2099,9 @@
 			pdf.setFont('helvetica', 'normal');
 			for (const row of rows) {
 				if (ty > pageH - 14) {
-					setText(muted);
-					pdf.setFontSize(7);
-					pdf.text('JCH Incident Tracker · continued', m, pageH - 5);
+					pageFooter('Driver × month · continued · JCH Incident Tracker');
 					pdf.addPage();
-					setFill(pageFill);
-					pdf.rect(0, 0, pageW, pageH, 'F');
+					fillPage();
 					ty = drawTableHeader(m + 4);
 					paintHeaderRow(ty);
 					ty += rowH;
@@ -2073,9 +2137,9 @@
 			// Footer totals
 			if (tally.rows.length > 0) {
 				if (ty > pageH - 14) {
+					pageFooter('Driver × month · continued · JCH Incident Tracker');
 					pdf.addPage();
-					setFill(pageFill);
-					pdf.rect(0, 0, pageW, pageH, 'F');
+					fillPage();
 					ty = m + 10;
 				}
 				setFill(dark ? '#2a2a2a' : '#f0f0f0');
@@ -2096,21 +2160,23 @@
 				}
 			}
 
+			// Stamp accurate page numbers (pages 1–2 already labelled; refresh all)
 			const pageCount = pdf.getNumberOfPages();
 			for (let p = 1; p <= pageCount; p++) {
 				pdf.setPage(p);
+				// Cover any prior footer strip
+				setFill(pageFill);
+				pdf.rect(0, pageH - 8, pageW, 8, 'F');
 				setText(muted);
 				pdf.setFont('helvetica', 'normal');
 				pdf.setFontSize(7);
-				if (p === 1) {
-					// already wrote page 1 footer
-				} else {
-					pdf.text(
-						`Page ${p} of ${pageCount} · Driver × month · JCH Incident Tracker`,
-						m,
-						pageH - 5
-					);
-				}
+				const label =
+					p === 1
+						? `Page 1 of ${pageCount} · Overview · JCH Incident Tracker`
+						: p === 2
+							? `Page 2 of ${pageCount} · Incidents by Driver · JCH Incident Tracker`
+							: `Page ${p} of ${pageCount} · Driver × month · JCH Incident Tracker`;
+				pdf.text(label, m, pageH - 5);
 			}
 
 			const periodSlug = pdfFilenameSlug(periodLabel) || 'period';
