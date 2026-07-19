@@ -1620,6 +1620,94 @@
 			const amber = '#b45309';
 			const emerald = '#047857';
 
+			/** Point/bar value labels on PDF chart rasters (chartjs-plugin-datalabels). */
+			const pdfDataLabels = {
+				display: (context: { dataset: { data: unknown[] }; dataIndex: number }) => {
+					const raw = context.dataset.data[context.dataIndex];
+					return typeof raw === 'number' && raw > 0;
+				},
+				align: 'top' as const,
+				anchor: 'end' as const,
+				offset: 4,
+				clamp: false,
+				clip: false,
+				formatter: (value: unknown) =>
+					typeof value === 'number' && Number.isFinite(value) ? String(value) : '',
+				color: ink,
+				font: { size: 11, weight: 'bold' as const },
+				textStrokeColor: dark ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.9)',
+				textStrokeWidth: 3
+			};
+
+			/**
+			 * Stacked vertical bar: segment counts inside slices + stack total on top.
+			 * Used for the full-page driver chart in the PDF.
+			 */
+			const pdfStackedBarDataLabels = {
+				labels: {
+					segment: {
+						anchor: 'center' as const,
+						align: 'center' as const,
+						clamp: true,
+						clip: true,
+						display: (context: {
+							dataset: { data: unknown[] };
+							dataIndex: number;
+						}) => {
+							const raw = context.dataset.data[context.dataIndex];
+							return typeof raw === 'number' && raw >= 1;
+						},
+						formatter: (value: unknown) =>
+							typeof value === 'number' && Number.isFinite(value) && value > 0
+								? String(value)
+								: '',
+						color: '#ffffff',
+						font: { size: 11, weight: 'bold' as const },
+						textStrokeColor: 'rgba(0,0,0,0.45)',
+						textStrokeWidth: 2
+					},
+					total: {
+						anchor: 'end' as const,
+						align: 'top' as const,
+						offset: 2,
+						clamp: false,
+						clip: false,
+						display: (context: {
+							datasetIndex: number;
+							dataIndex: number;
+							chart: { data: { datasets: { data?: unknown[] }[] } };
+						}) => {
+							const last = context.chart.data.datasets.length - 1;
+							if (context.datasetIndex !== last) return false;
+							let sum = 0;
+							for (const ds of context.chart.data.datasets) {
+								const v = ds.data?.[context.dataIndex];
+								if (typeof v === 'number' && Number.isFinite(v)) sum += v;
+							}
+							return sum > 0;
+						},
+						formatter: (
+							_value: unknown,
+							context: {
+								dataIndex: number;
+								chart: { data: { datasets: { data?: unknown[] }[] } };
+							}
+						) => {
+							let sum = 0;
+							for (const ds of context.chart.data.datasets) {
+								const v = ds.data?.[context.dataIndex];
+								if (typeof v === 'number' && Number.isFinite(v)) sum += v;
+							}
+							return sum > 0 ? String(sum) : '';
+						},
+						color: ink,
+						font: { size: 12, weight: 'bold' as const },
+						textStrokeColor: dark ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.9)',
+						textStrokeWidth: 3
+					}
+				}
+			};
+
 			/** Render a Chart.js chart off-DOM → PNG data URL (high DPR, no animation). */
 			function chartToPng(
 				type: 'line' | 'bar',
@@ -1644,7 +1732,8 @@
 						maintainAspectRatio: false,
 						animation: false,
 						devicePixelRatio: dpr,
-						layout: { padding: { top: 8, right: 10, bottom: 4, left: 4 } },
+						// Extra top pad so end/anchor labels are not clipped
+						layout: { padding: { top: 16, right: 10, bottom: 4, left: 4 } },
 						plugins: {
 							legend: {
 								display: Boolean(extraOptions.showLegend),
@@ -1659,16 +1748,19 @@
 									pointStyle: 'rectRounded'
 								}
 							},
-							datalabels: { display: false },
+							// Always draw value labels on PDF chart images
+							datalabels: extraOptions.datalabels ?? pdfDataLabels,
 							tooltip: { enabled: false }
 						},
+						// x-axis tick font +2pt vs previous PDF defaults (9 → 11)
 						scales: extraOptions.scales ?? {
 							x: {
-								ticks: { color: muted, font: { size: 9, weight: 500 }, maxRotation: 40 },
+								ticks: { color: muted, font: { size: 11, weight: 500 }, maxRotation: 40 },
 								grid: { color: rule, drawBorder: false }
 							},
 							y: {
 								beginAtZero: true,
+								grace: '18%',
 								ticks: {
 									color: muted,
 									font: { size: 9, weight: 500 },
@@ -1751,12 +1843,15 @@
 				},
 				{
 					showLegend: true,
+					// Segment + stack-total labels (overrides default point-style datalabels)
+					datalabels: pdfStackedBarDataLabels,
+					// x-axis tick font +2pt vs previous PDF driver chart (11 → 13)
 					scales: {
 						x: {
 							stacked: true,
 							ticks: {
 								color: muted,
-								font: { size: 11, weight: 500 },
+								font: { size: 13, weight: 500 },
 								maxRotation: 45,
 								minRotation: 0,
 								autoSkip: true
@@ -1766,6 +1861,7 @@
 						y: {
 							stacked: true,
 							beginAtZero: true,
+							grace: '12%',
 							ticks: {
 								color: muted,
 								font: { size: 11, weight: 500 },
@@ -1776,7 +1872,7 @@
 						}
 					},
 					chartOptions: {
-						layout: { padding: { top: 12, right: 16, bottom: 8, left: 8 } },
+						layout: { padding: { top: 20, right: 16, bottom: 8, left: 8 } },
 						plugins: {
 							legend: {
 								display: true,
@@ -1791,7 +1887,7 @@
 									pointStyle: 'rectRounded'
 								}
 							},
-							datalabels: { display: false },
+							datalabels: pdfStackedBarDataLabels,
 							tooltip: { enabled: false }
 						}
 					}
