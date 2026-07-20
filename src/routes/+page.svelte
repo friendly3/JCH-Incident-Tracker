@@ -1164,7 +1164,7 @@
 								sharesReferenceWithOther(editingIncident, incidents)}
 							{#if isTaggedDupe}
 								<span
-									class="hidden rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 sm:inline dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-200"
+									class="hidden h-8 min-w-[9.75rem] items-center justify-center rounded-md border border-amber-300 bg-amber-50 px-3 text-sm font-medium text-amber-900 sm:inline-flex dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-100"
 									title="This row shares a reference with an earlier incident"
 								>
 									Duplicate
@@ -1174,7 +1174,7 @@
 									disabled={dupeToggleBusyId === editingIncident.id}
 									onclick={() => setDuplicateExempt(editingIncident!, true)}
 									title="Stop treating this row as a duplicate of the same reference"
-									class="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-100"
+									class="inline-flex h-8 min-w-[9.75rem] items-center justify-center rounded-md border border-amber-300 bg-amber-50 px-3 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-100"
 								>
 									{dupeToggleBusyId === editingIncident.id ? 'Saving…' : 'Not a duplicate'}
 								</button>
@@ -1184,7 +1184,7 @@
 									disabled={dupeToggleBusyId === editingIncident.id}
 									onclick={() => setDuplicateExempt(editingIncident!, false)}
 									title="Tag this row as a duplicate of the same reference again"
-									class="rounded-md border border-amber-400 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-600 dark:bg-warm-100 dark:text-amber-100 dark:hover:bg-amber-950/30"
+									class="inline-flex h-8 min-w-[9.75rem] items-center justify-center rounded-md border border-amber-400 bg-white px-3 text-sm font-medium text-amber-900 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-600 dark:bg-warm-100 dark:text-amber-100 dark:hover:bg-amber-950/30"
 								>
 									{dupeToggleBusyId === editingIncident.id ? 'Saving…' : 'Tag as duplicate'}
 								</button>
