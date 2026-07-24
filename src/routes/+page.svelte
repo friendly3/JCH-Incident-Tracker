@@ -849,14 +849,14 @@
 		>
 			<table class="incidents-table w-full table-fixed text-left text-sm min-w-[1480px]">
 				<colgroup>
-					<!-- Ref −25% (6.75→5.06rem); Date −25% (7.25→5.44rem); freed → Email Sender / Subject -->
-					<col style="width: 5.06rem" />
+					<!-- Ref wide enough for ref + DUPLICATE badge; date compact; space → email cols -->
+					<col style="width: 6.5rem" />
 					<col style="width: 5.44rem" />
 					<col style="width: 5.5%" />
 					<col style="width: 5%" />
 					<col style="width: 7.5%" />
-					<col style="width: 12.9%" />
-					<col style="width: 22.9%" />
+					<col style="width: 12.2%" />
+					<col style="width: 22.2%" />
 					<col style="width: 6.5%" />
 					<col style="width: 9%" />
 					<col style="width: 7.5%" />
@@ -935,15 +935,15 @@
 									id={index === 0 ? `month-group-${group.key}` : undefined}
 									class="border-b border-warm-100 last:border-0 {index % 2 === 1 ? 'bg-warm-100/60 dark:bg-warm-200' : 'bg-white'} hover:bg-warm-200/50 dark:hover:bg-warm-300/50"
 								>
-									<td class="px-2 py-3 font-mono text-xs max-w-0 overflow-hidden whitespace-nowrap">
+									<td class="px-2 py-3 font-mono text-xs max-w-0 align-top">
 										{#if incident.referenceNo?.trim()}
-											<span class="inline-flex max-w-full items-center gap-1">
+											<div class="flex min-w-0 max-w-full flex-col items-start gap-0.5">
 												<button
 													type="button"
 													onclick={() => startEdit(incident)}
 													title="Edit incident {incident.referenceNo}"
 													aria-label="Edit incident {incident.referenceNo}"
-													class="min-w-0 max-w-full cursor-pointer truncate whitespace-nowrap text-left text-accent-600 hover:text-accent-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-warm-50 dark:focus-visible:ring-offset-warm-200"
+													class="block max-w-full min-w-0 cursor-pointer truncate whitespace-nowrap text-left text-accent-600 hover:text-accent-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-warm-50 dark:focus-visible:ring-offset-warm-200"
 												>
 													{incident.referenceNo}
 												</button>
@@ -951,14 +951,14 @@
 													<button
 														type="button"
 														onclick={(e) => copyDupeRef(incident.referenceNo, e)}
-														class="shrink-0 cursor-pointer rounded border border-amber-300 bg-amber-50 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-amber-800 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-900/50"
+														class="inline-block max-w-full shrink-0 cursor-pointer rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-tight tracking-wide text-amber-800 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-900/50"
 														title="Copy reference number to clipboard for search"
 														aria-label="Copy duplicate reference {incident.referenceNo} to clipboard"
 													>
 														DUPLICATE
 													</button>
 												{/if}
-											</span>
+											</div>
 										{:else}
 											<button
 												type="button"
