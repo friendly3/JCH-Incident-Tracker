@@ -116,6 +116,12 @@
 	let filterAction = $state('');
 	/** Only incidents with no manual suburb and no parseable subject location. */
 	let filterMissingMapLocation = $state(false);
+	/** Date Received column: newest-first (desc) by default; click header to toggle. */
+	let dateReceivedSort: 'asc' | 'desc' = $state('desc');
+
+	function toggleDateReceivedSort() {
+		dateReceivedSort = dateReceivedSort === 'desc' ? 'asc' : 'desc';
+	}
 	/**
 	 * Date received period — same shape as dashboard Period picker
 	 * (relative ranges + months that have data). Independent of dashboard store.
@@ -243,10 +249,14 @@
 			return true;
 		});
 
-		// Always newest-first within filtered set (list groups handle month order)
-		result.sort((a, b) =>
-			`${b.dateReceived}T${b.time}`.localeCompare(`${a.dateReceived}T${a.time}`)
-		);
+		// Date Received + time; direction from column header toggle
+		result.sort((a, b) => {
+			const aKey = `${a.dateReceived}T${a.time}`;
+			const bKey = `${b.dateReceived}T${b.time}`;
+			return dateReceivedSort === 'desc'
+				? bKey.localeCompare(aKey)
+				: aKey.localeCompare(bKey);
+		});
 
 		return result;
 	});
@@ -306,8 +316,8 @@
 		const sortedKeys = [...groups.keys()].sort((a, b) => {
 			if (a === 'unknown') return 1;
 			if (b === 'unknown') return -1;
-			// Newest month groups first
-			return b.localeCompare(a);
+			// Month groups follow Date Received sort (desc = newest month first)
+			return dateReceivedSort === 'desc' ? b.localeCompare(a) : a.localeCompare(b);
 		});
 
 		return sortedKeys.map((key) => ({
@@ -855,7 +865,19 @@
 					<tr>
 						<th class="px-2 py-3 font-medium text-warm-500 whitespace-nowrap">Ref No.</th>
 						<th class="px-2 py-3 font-medium text-warm-500 whitespace-nowrap">
-							Date Received
+							<button
+								type="button"
+								onclick={toggleDateReceivedSort}
+								class="inline-flex items-center gap-1 rounded-sm font-medium text-warm-500 hover:text-warm-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+								aria-label="Sort by date received, currently {dateReceivedSort === 'desc' ? 'newest first' : 'oldest first'}. Click to reverse."
+								title={dateReceivedSort === 'desc' ? 'Newest first — click for oldest first' : 'Oldest first — click for newest first'}
+							>
+								Date Received
+								<span class="inline-flex flex-col leading-none text-[0.65rem] text-warm-400" aria-hidden="true">
+									<span class={dateReceivedSort === 'asc' ? 'text-accent-600' : ''}>▲</span>
+									<span class={dateReceivedSort === 'desc' ? 'text-accent-600' : ''}>▼</span>
+								</span>
+							</button>
 						</th>
 						<th class="px-2 py-3 text-center font-medium text-warm-500 whitespace-nowrap">
 							Resolution Status
