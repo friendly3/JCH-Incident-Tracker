@@ -268,10 +268,17 @@
 	);
 
 	/**
-	 * Incident ids that share a reference number with an older row — show DUPE tag.
+	 * Later same-reference rows (not the earliest) — show DUPLICATE badge.
+	 * Plain object map so template lookups stay reliable (Set#has can be awkward in Svelte).
 	 * Same rule as dashboard exclusion (earliest date received + time kept as original).
 	 */
 	const duplicateRefIds = $derived(getDuplicateIncidentIds(incidents));
+	const isDuplicateRow = $derived.by(() => {
+		const set = duplicateRefIds;
+		const map: Record<string, true> = Object.create(null);
+		for (const id of set) map[id] = true;
+		return map;
+	});
 
 	function clearFilters() {
 		search = '';
@@ -849,14 +856,14 @@
 		>
 			<table class="incidents-table w-full table-fixed text-left text-sm min-w-[1480px]">
 				<colgroup>
-					<!-- Ref wide enough for ref + DUPLICATE badge; date compact; space → email cols -->
-					<col style="width: 6.5rem" />
+					<!-- Ref fits article no. + DUPLICATE pill; date compact; space → email cols -->
+					<col style="width: 7.25rem" />
 					<col style="width: 5.44rem" />
 					<col style="width: 5.5%" />
 					<col style="width: 5%" />
 					<col style="width: 7.5%" />
-					<col style="width: 12.2%" />
-					<col style="width: 22.2%" />
+					<col style="width: 11.8%" />
+					<col style="width: 21.8%" />
 					<col style="width: 6.5%" />
 					<col style="width: 9%" />
 					<col style="width: 7.5%" />
@@ -931,27 +938,32 @@
 						</tr>
 						{#if isMonthExpanded(group.key)}
 							{#each group.incidents as incident, index (incident.id)}
+								{@const rowIsDuplicate = Boolean(isDuplicateRow[incident.id])}
 								<tr
 									id={index === 0 ? `month-group-${group.key}` : undefined}
-									class="border-b border-warm-100 last:border-0 {index % 2 === 1 ? 'bg-warm-100/60 dark:bg-warm-200' : 'bg-white'} hover:bg-warm-200/50 dark:hover:bg-warm-300/50"
+									class="border-b border-warm-100 last:border-0 {rowIsDuplicate
+										? 'bg-amber-50/80 dark:bg-amber-950/25'
+										: index % 2 === 1
+											? 'bg-warm-100/60 dark:bg-warm-200'
+											: 'bg-white'} hover:bg-warm-200/50 dark:hover:bg-warm-300/50"
 								>
-									<td class="px-2 py-3 font-mono text-xs max-w-0 align-top">
+									<td class="px-2 py-3 font-mono text-xs align-top" style="overflow: visible">
 										{#if incident.referenceNo?.trim()}
-											<div class="flex min-w-0 max-w-full flex-col items-start gap-0.5">
+											<div class="flex flex-col items-start gap-1" style="overflow: visible">
 												<button
 													type="button"
 													onclick={() => startEdit(incident)}
 													title="Edit incident {incident.referenceNo}"
 													aria-label="Edit incident {incident.referenceNo}"
-													class="block max-w-full min-w-0 cursor-pointer truncate whitespace-nowrap text-left text-accent-600 hover:text-accent-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-warm-50 dark:focus-visible:ring-offset-warm-200"
+													class="max-w-full cursor-pointer break-all text-left text-accent-600 hover:text-accent-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-warm-50 dark:focus-visible:ring-offset-warm-200"
 												>
 													{incident.referenceNo}
 												</button>
-												{#if duplicateRefIds.has(incident.id)}
+												{#if rowIsDuplicate}
 													<button
 														type="button"
 														onclick={(e) => copyDupeRef(incident.referenceNo, e)}
-														class="inline-block max-w-full shrink-0 cursor-pointer rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-tight tracking-wide text-amber-800 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-900/50"
+														class="inline-flex shrink-0 cursor-pointer items-center rounded border border-amber-400 bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide text-amber-950 shadow-sm transition hover:bg-amber-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-500 dark:bg-amber-900/70 dark:text-amber-50 dark:hover:bg-amber-800"
 														title="Copy reference number to clipboard for search"
 														aria-label="Copy duplicate reference {incident.referenceNo} to clipboard"
 													>
@@ -1068,7 +1080,7 @@
 												class="px-3 py-1 text-xs bg-warm-100 hover:bg-warm-200 text-warm-700 rounded">No</button>
 										{:else}
 											<span class="inline-flex flex-nowrap items-center justify-end gap-1.5 whitespace-nowrap">
-												{#if duplicateRefIds.has(incident.id)}
+												{#if isDuplicateRow[incident.id]}
 													<button
 														type="button"
 														disabled={dupeToggleBusyId === incident.id}
