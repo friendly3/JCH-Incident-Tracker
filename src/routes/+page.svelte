@@ -268,15 +268,14 @@
 	);
 
 	/**
-	 * Later same-reference rows (not the earliest) — show DUPLICATE badge.
-	 * Plain object map so template lookups stay reliable (Set#has can be awkward in Svelte).
-	 * Same rule as dashboard exclusion (earliest date received + time kept as original).
+	 * Ids that are true duplicates only:
+	 * same reference as an earlier row, and not marked “Not a duplicate” (duplicate_exempt).
+	 * Badge must not show for unique refs, the earliest original, or exempted rows.
 	 */
 	const duplicateRefIds = $derived(getDuplicateIncidentIds(incidents));
 	const isDuplicateRow = $derived.by(() => {
-		const set = duplicateRefIds;
 		const map: Record<string, true> = Object.create(null);
-		for (const id of set) map[id] = true;
+		for (const id of duplicateRefIds) map[id] = true;
 		return map;
 	});
 
@@ -938,14 +937,9 @@
 						</tr>
 						{#if isMonthExpanded(group.key)}
 							{#each group.incidents as incident, index (incident.id)}
-								{@const rowIsDuplicate = Boolean(isDuplicateRow[incident.id])}
 								<tr
 									id={index === 0 ? `month-group-${group.key}` : undefined}
-									class="border-b border-warm-100 last:border-0 {rowIsDuplicate
-										? 'bg-amber-50/80 dark:bg-amber-950/25'
-										: index % 2 === 1
-											? 'bg-warm-100/60 dark:bg-warm-200'
-											: 'bg-white'} hover:bg-warm-200/50 dark:hover:bg-warm-300/50"
+									class="border-b border-warm-100 last:border-0 {index % 2 === 1 ? 'bg-warm-100/60 dark:bg-warm-200' : 'bg-white'} hover:bg-warm-200/50 dark:hover:bg-warm-300/50"
 								>
 									<td class="px-2 py-3 font-mono text-xs align-top" style="overflow: visible">
 										{#if incident.referenceNo?.trim()}
@@ -959,7 +953,7 @@
 												>
 													{incident.referenceNo}
 												</button>
-												{#if rowIsDuplicate}
+												{#if isDuplicateRow[incident.id]}
 													<button
 														type="button"
 														onclick={(e) => copyDupeRef(incident.referenceNo, e)}
