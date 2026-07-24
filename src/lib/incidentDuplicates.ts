@@ -44,6 +44,26 @@ export function sharesReferenceWithOther(
 	);
 }
 
+/**
+ * True when this row shares a reference with others and is not the earliest
+ * occurrence (by date received + time). Only later rows can be tagged as duplicates.
+ */
+export function isLaterSameReferenceRow(
+	incident: Incident,
+	incidents: readonly Incident[]
+): boolean {
+	const ref = incident.referenceNo?.trim().toUpperCase();
+	if (!ref) return false;
+	const group = incidents.filter(
+		(i) => (i.referenceNo?.trim().toUpperCase() ?? '') === ref
+	);
+	if (group.length < 2) return false;
+	group.sort((a, b) =>
+		`${a.dateReceived}T${a.time}`.localeCompare(`${b.dateReceived}T${b.time}`)
+	);
+	return group[0]?.id !== incident.id;
+}
+
 /** Incidents that are not later duplicates of another row with the same reference. */
 export function withoutDuplicateIncidents(incidents: readonly Incident[]): Incident[] {
 	const dupeIds = getDuplicateIncidentIds(incidents);

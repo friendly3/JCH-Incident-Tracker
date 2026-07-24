@@ -43,6 +43,7 @@
 	} from '$lib/dashboardPeriod.svelte';
 	import {
 		getDuplicateIncidentIds,
+		isLaterSameReferenceRow,
 		sharesReferenceWithOther
 	} from '$lib/incidentDuplicates';
 
@@ -1179,69 +1180,6 @@
 						{/if}
 					</div>
 					<div class="flex shrink-0 items-center gap-2">
-						{#if mode === 'edit' && editingIncident}
-							{@const isTaggedDupe = duplicateRefIds.has(editingIncident.id)}
-							{@const canTagAsDupe =
-								Boolean(editingIncident.duplicateExempt) &&
-								sharesReferenceWithOther(editingIncident, incidents)}
-							{#if isTaggedDupe || canTagAsDupe}
-								{@const dupeBusy = dupeToggleBusyId === editingIncident.id}
-								<fieldset
-									class="m-0 min-w-0 border-0 p-0 disabled:opacity-50"
-									disabled={dupeBusy}
-									title="Whether this row is a duplicate of an earlier incident with the same reference"
-								>
-									<legend class="sr-only">Duplicate status</legend>
-									<div
-										class="inline-flex flex-wrap items-center gap-1 rounded-md border border-amber-300 bg-amber-50/80 p-1 dark:border-amber-600/50 dark:bg-amber-950/30"
-										role="radiogroup"
-										aria-label="Duplicate status"
-									>
-										<label
-											class="inline-flex cursor-pointer items-center gap-1.5 rounded px-2.5 py-1 text-sm font-medium transition {isTaggedDupe
-												? 'bg-amber-200/90 text-amber-950 shadow-sm dark:bg-amber-800/60 dark:text-amber-50'
-												: 'text-amber-900/80 hover:bg-amber-100/80 dark:text-amber-100/90 dark:hover:bg-amber-900/40'} {dupeBusy
-												? 'cursor-wait'
-												: ''}"
-										>
-											<input
-												type="radio"
-												name="incident-duplicate-{editingIncident.id}"
-												class="h-3.5 w-3.5 shrink-0 accent-amber-600"
-												checked={isTaggedDupe}
-												disabled={dupeBusy}
-												onchange={() => {
-													if (!isTaggedDupe) void setDuplicateExempt(editingIncident!, false);
-												}}
-											/>
-											<span>Duplicate</span>
-										</label>
-										<label
-											class="inline-flex cursor-pointer items-center gap-1.5 rounded px-2.5 py-1 text-sm font-medium transition {!isTaggedDupe
-												? 'bg-amber-200/90 text-amber-950 shadow-sm dark:bg-amber-800/60 dark:text-amber-50'
-												: 'text-amber-900/80 hover:bg-amber-100/80 dark:text-amber-100/90 dark:hover:bg-amber-900/40'} {dupeBusy
-												? 'cursor-wait'
-												: ''}"
-										>
-											<input
-												type="radio"
-												name="incident-duplicate-{editingIncident.id}"
-												class="h-3.5 w-3.5 shrink-0 accent-amber-600"
-												checked={!isTaggedDupe}
-												disabled={dupeBusy}
-												onchange={() => {
-													if (isTaggedDupe) void setDuplicateExempt(editingIncident!, true);
-												}}
-											/>
-											<span>Not a duplicate</span>
-										</label>
-									</div>
-									{#if dupeBusy}
-										<span class="sr-only">Saving…</span>
-									{/if}
-								</fieldset>
-							{/if}
-						{/if}
 						{#if isFormExpanded}
 							<button
 								bind:this={backToListBtn}
@@ -1299,6 +1237,89 @@
 						{/if}
 					</div>
 				</header>
+
+				{#if mode === 'edit' && editingIncident}
+					{@const isTaggedDupe = duplicateRefIds.has(editingIncident.id)}
+					{@const canSetDupeStatus = isLaterSameReferenceRow(editingIncident, incidents)}
+					{@const dupeBusy = dupeToggleBusyId === editingIncident.id}
+					{@const isDuplicate = isTaggedDupe}
+					<div
+						class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-warm-200 bg-warm-50/90 px-5 py-2.5 dark:bg-warm-100/40"
+					>
+						<span class="text-xs font-medium uppercase tracking-wide text-warm-600">
+							Duplicate status
+						</span>
+						<fieldset
+							class="m-0 min-w-0 border-0 p-0 disabled:opacity-60"
+							disabled={dupeBusy || !canSetDupeStatus}
+							title={canSetDupeStatus
+								? 'Mark whether this later same-reference row is a duplicate'
+								: 'Only later incidents that share a reference number can be marked as duplicates'}
+						>
+							<legend class="sr-only">Duplicate status</legend>
+							<div
+								class="inline-flex flex-wrap items-center gap-1 rounded-md border border-amber-300 bg-white p-1 dark:border-amber-600/50 dark:bg-warm-200"
+								role="radiogroup"
+								aria-label="Duplicate status"
+								aria-disabled={!canSetDupeStatus || dupeBusy}
+							>
+								<label
+									class="inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition {isDuplicate
+										? 'bg-amber-200 text-amber-950 shadow-sm dark:bg-amber-800/70 dark:text-amber-50'
+										: 'text-warm-700 hover:bg-amber-50 dark:text-warm-800 dark:hover:bg-amber-950/20'} {canSetDupeStatus &&
+									!dupeBusy
+										? 'cursor-pointer'
+										: 'cursor-not-allowed'}"
+								>
+									<input
+										type="radio"
+										name="incident-duplicate-{editingIncident.id}"
+										class="h-4 w-4 shrink-0 accent-amber-600"
+										checked={isDuplicate}
+										disabled={dupeBusy || !canSetDupeStatus}
+										onchange={() => {
+											if (!isDuplicate) void setDuplicateExempt(editingIncident!, false);
+										}}
+									/>
+									<span>Duplicate</span>
+								</label>
+								<label
+									class="inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition {!isDuplicate
+										? 'bg-amber-200 text-amber-950 shadow-sm dark:bg-amber-800/70 dark:text-amber-50'
+										: 'text-warm-700 hover:bg-amber-50 dark:text-warm-800 dark:hover:bg-amber-950/20'} {canSetDupeStatus &&
+									!dupeBusy
+										? 'cursor-pointer'
+										: 'cursor-not-allowed'}"
+								>
+									<input
+										type="radio"
+										name="incident-duplicate-{editingIncident.id}"
+										class="h-4 w-4 shrink-0 accent-amber-600"
+										checked={!isDuplicate}
+										disabled={dupeBusy || !canSetDupeStatus}
+										onchange={() => {
+											if (isDuplicate) void setDuplicateExempt(editingIncident!, true);
+										}}
+									/>
+									<span>Not a duplicate</span>
+								</label>
+							</div>
+						</fieldset>
+						{#if dupeBusy}
+							<span class="text-xs text-warm-500">Saving…</span>
+						{:else if !canSetDupeStatus}
+							<span class="text-xs text-warm-500">
+								{#if !editingIncident.referenceNo?.trim()}
+									Add a reference number shared with another incident to enable this.
+								{:else if !sharesReferenceWithOther(editingIncident, incidents)}
+									No other incident shares this reference.
+								{:else}
+									Earliest record for this reference (not a later duplicate).
+								{/if}
+							</span>
+						{/if}
+					</div>
+				{/if}
 
 				{#if incidentStore.error}
 					<div class="shrink-0 border-b border-red-200 bg-red-50 px-5 py-3" role="alert">
