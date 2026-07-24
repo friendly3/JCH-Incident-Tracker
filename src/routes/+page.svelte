@@ -1184,32 +1184,62 @@
 							{@const canTagAsDupe =
 								Boolean(editingIncident.duplicateExempt) &&
 								sharesReferenceWithOther(editingIncident, incidents)}
-							{#if isTaggedDupe}
-								<span
-									class="hidden h-8 min-w-[9.75rem] items-center justify-center rounded-md border border-amber-300 bg-amber-50 px-3 text-sm font-medium text-amber-900 sm:inline-flex dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-100"
-									title="This row shares a reference with an earlier incident"
+							{#if isTaggedDupe || canTagAsDupe}
+								{@const dupeBusy = dupeToggleBusyId === editingIncident.id}
+								<fieldset
+									class="m-0 min-w-0 border-0 p-0 disabled:opacity-50"
+									disabled={dupeBusy}
+									title="Whether this row is a duplicate of an earlier incident with the same reference"
 								>
-									Duplicate
-								</span>
-								<button
-									type="button"
-									disabled={dupeToggleBusyId === editingIncident.id}
-									onclick={() => setDuplicateExempt(editingIncident!, true)}
-									title="Stop treating this row as a duplicate of the same reference"
-									class="inline-flex h-8 min-w-[9.75rem] items-center justify-center rounded-md border border-amber-300 bg-amber-50 px-3 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-100"
-								>
-									{dupeToggleBusyId === editingIncident.id ? 'Saving…' : 'Not a duplicate'}
-								</button>
-							{:else if canTagAsDupe}
-								<button
-									type="button"
-									disabled={dupeToggleBusyId === editingIncident.id}
-									onclick={() => setDuplicateExempt(editingIncident!, false)}
-									title="Tag this row as a duplicate of the same reference again"
-									class="inline-flex h-8 min-w-[9.75rem] items-center justify-center rounded-md border border-amber-400 bg-white px-3 text-sm font-medium text-amber-900 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-600 dark:bg-warm-100 dark:text-amber-100 dark:hover:bg-amber-950/30"
-								>
-									{dupeToggleBusyId === editingIncident.id ? 'Saving…' : 'Tag as duplicate'}
-								</button>
+									<legend class="sr-only">Duplicate status</legend>
+									<div
+										class="inline-flex flex-wrap items-center gap-1 rounded-md border border-amber-300 bg-amber-50/80 p-1 dark:border-amber-600/50 dark:bg-amber-950/30"
+										role="radiogroup"
+										aria-label="Duplicate status"
+									>
+										<label
+											class="inline-flex cursor-pointer items-center gap-1.5 rounded px-2.5 py-1 text-sm font-medium transition {isTaggedDupe
+												? 'bg-amber-200/90 text-amber-950 shadow-sm dark:bg-amber-800/60 dark:text-amber-50'
+												: 'text-amber-900/80 hover:bg-amber-100/80 dark:text-amber-100/90 dark:hover:bg-amber-900/40'} {dupeBusy
+												? 'cursor-wait'
+												: ''}"
+										>
+											<input
+												type="radio"
+												name="incident-duplicate-{editingIncident.id}"
+												class="h-3.5 w-3.5 shrink-0 accent-amber-600"
+												checked={isTaggedDupe}
+												disabled={dupeBusy}
+												onchange={() => {
+													if (!isTaggedDupe) void setDuplicateExempt(editingIncident!, false);
+												}}
+											/>
+											<span>Duplicate</span>
+										</label>
+										<label
+											class="inline-flex cursor-pointer items-center gap-1.5 rounded px-2.5 py-1 text-sm font-medium transition {!isTaggedDupe
+												? 'bg-amber-200/90 text-amber-950 shadow-sm dark:bg-amber-800/60 dark:text-amber-50'
+												: 'text-amber-900/80 hover:bg-amber-100/80 dark:text-amber-100/90 dark:hover:bg-amber-900/40'} {dupeBusy
+												? 'cursor-wait'
+												: ''}"
+										>
+											<input
+												type="radio"
+												name="incident-duplicate-{editingIncident.id}"
+												class="h-3.5 w-3.5 shrink-0 accent-amber-600"
+												checked={!isTaggedDupe}
+												disabled={dupeBusy}
+												onchange={() => {
+													if (isTaggedDupe) void setDuplicateExempt(editingIncident!, true);
+												}}
+											/>
+											<span>Not a duplicate</span>
+										</label>
+									</div>
+									{#if dupeBusy}
+										<span class="sr-only">Saving…</span>
+									{/if}
+								</fieldset>
 							{/if}
 						{/if}
 						{#if isFormExpanded}
