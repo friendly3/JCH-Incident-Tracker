@@ -3507,16 +3507,16 @@
 					</section>
 				</div>
 
-				<!-- Driver table + bar chart side by side -->
+				<!-- Driver table + bar chart side by side (equal card height; table body fills like chart plot) -->
 				<div
 					class="dashboard-driver-row mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2 lg:items-stretch"
 				>
 					<section
-						class="flex min-h-0 min-w-0 flex-col rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4 dark:bg-warm-100"
+						class="dashboard-driver-table-card flex h-full min-h-0 min-w-0 flex-col rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4 dark:bg-warm-100"
 						aria-labelledby="driver-month-tally-title"
 						aria-describedby="driver-month-tally-summary"
 					>
-						<div class="mb-2 flex flex-wrap items-start justify-between gap-2">
+						<div class="dashboard-driver-table-header mb-2 flex shrink-0 flex-wrap items-start justify-between gap-2">
 							<div class="min-w-0">
 								<h2
 									id="driver-month-tally-title"
@@ -3550,12 +3550,12 @@
 						<p id="driver-month-tally-summary" class="sr-only">{driverMonthTallyAriaLabel}</p>
 
 						{#if !hasDriverMonthTally}
-							<p class="flex flex-1 items-center justify-center py-6 text-center text-sm text-warm-500">
+							<p class="flex min-h-0 flex-1 items-center justify-center py-6 text-center text-sm text-warm-500">
 								No incidents in this period.
 							</p>
 						{:else}
 							<div
-								class="min-h-0 flex-1 overflow-auto rounded-md border border-warm-200 max-h-[min(24.4rem,45vh)] lg:max-h-[min(24rem,52.5vh)] lg:min-h-[min(24rem,52.5vh)]"
+								class="dashboard-driver-table-scroll min-h-0 flex-1 overflow-auto rounded-md border border-warm-200"
 							>
 								<table class="w-full min-w-[20rem] border-collapse text-left text-sm">
 									<thead class="sticky top-0 z-10 border-b border-warm-200 bg-warm-50 dark:bg-warm-200">
@@ -4023,20 +4023,37 @@
 	}
 
 	/*
-	 * Driver row: card stretches to match the month table; plot grows to fill
-	 * leftover height so the bar chart is not stuck at the top-row slot size.
+	 * Driver row: equal-height cards. Table scroll body and chart plot both
+	 * flex-grow so they share the same vertical space (no max-height cap on the table).
+	 * Floor ≈ 75% of top-row plot (23.17rem × 0.75).
 	 */
 	:global(.dashboard-driver-row) {
 		align-items: stretch;
 	}
 
+	:global(.dashboard-driver-row > *) {
+		min-height: 0;
+		height: 100%;
+	}
+
+	:global(.dashboard-driver-table-card) {
+		display: flex;
+		flex-direction: column;
+		/* header + plot floor + chart footer band ≈ match chart card */
+		min-height: calc(3.25rem + 17.38rem + 2.85rem + 10px + 0.7rem);
+	}
+
+	:global(.dashboard-driver-table-scroll) {
+		flex: 1 1 auto;
+		min-height: 17.38rem;
+	}
+
 	:global(.dashboard-driver-row .dashboard-chart-card) {
-		/* Match sibling table height from the grid stretch */
 		height: 100%;
 		min-height: 100%;
 	}
 
-	/* Driver row plot: ~75% of top-row chart slot (23.17rem × 0.75) */
+	/* Driver row plot fills remaining card height under header/footer */
 	:global(.dashboard-chart-plot.dashboard-chart-plot--fill) {
 		flex: 1 1 auto;
 		height: auto;
