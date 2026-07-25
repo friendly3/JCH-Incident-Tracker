@@ -3517,7 +3517,7 @@
 							</p>
 						{:else}
 							<div
-								class="min-h-0 flex-1 overflow-auto rounded-md border border-warm-200 max-h-[min(32.5rem,60vh)] lg:max-h-none lg:min-h-[25rem]"
+								class="min-h-0 flex-1 overflow-auto rounded-md border border-warm-200 max-h-[min(32.5rem,60vh)] lg:max-h-none lg:min-h-[min(32rem,70vh)]"
 							>
 								<table class="w-full min-w-[20rem] border-collapse text-left text-sm">
 									<thead class="sticky top-0 z-10 border-b border-warm-200 bg-warm-50 dark:bg-warm-200">
@@ -3649,7 +3649,7 @@
 							</p>
 						</div>
 						<p id="driver-chart-summary" class="sr-only">{driverChartAriaLabel}</p>
-						<div class="dashboard-chart-plot relative w-full">
+						<div class="dashboard-chart-plot dashboard-chart-plot--fill relative w-full min-h-0">
 							{#if !hasDriverData}
 								<div class="flex h-full items-center justify-center">
 									<p class="text-sm text-warm-500">No incidents in this period.</p>
@@ -3967,7 +3967,7 @@
 		line-height: 1.1rem;
 	}
 
-	/* Plot height: 21.06rem + 10% = 23.166rem */
+	/* Plot height: 21.06rem + 10% = 23.166rem (top-row equal cards) */
 	:global(.dashboard-chart-plot) {
 		flex: 0 0 23.17rem;
 		height: 23.17rem;
@@ -3982,6 +3982,31 @@
 		width: 100% !important;
 		height: 100% !important;
 		max-height: 23.17rem !important;
+	}
+
+	/*
+	 * Driver row: card stretches to match the month table; plot grows to fill
+	 * leftover height so the bar chart is not stuck at the top-row slot size.
+	 */
+	:global(.dashboard-driver-row) {
+		align-items: stretch;
+	}
+
+	:global(.dashboard-driver-row .dashboard-chart-card) {
+		/* Match sibling table height from the grid stretch */
+		height: 100%;
+		min-height: 100%;
+	}
+
+	:global(.dashboard-chart-plot.dashboard-chart-plot--fill) {
+		flex: 1 1 auto;
+		height: auto;
+		min-height: 23.17rem;
+		max-height: none;
+	}
+
+	:global(.dashboard-chart-plot.dashboard-chart-plot--fill canvas) {
+		max-height: none !important;
 	}
 
 	/* +10px so multi-line type legends are not clipped */
