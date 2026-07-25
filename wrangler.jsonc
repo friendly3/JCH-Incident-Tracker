@@ -1,8 +1,8 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "jch-incident-tracker-v1",
+	// Keep this minimal for Cloudflare Pages Git deploys — do not set `name` or
+	// `pages_build_output_dir` here (dashboard / adapter owns those). Only
+	// runtime compatibility flags for SvelteKit on Workers.
 	"compatibility_date": "2024-11-12",
-	// Required by SvelteKit 2.x on Cloudflare (AsyncLocalStorage / Node builtins).
-	"compatibility_flags": ["nodejs_compat", "nodejs_als"],
-	"pages_build_output_dir": ".svelte-kit/cloudflare"
+	"compatibility_flags": ["nodejs_compat", "nodejs_als"]
 }

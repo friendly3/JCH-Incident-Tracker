@@ -5,55 +5,65 @@ import { sequence } from '@sveltejs/kit/hooks'
 import { env as privateEnv } from '$env/dynamic/private'
 
 /**
- * Resolve Supabase URL/key from every place CF Pages / Vite may put them:
- * - $env/dynamic/private (Worker runtime bindings)
- * - event.platform.env (Cloudflare platform)
- * - import.meta.env (inlined at build when VITE_* is set during `npm run build`)
+ * Vite only inlines *static* `import.meta.env.VITE_*` access — dynamic
+ * `import.meta.env[key]` is always undefined. Prefer static reads.
  */
 function resolveSupabaseConfig(platformEnv?: Record<string, unknown> | null) {
-	const fromImportMeta = (key: string): string => {
-		const v = (import.meta.env as Record<string, unknown>)[key]
-		return typeof v === 'string' && v.length > 0 ? v : ''
-	}
-	const fromPlatform = (key: string): string => {
-		if (!platformEnv) return ''
-		const v = platformEnv[key]
-		return typeof v === 'string' && v.length > 0 ? v : ''
-	}
-	const fromPrivate = (key: string): string => {
-		const v = privateEnv[key]
-		return typeof v === 'string' && v.length > 0 ? v : ''
-	}
-	const pick = (...keys: string[]) => {
-		for (const key of keys) {
-			const v = fromPrivate(key) || fromPlatform(key) || fromImportMeta(key)
-			if (v) return v
-		}
-		return ''
-	}
+	const processEnv =
+		typeof process !== 'undefined' && process.env ? process.env : undefined
+
+	const supabaseUrl =
+		privateEnv.VITE_SUPABASE_URL ||
+		privateEnv.PUBLIC_SUPABASE_URL ||
+		privateEnv.SUPABASE_URL ||
+		(typeof platformEnv?.VITE_SUPABASE_URL === 'string'
+			? platformEnv.VITE_SUPABASE_URL
+			: '') ||
+		(typeof platformEnv?.PUBLIC_SUPABASE_URL === 'string'
+			? platformEnv.PUBLIC_SUPABASE_URL
+			: '') ||
+		(typeof platformEnv?.SUPABASE_URL === 'string' ? platformEnv.SUPABASE_URL : '') ||
+		processEnv?.VITE_SUPABASE_URL ||
+		processEnv?.PUBLIC_SUPABASE_URL ||
+		processEnv?.SUPABASE_URL ||
+		// Static property access — required for Vite build-time inlining
+		import.meta.env.VITE_SUPABASE_URL ||
+		''
+
+	const supabaseAnonKey =
+		privateEnv.VITE_SUPABASE_ANON_KEY ||
+		privateEnv.PUBLIC_SUPABASE_ANON_KEY ||
+		privateEnv.SUPABASE_ANON_KEY ||
+		(typeof platformEnv?.VITE_SUPABASE_ANON_KEY === 'string'
+			? platformEnv.VITE_SUPABASE_ANON_KEY
+			: '') ||
+		(typeof platformEnv?.PUBLIC_SUPABASE_ANON_KEY === 'string'
+			? platformEnv.PUBLIC_SUPABASE_ANON_KEY
+			: '') ||
+		(typeof platformEnv?.SUPABASE_ANON_KEY === 'string'
+			? platformEnv.SUPABASE_ANON_KEY
+			: '') ||
+		processEnv?.VITE_SUPABASE_ANON_KEY ||
+		processEnv?.PUBLIC_SUPABASE_ANON_KEY ||
+		processEnv?.SUPABASE_ANON_KEY ||
+		import.meta.env.VITE_SUPABASE_ANON_KEY ||
+		''
 
 	return {
-		supabaseUrl: pick('VITE_SUPABASE_URL', 'PUBLIC_SUPABASE_URL', 'SUPABASE_URL'),
-		supabaseAnonKey: pick(
-			'VITE_SUPABASE_ANON_KEY',
-			'PUBLIC_SUPABASE_ANON_KEY',
-			'SUPABASE_ANON_KEY'
-		)
+		supabaseUrl: typeof supabaseUrl === 'string' ? supabaseUrl.trim() : '',
+		supabaseAnonKey: typeof supabaseAnonKey === 'string' ? supabaseAnonKey.trim() : ''
 	}
 }
 
 // Create Supabase server client for SSR
 export const supabase: Handle = async ({ event, resolve }) => {
-	const platformEnv = (
-		event.platform as { env?: Record<string, unknown> } | undefined
-	)?.env
+	const platformEnv = (event.platform as { env?: Record<string, unknown> } | undefined)?.env
 	const { supabaseUrl, supabaseAnonKey } = resolveSupabaseConfig(platformEnv)
 
 	if (!supabaseUrl || !supabaseAnonKey) {
-		// Surface a clear message instead of a bare "Internal Error"
 		error(
 			500,
-			'Missing Supabase configuration (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY). Set them in Cloudflare Pages → Settings → Environment variables for Production and Preview (Build and runtime), then redeploy.'
+			'Missing Supabase configuration (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY). Set both in Cloudflare Pages → Settings → Environment variables for Production (and Preview), enable Build + Runtime, then redeploy.'
 		)
 	}
 
