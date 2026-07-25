@@ -63,10 +63,20 @@ npm run preview
    - **Build command:** `npm run build`
    - **Build output directory:** `.svelte-kit/cloudflare`
    - **Node.js version:** 18 or 20
-3. Set environment variables (Production and Preview):
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-4. In Supabase → Authentication → URL Configuration, add your Pages URL (e.g. `https://your-project.pages.dev`) as Site URL and redirect URL.
+3. Set environment variables (Production **and** Preview — both **Build** and **Runtime**):
+   - `VITE_SUPABASE_URL` — same value as in your local `.env.local`
+   - `VITE_SUPABASE_ANON_KEY` — same value as in your local `.env.local`
+
+   Dashboard: **Workers & Pages → jch-incident-tracker-v1 → Settings → Environment variables**
+
+   Or from this repo (after `npx wrangler login`):
+
+   ```bash
+   node scripts/sync-cf-pages-env.mjs
+   ```
+
+   Then **Retry deployment** so the build can pick up `VITE_*` vars.
+4. In Supabase → Authentication → URL Configuration, add your Pages URL (e.g. `https://jch-incident-tracker-v1.pages.dev`) as Site URL and redirect URL.
 5. Apply all SQL migrations in `supabase/migrations/` via the Supabase SQL editor.
 
 ## Project Structure
