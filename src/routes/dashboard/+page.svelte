@@ -29,13 +29,19 @@
 	} from '$lib/dashboardPeriod.svelte';
 	import { theme } from '$lib/theme.svelte';
 	import type { Chart as ChartJS, ChartOptions, Plugin } from 'chart.js';
-	import { Chart, registerables } from 'chart.js';
-	import ChartDataLabels from 'chartjs-plugin-datalabels';
 	import { onMount, untrack } from 'svelte';
 
-	// Register Chart.js only in the browser — avoids Worker SSR touching canvas APIs
-	if (typeof window !== 'undefined') {
+	/** Lazy-load Chart.js in the browser only (keeps Worker free of canvas import cost). */
+	let ChartCtor: typeof import('chart.js').Chart | null = null;
+
+	async function ensureChartJs(): Promise<typeof import('chart.js').Chart | null> {
+		if (typeof window === 'undefined') return null;
+		if (ChartCtor) return ChartCtor;
+		const { Chart, registerables } = await import('chart.js');
+		const ChartDataLabels = (await import('chartjs-plugin-datalabels')).default;
 		Chart.register(...registerables, ChartDataLabels);
+		ChartCtor = Chart;
+		return Chart;
 	}
 
 	function cssVar(name: string, fallback: string): string {
@@ -1711,14 +1717,16 @@
 			};
 
 			/** Render a Chart.js chart off-DOM → PNG data URL (high DPR, no animation). */
-			function chartToPng(
+			async function chartToPng(
 				type: 'line' | 'bar',
 				width: number,
 				height: number,
 				data: { labels?: unknown; datasets: unknown[] },
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				extraOptions: Record<string, any> = {}
-			): string {
+			): Promise<string> {
+				const Chart = await ensureChartJs();
+				if (!Chart) throw new Error('Chart.js is not available');
 				const canvas = document.createElement('canvas');
 				const dpr = 2;
 				// Chart.js owns backing-store size via devicePixelRatio
@@ -1781,7 +1789,7 @@
 			}
 
 			// —— Build chart images ————————————————————————————————
-			const overTimePng = chartToPng(
+			const overTimePng = await chartToPng(
 				'line',
 				720,
 				320,
@@ -1802,7 +1810,7 @@
 				{ showLegend: false }
 			);
 
-			const typePng = chartToPng(
+			const typePng = await chartToPng(
 				'line',
 				720,
 				320,
@@ -1826,7 +1834,7 @@
 			);
 
 			// Full-page chart raster (wide + tall) so page-2 fit keeps labels/legend readable
-			const driverPng = chartToPng(
+			const driverPng = await chartToPng(
 				'bar',
 				1600,
 				900,
@@ -1898,7 +1906,7 @@
 
 			const statusPng =
 				byStatus.length > 0
-					? chartToPng(
+					? await chartToPng(
 							'bar',
 							900,
 							220,
@@ -2812,16 +2820,23 @@
 
 		const colors = untrack(() => getChartTheme(theme.isDark));
 		const initialData = untrack(() => chartData);
-		const instance = new Chart(canvas, {
-			type: 'line',
-			data: initialData,
-			options: buildChartOptions(colors)
+		let cancelled = false;
+		let instance: ChartJS<'line'> | undefined;
+
+		void ensureChartJs().then((Chart) => {
+			if (cancelled || !Chart || !canvas.isConnected) return;
+			instance = new Chart(canvas, {
+				type: 'line',
+				data: initialData,
+				options: buildChartOptions(colors)
+			});
+			applyChartTheme(instance);
+			chartInstance = instance;
 		});
-		applyChartTheme(instance);
-		chartInstance = instance;
 
 		return () => {
-			instance.destroy();
+			cancelled = true;
+			instance?.destroy();
 			chartInstance = undefined;
 		};
 	});
@@ -2842,16 +2857,23 @@
 				}))
 			};
 		});
-		const instance = new Chart(canvas, {
-			type: 'line',
-			data: initialData,
-			options: buildTypeOverTimeChartOptions(colors)
+		let cancelled = false;
+		let instance: ChartJS<'line'> | undefined;
+
+		void ensureChartJs().then((Chart) => {
+			if (cancelled || !Chart || !canvas.isConnected) return;
+			instance = new Chart(canvas, {
+				type: 'line',
+				data: initialData,
+				options: buildTypeOverTimeChartOptions(colors)
+			});
+			applyTypeOverTimeChartTheme(instance);
+			typeOverTimeChart = instance;
 		});
-		applyTypeOverTimeChartTheme(instance);
-		typeOverTimeChart = instance;
 
 		return () => {
-			instance.destroy();
+			cancelled = true;
+			instance?.destroy();
 			typeOverTimeChart = undefined;
 		};
 	});
@@ -2863,16 +2885,23 @@
 
 		const colors = untrack(() => getChartTheme(theme.isDark));
 		const initialData = untrack(() => actionStatusBarData);
-		const instance = new Chart(canvas, {
-			type: 'bar',
-			data: initialData,
-			options: buildActionStatusBarOptions(colors)
+		let cancelled = false;
+		let instance: ChartJS<'bar'> | undefined;
+
+		void ensureChartJs().then((Chart) => {
+			if (cancelled || !Chart || !canvas.isConnected) return;
+			instance = new Chart(canvas, {
+				type: 'bar',
+				data: initialData,
+				options: buildActionStatusBarOptions(colors)
+			});
+			applyActionStatusBarTheme(instance);
+			actionStatusChart = instance;
 		});
-		applyActionStatusBarTheme(instance);
-		actionStatusChart = instance;
 
 		return () => {
-			instance.destroy();
+			cancelled = true;
+			instance?.destroy();
 			actionStatusChart = undefined;
 		};
 	});
@@ -2893,16 +2922,23 @@
 				}))
 			};
 		});
-		const instance = new Chart(canvas, {
-			type: 'bar',
-			data: initialData,
-			options: buildDriverBarOptions(colors)
+		let cancelled = false;
+		let instance: ChartJS<'bar'> | undefined;
+
+		void ensureChartJs().then((Chart) => {
+			if (cancelled || !Chart || !canvas.isConnected) return;
+			instance = new Chart(canvas, {
+				type: 'bar',
+				data: initialData,
+				options: buildDriverBarOptions(colors)
+			});
+			applyDriverBarTheme(instance);
+			driverChart = instance;
 		});
-		applyDriverBarTheme(instance);
-		driverChart = instance;
 
 		return () => {
-			instance.destroy();
+			cancelled = true;
+			instance?.destroy();
 			driverChart = undefined;
 		};
 	});

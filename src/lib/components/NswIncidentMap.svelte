@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount, tick } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import type { Incident } from '$lib/data/incidents';
 	import {
 		SYDNEY_CENTER,
@@ -702,8 +702,25 @@
 	onMount(() => {
 		cancelled = false;
 		void initMap();
+		// Prefer onMount cleanup over onDestroy — safer under Svelte 5 SSR / Workers
 		return () => {
 			cancelled = true;
+			if (labelLayoutTimer) clearTimeout(labelLayoutTimer);
+			if (typeof document !== 'undefined') {
+				document.body.style.overflow = previousBodyOverflow;
+			}
+			resizeObserver?.disconnect();
+			resizeObserver = null;
+			if (map) {
+				map.off('zoomend moveend', scheduleLabelLayout);
+				map.remove();
+				map = null;
+				markersLayer = null;
+			}
+			placedMarkers = [];
+			streetPlaces = [];
+			labelLayoutBound = false;
+			Lref = null;
 		};
 	});
 
@@ -731,26 +748,6 @@
 			// Supersede in-flight geocode so finally/early-exit can settle
 			plotGeneration += 1;
 		};
-	});
-
-	onDestroy(() => {
-		cancelled = true;
-		if (labelLayoutTimer) clearTimeout(labelLayoutTimer);
-		if (typeof document !== 'undefined') {
-			document.body.style.overflow = previousBodyOverflow;
-		}
-		resizeObserver?.disconnect();
-		resizeObserver = null;
-		if (map) {
-			map.off('zoomend moveend', scheduleLabelLayout);
-			map.remove();
-			map = null;
-			markersLayer = null;
-		}
-		placedMarkers = [];
-		streetPlaces = [];
-		labelLayoutBound = false;
-		Lref = null;
 	});
 </script>
 
