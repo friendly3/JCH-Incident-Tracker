@@ -3555,7 +3555,7 @@
 							</p>
 						{:else}
 							<div
-								class="min-h-0 flex-1 overflow-auto rounded-md border border-warm-200 max-h-[min(32.5rem,60vh)] lg:max-h-none lg:min-h-[min(32rem,70vh)]"
+								class="min-h-0 flex-1 overflow-auto rounded-md border border-warm-200 max-h-[min(24.4rem,45vh)] lg:max-h-[min(24rem,52.5vh)] lg:min-h-[min(24rem,52.5vh)]"
 							>
 								<table class="w-full min-w-[20rem] border-collapse text-left text-sm">
 									<thead class="sticky top-0 z-10 border-b border-warm-200 bg-warm-50 dark:bg-warm-200">
@@ -4036,10 +4036,11 @@
 		min-height: 100%;
 	}
 
+	/* Driver row plot: ~75% of top-row chart slot (23.17rem × 0.75) */
 	:global(.dashboard-chart-plot.dashboard-chart-plot--fill) {
 		flex: 1 1 auto;
 		height: auto;
-		min-height: 23.17rem;
+		min-height: 17.38rem;
 		max-height: none;
 	}
 
