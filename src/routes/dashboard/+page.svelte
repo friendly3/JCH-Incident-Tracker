@@ -33,8 +33,10 @@
 	import ChartDataLabels from 'chartjs-plugin-datalabels';
 	import { onMount, untrack } from 'svelte';
 
-	// Register Chart.js plugins (datalabels for always-visible pie slice stats)
-	Chart.register(...registerables, ChartDataLabels);
+	// Register Chart.js only in the browser — avoids Worker SSR touching canvas APIs
+	if (typeof window !== 'undefined') {
+		Chart.register(...registerables, ChartDataLabels);
+	}
 
 	function cssVar(name: string, fallback: string): string {
 		if (typeof document === 'undefined') return fallback;

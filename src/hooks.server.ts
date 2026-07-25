@@ -1,17 +1,33 @@
 import { createServerClient } from '@supabase/ssr'
 import type { CookieOptions } from '@supabase/ssr'
-import { redirect, type Handle } from '@sveltejs/kit'
+import { error, redirect, type Handle, type HandleServerError } from '@sveltejs/kit'
 import { sequence } from '@sveltejs/kit/hooks'
 import { env } from '$env/dynamic/private'
 
+function resolveSupabaseConfig() {
+	// Cloudflare Pages runtime bindings + local .env (VITE_ prefix used historically)
+	const supabaseUrl =
+		env.VITE_SUPABASE_URL ||
+		env.PUBLIC_SUPABASE_URL ||
+		env.SUPABASE_URL ||
+		''
+	const supabaseAnonKey =
+		env.VITE_SUPABASE_ANON_KEY ||
+		env.PUBLIC_SUPABASE_ANON_KEY ||
+		env.SUPABASE_ANON_KEY ||
+		''
+	return { supabaseUrl, supabaseAnonKey }
+}
+
 // Create Supabase server client for SSR
 export const supabase: Handle = async ({ event, resolve }) => {
-	const supabaseUrl = env.VITE_SUPABASE_URL
-	const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY
+	const { supabaseUrl, supabaseAnonKey } = resolveSupabaseConfig()
 
 	if (!supabaseUrl || !supabaseAnonKey) {
-		throw new Error(
-			'Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY (required for server Supabase client)'
+		// Surface a clear message instead of a bare "Internal Error"
+		error(
+			500,
+			'Missing Supabase configuration (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY). Set them in Cloudflare Pages → Settings → Environment variables for Production and Preview, then redeploy.'
 		)
 	}
 
@@ -26,12 +42,24 @@ export const supabase: Handle = async ({ event, resolve }) => {
 		}
 	})
 
-	const {
-		data: { user }
-	} = await event.locals.supabase.auth.getUser()
+	// Never let auth network / JWT errors become an unhandled 500 for every page
+	try {
+		const {
+			data: { user },
+			error: authError
+		} = await event.locals.supabase.auth.getUser()
 
-	event.locals.session = user ? { user } : null
-	event.locals.user = user ?? null
+		if (authError) {
+			console.error('Supabase getUser error:', authError.message)
+		}
+
+		event.locals.session = user ? { user } : null
+		event.locals.user = user ?? null
+	} catch (err) {
+		console.error('Supabase getUser threw:', err)
+		event.locals.session = null
+		event.locals.user = null
+	}
 
 	return resolve(event)
 }
@@ -61,3 +89,15 @@ export const authorize: Handle = async ({ event, resolve }) => {
 }
 
 export const handle: Handle = sequence(supabase, authorize)
+
+/** Prefer a real message over the default "Internal Error" shell. */
+export const handleError: HandleServerError = ({ error: err, event }) => {
+	const message =
+		err instanceof Error
+			? err.message
+			: typeof err === 'string'
+				? err
+				: 'An unexpected error occurred'
+	console.error(`[handleError] ${event.request.method} ${event.url.pathname}:`, err)
+	return { message }
+}
