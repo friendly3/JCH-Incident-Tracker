@@ -3343,8 +3343,8 @@
 
 				<!-- Charts & tables (same period as header picker) -->
 				<section class="dashboard-charts" aria-label="Incident charts">
-				<!-- Three equal cards: shared header/plot/footer heights so the row lines up. -->
-				<div class="dashboard-chart-row grid grid-cols-1 gap-2 lg:grid-cols-3 lg:items-stretch">
+				<!-- Top row: over-time charts side by side -->
+				<div class="dashboard-chart-row grid grid-cols-1 gap-2 lg:grid-cols-2 lg:items-stretch">
 					<section
 						class="dashboard-chart-card min-w-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="over-time-chart-title"
@@ -3467,112 +3467,11 @@
 							{/if}
 						</div>
 					</section>
-
-					<section
-						class="dashboard-chart-card min-w-0 overflow-hidden rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
-						data-pdf-driver-chart
-						aria-labelledby="driver-chart-title"
-						aria-describedby="driver-chart-summary"
-					>
-						<div class="dashboard-chart-header">
-							<h2 class="text-sm font-semibold text-warm-800" id="driver-chart-title">
-								Incidents by Driver
-							</h2>
-							<p class="dashboard-chart-meta text-xs text-warm-500">
-								{timeRangeLabel} · stacked by type
-							</p>
-						</div>
-						<p id="driver-chart-summary" class="sr-only">{driverChartAriaLabel}</p>
-						<div class="dashboard-chart-plot relative w-full">
-							{#if !hasDriverData}
-								<div class="flex h-full items-center justify-center">
-									<p class="text-sm text-warm-500">No incidents in this period.</p>
-								</div>
-							{/if}
-							<canvas
-								bind:this={driverCanvas}
-								class={!hasDriverData ? 'hidden' : 'block h-full w-full'}
-								aria-hidden="true"
-							></canvas>
-							<table class="sr-only" aria-labelledby="driver-chart-title">
-								<thead>
-									<tr>
-										<th scope="col">Driver</th>
-										{#each driverStackedBarData.typeLabels as typeLabel (typeLabel)}
-											<th scope="col">{typeLabel}</th>
-										{/each}
-										<th scope="col">Total</th>
-									</tr>
-								</thead>
-								<tbody>
-									{#each driverStackedBarData.driverRows as row (row.label)}
-										<tr>
-											<th scope="row">{row.label}</th>
-											{#each row.byType as count, i (`${row.label}-${driverStackedBarData.typeLabels[i] ?? i}`)}
-												<td>{count}</td>
-											{/each}
-											<td>{row.total}</td>
-										</tr>
-									{/each}
-								</tbody>
-							</table>
-						</div>
-						<div class="dashboard-chart-footer">
-							{#if hasDriverData}
-								<ul
-									class="flex flex-wrap gap-x-1.5 gap-y-1"
-									aria-label="Incident type legend for {driverStackedBarData.periodLabel}. Click to show or hide a series. Hover to highlight a series."
-									onpointerleave={() => {
-										hoveredDriverTypeLabel = null;
-									}}
-								>
-									{#each driverStackedBarData.datasets as ds (`${ds.label}-${ds.total}-${timeRange}`)}
-										{@const visible = isLegendVisible(hiddenDriverTypeLabels, ds.label)}
-										{@const focus = hoveredDriverTypeLabel}
-										{@const dimLegend =
-											visible && focus != null && focus !== ds.label}
-										{@const activeLegend = visible && focus === ds.label}
-										<li>
-											<button
-												type="button"
-												class="dashboard-legend-btn flex max-w-full items-center gap-1 text-[12px] leading-tight text-warm-600 {visible
-													? dimLegend
-														? 'opacity-35'
-														: activeLegend
-															? 'bg-warm-100 text-warm-800 opacity-100 ring-1 ring-warm-300/80 dark:bg-warm-200'
-															: ''
-													: 'opacity-40 line-through'}"
-												aria-pressed={visible}
-												title={visible
-													? `Hide ${ds.label} on chart`
-													: `Show ${ds.label} on chart`}
-												onpointerenter={() => {
-													hoveredDriverTypeLabel = ds.label;
-												}}
-												onclick={() => toggleDriverTypeLegend(ds.label)}
-											>
-												<span
-													class="inline-block h-2.5 w-2.5 shrink-0 rounded-full {dimLegend
-														? 'opacity-50'
-														: ''}"
-													style="background: {typeof ds.borderColor === 'string'
-														? ds.borderColor
-														: '#666'}"
-													aria-hidden="true"
-												></span>
-												<span class="truncate">{ds.label} ({ds.total})</span>
-											</button>
-										</li>
-									{/each}
-								</ul>
-							{/if}
-						</div>
-					</section>
 				</div>
 
-				<!-- Driver × month tally + NSW map side by side (period filter applies to table) -->
+				<!-- Driver table + bar chart side by side -->
 				<div
-					class="dashboard-table-map-row mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2 lg:items-stretch"
+					class="dashboard-driver-row mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2 lg:items-stretch"
 				>
 					<section
 						class="flex min-h-0 min-w-0 flex-col rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4 dark:bg-warm-100"
@@ -3735,16 +3634,118 @@
 						{/if}
 					</section>
 
-					<div class="flex min-h-0 min-w-0 flex-col" data-pdf-hide>
-						<div class="min-h-0 flex-1 [&_.map-chart-shell]:h-full">
-							<NswIncidentMap
-								incidents={periodIncidents}
-								periodLabel={timeRangeLabel}
-								onPersistCoords={async (updates) => {
-									await incidentStore.persistLocationCoords(updates);
-								}}
-							/>
+					<section
+						class="dashboard-chart-card min-w-0 overflow-hidden rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
+						data-pdf-driver-chart
+						aria-labelledby="driver-chart-title"
+						aria-describedby="driver-chart-summary"
+					>
+						<div class="dashboard-chart-header">
+							<h2 class="text-sm font-semibold text-warm-800" id="driver-chart-title">
+								Incidents by Driver
+							</h2>
+							<p class="dashboard-chart-meta text-xs text-warm-500">
+								{timeRangeLabel} · stacked by type
+							</p>
 						</div>
+						<p id="driver-chart-summary" class="sr-only">{driverChartAriaLabel}</p>
+						<div class="dashboard-chart-plot relative w-full">
+							{#if !hasDriverData}
+								<div class="flex h-full items-center justify-center">
+									<p class="text-sm text-warm-500">No incidents in this period.</p>
+								</div>
+							{/if}
+							<canvas
+								bind:this={driverCanvas}
+								class={!hasDriverData ? 'hidden' : 'block h-full w-full'}
+								aria-hidden="true"
+							></canvas>
+							<table class="sr-only" aria-labelledby="driver-chart-title">
+								<thead>
+									<tr>
+										<th scope="col">Driver</th>
+										{#each driverStackedBarData.typeLabels as typeLabel (typeLabel)}
+											<th scope="col">{typeLabel}</th>
+										{/each}
+										<th scope="col">Total</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each driverStackedBarData.driverRows as row (row.label)}
+										<tr>
+											<th scope="row">{row.label}</th>
+											{#each row.byType as count, i (`${row.label}-${driverStackedBarData.typeLabels[i] ?? i}`)}
+												<td>{count}</td>
+											{/each}
+											<td>{row.total}</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+						<div class="dashboard-chart-footer">
+							{#if hasDriverData}
+								<ul
+									class="flex flex-wrap gap-x-1.5 gap-y-1"
+									aria-label="Incident type legend for {driverStackedBarData.periodLabel}. Click to show or hide a series. Hover to highlight a series."
+									onpointerleave={() => {
+										hoveredDriverTypeLabel = null;
+									}}
+								>
+									{#each driverStackedBarData.datasets as ds (`${ds.label}-${ds.total}-${timeRange}`)}
+										{@const visible = isLegendVisible(hiddenDriverTypeLabels, ds.label)}
+										{@const focus = hoveredDriverTypeLabel}
+										{@const dimLegend =
+											visible && focus != null && focus !== ds.label}
+										{@const activeLegend = visible && focus === ds.label}
+										<li>
+											<button
+												type="button"
+												class="dashboard-legend-btn flex max-w-full items-center gap-1 text-[12px] leading-tight text-warm-600 {visible
+													? dimLegend
+														? 'opacity-35'
+														: activeLegend
+															? 'bg-warm-100 text-warm-800 opacity-100 ring-1 ring-warm-300/80 dark:bg-warm-200'
+															: ''
+													: 'opacity-40 line-through'}"
+												aria-pressed={visible}
+												title={visible
+													? `Hide ${ds.label} on chart`
+													: `Show ${ds.label} on chart`}
+												onpointerenter={() => {
+													hoveredDriverTypeLabel = ds.label;
+												}}
+												onclick={() => toggleDriverTypeLegend(ds.label)}
+											>
+												<span
+													class="inline-block h-2.5 w-2.5 shrink-0 rounded-full {dimLegend
+														? 'opacity-50'
+														: ''}"
+													style="background: {typeof ds.borderColor === 'string'
+														? ds.borderColor
+														: '#666'}"
+													aria-hidden="true"
+												></span>
+												<span class="truncate">{ds.label} ({ds.total})</span>
+											</button>
+										</li>
+									{/each}
+								</ul>
+							{/if}
+						</div>
+					</section>
+				</div>
+
+				<!-- NSW map on its own full-width row -->
+				<div class="dashboard-map-row mt-2" data-pdf-hide>
+					<div class="min-h-[min(28rem,55vh)] w-full [&_.map-chart-shell]:h-full [&_.map-chart-shell]:min-h-[min(28rem,55vh)]">
+						<NswIncidentMap
+							incidents={periodIncidents}
+							periodLabel={timeRangeLabel}
+							onPersistCoords={async (updates) => {
+								await incidentStore.persistLocationCoords(updates);
+							}}
+						/>
 					</div>
 				</div>
 				</section>
