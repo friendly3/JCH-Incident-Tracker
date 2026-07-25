@@ -2,32 +2,58 @@ import { createServerClient } from '@supabase/ssr'
 import type { CookieOptions } from '@supabase/ssr'
 import { error, redirect, type Handle, type HandleServerError } from '@sveltejs/kit'
 import { sequence } from '@sveltejs/kit/hooks'
-import { env } from '$env/dynamic/private'
+import { env as privateEnv } from '$env/dynamic/private'
 
-function resolveSupabaseConfig() {
-	// Cloudflare Pages runtime bindings + local .env (VITE_ prefix used historically)
-	const supabaseUrl =
-		env.VITE_SUPABASE_URL ||
-		env.PUBLIC_SUPABASE_URL ||
-		env.SUPABASE_URL ||
-		''
-	const supabaseAnonKey =
-		env.VITE_SUPABASE_ANON_KEY ||
-		env.PUBLIC_SUPABASE_ANON_KEY ||
-		env.SUPABASE_ANON_KEY ||
-		''
-	return { supabaseUrl, supabaseAnonKey }
+/**
+ * Resolve Supabase URL/key from every place CF Pages / Vite may put them:
+ * - $env/dynamic/private (Worker runtime bindings)
+ * - event.platform.env (Cloudflare platform)
+ * - import.meta.env (inlined at build when VITE_* is set during `npm run build`)
+ */
+function resolveSupabaseConfig(platformEnv?: Record<string, unknown> | null) {
+	const fromImportMeta = (key: string): string => {
+		const v = (import.meta.env as Record<string, unknown>)[key]
+		return typeof v === 'string' && v.length > 0 ? v : ''
+	}
+	const fromPlatform = (key: string): string => {
+		if (!platformEnv) return ''
+		const v = platformEnv[key]
+		return typeof v === 'string' && v.length > 0 ? v : ''
+	}
+	const fromPrivate = (key: string): string => {
+		const v = privateEnv[key]
+		return typeof v === 'string' && v.length > 0 ? v : ''
+	}
+	const pick = (...keys: string[]) => {
+		for (const key of keys) {
+			const v = fromPrivate(key) || fromPlatform(key) || fromImportMeta(key)
+			if (v) return v
+		}
+		return ''
+	}
+
+	return {
+		supabaseUrl: pick('VITE_SUPABASE_URL', 'PUBLIC_SUPABASE_URL', 'SUPABASE_URL'),
+		supabaseAnonKey: pick(
+			'VITE_SUPABASE_ANON_KEY',
+			'PUBLIC_SUPABASE_ANON_KEY',
+			'SUPABASE_ANON_KEY'
+		)
+	}
 }
 
 // Create Supabase server client for SSR
 export const supabase: Handle = async ({ event, resolve }) => {
-	const { supabaseUrl, supabaseAnonKey } = resolveSupabaseConfig()
+	const platformEnv = (
+		event.platform as { env?: Record<string, unknown> } | undefined
+	)?.env
+	const { supabaseUrl, supabaseAnonKey } = resolveSupabaseConfig(platformEnv)
 
 	if (!supabaseUrl || !supabaseAnonKey) {
 		// Surface a clear message instead of a bare "Internal Error"
 		error(
 			500,
-			'Missing Supabase configuration (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY). Set them in Cloudflare Pages → Settings → Environment variables for Production and Preview, then redeploy.'
+			'Missing Supabase configuration (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY). Set them in Cloudflare Pages → Settings → Environment variables for Production and Preview (Build and runtime), then redeploy.'
 		)
 	}
 
