@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { invalidateAll } from '$app/navigation';
 	import { incidentStore } from '$lib/data/store.svelte';
-	import { formatDate, formatDateTimeFields, normalizeDateOnly } from '$lib/formatDate';
+	import { formatDate, formatDateTimeFields } from '$lib/formatDate';
 	import type { Incident } from '$lib/data/incidents';
 	import {
 		getActionPillClass,
@@ -2504,7 +2504,10 @@
 		return dashboardIncidents.filter((i) => isDateReceivedInTimeRange(i.dateReceived, range));
 	});
 
-	/** Counts by resolution status in the selected period — sorted high → low. */
+	/**
+	 * Counts by resolution status in the selected period.
+	 * Order: New → Ongoing → remaining statuses by count high → low.
+	 */
 	const incidentsByActionStatus = $derived.by(() => {
 		const grouped = new Map<string, { label: string; count: number }>();
 		for (const incident of periodIncidents) {
@@ -2515,9 +2518,20 @@
 				count: (existing?.count ?? 0) + 1
 			});
 		}
+		function statusOrderRank(label: string): number {
+			const key = label.trim().toUpperCase();
+			if (key === 'NEW') return 0;
+			if (key === 'ONGOING') return 1;
+			return 2;
+		}
 		return Array.from(grouped.values())
 			.map(({ label, count }) => [label, count] as [string, number])
-			.sort(([, a], [, b]) => b - a);
+			.sort(([labelA, countA], [labelB, countB]) => {
+				const rankA = statusOrderRank(labelA);
+				const rankB = statusOrderRank(labelB);
+				if (rankA !== rankB) return rankA - rankB;
+				return countB - countA;
+			});
 	});
 
 	const actionStatusBarData = $derived.by(() => ({
@@ -3034,18 +3048,16 @@
 	const totalIncidents = $derived(periodIncidents.length);
 
 	/**
-	 * Resolved = resolution status is "Resolved" AND a responded date is set.
-	 * Unresolved = anything that does not meet both conditions.
+	 * Unresolved = resolution status is "Ongoing" or "New".
+	 * Resolved = every other resolution status (LIT, LPO, Resolved, Ack, AP staff, etc.).
 	 */
-	function isIncidentResolved(incident: Incident): boolean {
+	function isIncidentUnresolved(incident: Incident): boolean {
 		const actionStatus = (incident.action ?? '').trim().toUpperCase();
-		const actionStatusIsResolved = actionStatus === 'RESOLVED';
-		const hasRespondedDate = Boolean(normalizeDateOnly(incident.dateResponse));
-		return actionStatusIsResolved && hasRespondedDate;
+		return actionStatus === 'ONGOING' || actionStatus === 'NEW';
 	}
 
-	const resolvedIncidents = $derived(periodIncidents.filter(isIncidentResolved).length);
-	const unresolvedIncidents = $derived(totalIncidents - resolvedIncidents);
+	const unresolvedIncidents = $derived(periodIncidents.filter(isIncidentUnresolved).length);
+	const resolvedIncidents = $derived(totalIncidents - unresolvedIncidents);
 	const resolvedPct = $derived(
 		totalIncidents > 0 ? Math.round((resolvedIncidents / totalIncidents) * 100) : 0
 	);
@@ -3239,7 +3251,7 @@
 									<div
 										class="h-1.5 w-full overflow-hidden rounded-full bg-warm-100 dark:bg-warm-200"
 										role="presentation"
-										title="{resolvedPct}% of period is resolved (status Resolved + Date Responded)"
+										title="{resolvedPct}% of period is resolved (any status except Ongoing and New)"
 									>
 										<div
 											class="h-full rounded-full bg-emerald-500/90"
@@ -3282,8 +3294,8 @@
 								id="unresolved-callout-tip"
 								class="text-[10px] leading-snug text-amber-800/85 dark:text-amber-200/85"
 							>
-								Not fully closed — status is not <span class="font-semibold">Resolved</span>, or
-								<span class="font-semibold">Date Responded</span> is missing.
+								Resolution status is <span class="font-semibold">Ongoing</span> or
+								<span class="font-semibold">New</span>.
 							</p>
 						</section>
 
@@ -3317,8 +3329,8 @@
 								id="resolved-callout-tip"
 								class="text-[10px] leading-snug text-emerald-800/85 dark:text-emerald-200/85"
 							>
-								Status is <span class="font-semibold">Resolved</span> and a
-								<span class="font-semibold">Date Responded</span> is set.
+								Any resolution status except <span class="font-semibold">Ongoing</span> and
+								<span class="font-semibold">New</span>.
 							</p>
 						</section>
 
