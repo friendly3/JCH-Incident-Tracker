@@ -849,6 +849,27 @@ body {
 	}
 
 	/*
+	 * Left nav: block pan/scroll gestures on the rail (collapsed or expanded).
+	 * Links / buttons / theme toggle still receive taps.
+	 */
+	.app-side-nav {
+		touch-action: none;
+		overscroll-behavior: none;
+	}
+
+	.app-side-nav__body {
+		/* Avoid the nav list itself becoming a pan surface on tablet */
+		touch-action: none;
+		overscroll-behavior: none;
+		overflow: hidden !important;
+	}
+
+	.app-side-nav a,
+	.app-side-nav button {
+		touch-action: manipulation;
+	}
+
+	/*
 	 * Column headers: table-fixed + nowrap was causing labels to paint over
 	 * neighbours on ~11–13″ widths. Allow 2-line wrap and clip overflow.
 	 * Desktop (>1366px) is outside this media block and stays unchanged.

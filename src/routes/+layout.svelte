@@ -95,7 +95,7 @@
 	{#if data.user}
 	<!-- Collapsible Left Navigation — icon rail when collapsed -->
 	<div
-		class="flex shrink-0 flex-col border-r border-warm-200 bg-warm-100 transition-[width] duration-300 dark:bg-warm-50 {isNavOpen
+		class="app-side-nav flex shrink-0 flex-col border-r border-warm-200 bg-warm-100 transition-[width] duration-300 dark:bg-warm-50 {isNavOpen
 			? 'w-64'
 			: 'w-14'}"
 	>
@@ -132,7 +132,11 @@
 		</div>
 
 		<!-- Nav Content -->
-		<div class="scroll-touch flex-1 overflow-auto {isNavOpen ? 'p-2 text-sm sm:p-3' : 'p-1'}">
+		<div
+			class="app-side-nav__body scroll-touch flex-1 overflow-auto {isNavOpen
+				? 'p-2 text-sm sm:p-3'
+				: 'p-1'}"
+		>
 			{#if isNavOpen}
 				<nav class="space-y-1 text-warm-600">
 					<a
