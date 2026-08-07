@@ -154,6 +154,18 @@
 		appliedDrillKey = searchStr;
 		const params = new URLSearchParams(searchStr.startsWith('?') ? searchStr.slice(1) : searchStr);
 
+		const hasDrillParams =
+			params.has('driver') ||
+			params.has('type') ||
+			params.has('period') ||
+			params.has('drill');
+
+		// Clean URL (e.g. after Clear drill-down) — do not leave stale drill filters on
+		if (!hasDrillParams) {
+			drillSource = null;
+			return;
+		}
+
 		const driver = params.get('driver');
 		if (driver !== null) {
 			filterDriver = driver === '' ? DRIVER_FILTER_UNASSIGNED : driver;
@@ -197,24 +209,25 @@
 		return filterDateRange;
 	}
 
-	function clearDrillDown() {
-		// Drop every filter applied by the drill-down so the full list is shown again
+	/** Reset list to unfiltered full view after leaving a dashboard drill-down. */
+	function resetListAfterDrillDown() {
+		// Mark the current drill URL as already handled so it cannot re-apply mid-nav
+		appliedDrillKey = page.url.search;
 		drillSource = null;
 		filterDriver = '';
 		filterType = '';
 		filterDateRange = 'all';
-		// Prevent applyUrlFiltersFromSearch from re-applying the old query string
-		// if navigation is slightly delayed; empty URL key matches a clean list.
-		appliedDrillKey = '';
+		// Open every month group so records are not hidden under collapsed accordions
+		expandedMonths = new Set(allMonthKeys);
+	}
+
+	function clearDrillDown() {
+		resetListAfterDrillDown();
 		void goto('/', { replaceState: true, keepFocus: true, noScroll: true });
 	}
 
 	function clearDrillDownAndGoDashboard() {
-		drillSource = null;
-		filterDriver = '';
-		filterType = '';
-		filterDateRange = 'all';
-		appliedDrillKey = '';
+		resetListAfterDrillDown();
 		void goto('/dashboard');
 	}
 
