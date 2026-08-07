@@ -2138,11 +2138,15 @@
 				ty += 3.5;
 				pdf.setFont('helvetica', 'normal');
 				pdf.setFontSize(6);
-				if (teamLeaderStats.rows.length === 0) {
+				if (teamLeaderStats.rows.length === 0 && teamLeaderStats.unassignedTotal === 0) {
 					setText(muted);
 					pdf.text('No ongoing or resolved incidents in this period', tableX, ty + 4);
 				} else {
-					const visible = teamLeaderStats.rows.slice(0, maxRows);
+					const reserveUnassigned = teamLeaderStats.unassignedTotal > 0 ? 1 : 0;
+					const visible = teamLeaderStats.rows.slice(
+						0,
+						Math.max(0, maxRows - reserveUnassigned)
+					);
 					for (const row of visible) {
 						if (ty > y + midChartH - 6) break;
 						setText(ink);
@@ -2167,6 +2171,23 @@
 							tableX,
 							ty
 						);
+						ty += rowH;
+					}
+					// Unassigned: Total only (no Ongoing / Resolved breakdown)
+					if (teamLeaderStats.unassignedTotal > 0 && ty <= y + midChartH - 6) {
+						setText(muted);
+						pdf.setFont('helvetica', 'italic');
+						pdf.setFontSize(6);
+						pdf.text('Unassigned', tableX, ty);
+						pdf.setFont('helvetica', 'normal');
+						pdf.text('—', xOngoing - 1, ty, { align: 'right' });
+						pdf.text('—', xOngoingPct - 1, ty, { align: 'right' });
+						pdf.text('—', xResolved - 1, ty, { align: 'right' });
+						pdf.text('—', xResolvedPct - 1, ty, { align: 'right' });
+						setText(ink);
+						pdf.text(String(teamLeaderStats.unassignedTotal), xTotal - 1, ty, {
+							align: 'right'
+						});
 					}
 				}
 			}
@@ -2629,13 +2650,16 @@
 	 * Stats by Team Leader: grouped by Responded By (labelled Team Leader).
 	 * Ongoing = resolution status Ongoing.
 	 * Resolved = any resolution status except Ongoing and New (same rule as KPI tiles).
-	 * Each % is that column’s share of its own total (1 decimal).
+	 * Each % is that column’s share of its own total among assigned leaders (1 decimal).
+	 * Unassigned Responded By is a separate bottom row with Total only (no Ongoing/Resolved split).
 	 */
 	const statsByTeamLeader = $derived.by(() => {
 		const byLeader = new Map<
 			string,
 			{ key: string; label: string; ongoing: number; resolved: number }
 		>();
+		/** Ongoing + Resolved with blank/unassigned Responded By (no per-status breakdown). */
+		let unassignedTotal = 0;
 		for (const incident of periodIncidents) {
 			const action = (incident.action ?? '').trim().toUpperCase();
 			const isOngoing = action === 'ONGOING';
@@ -2645,6 +2669,11 @@
 			if (!isOngoing && !isResolved) continue;
 
 			const r = normalizeAggregationKey(incident.response, 'Unassigned');
+			if (isUnassignedCategory(r.label) || r.key === 'UNASSIGNED') {
+				unassignedTotal += 1;
+				continue;
+			}
+
 			let row = byLeader.get(r.key);
 			if (!row) {
 				row = { key: r.key, label: r.label, ongoing: 0, resolved: 0 };
@@ -2660,11 +2689,13 @@
 		});
 		const totalOngoing = rows.reduce((sum, row) => sum + row.ongoing, 0);
 		const totalResolved = rows.reduce((sum, row) => sum + row.resolved, 0);
-		const grandTotal = totalOngoing + totalResolved;
+		const leadersTotal = totalOngoing + totalResolved;
+		const grandTotal = leadersTotal + unassignedTotal;
 		return {
 			periodLabel: timeRangeLabel,
 			totalOngoing,
 			totalResolved,
+			unassignedTotal,
 			grandTotal,
 			rows: rows.map((row) => {
 				const total = row.ongoing + row.resolved;
@@ -2672,10 +2703,10 @@
 					key: row.key,
 					label: row.label,
 					ongoing: row.ongoing,
-					/** Share of total Ongoing in this table; 1 decimal for display. */
+					/** Share of assigned-leaders Ongoing; 1 decimal for display. */
 					ongoingPct: totalOngoing > 0 ? (row.ongoing / totalOngoing) * 100 : 0,
 					resolved: row.resolved,
-					/** Share of total Resolved in this table; 1 decimal for display. */
+					/** Share of assigned-leaders Resolved; 1 decimal for display. */
 					resolvedPct: totalResolved > 0 ? (row.resolved / totalResolved) * 100 : 0,
 					/** Ongoing + Resolved for this team leader. */
 					total
@@ -2684,14 +2715,17 @@
 		};
 	});
 
-	const hasStatsByTeamLeader = $derived(statsByTeamLeader.rows.length > 0);
+	const hasStatsByTeamLeader = $derived(
+		statsByTeamLeader.rows.length > 0 || statsByTeamLeader.unassignedTotal > 0
+	);
 
 	const statsByTeamLeaderAriaLabel = $derived.by(() => {
-		const { rows, totalOngoing, totalResolved, grandTotal, periodLabel } = statsByTeamLeader;
-		if (rows.length === 0) {
+		const { rows, totalOngoing, totalResolved, unassignedTotal, grandTotal, periodLabel } =
+			statsByTeamLeader;
+		if (rows.length === 0 && unassignedTotal === 0) {
 			return `Stats by Team Leader (${periodLabel}): no ongoing or resolved incidents in this period`;
 		}
-		return `Stats by Team Leader for ${periodLabel}. ${rows.length} team leader${rows.length === 1 ? '' : 's'}, ${totalOngoing} ongoing, ${totalResolved} resolved, ${grandTotal} total.`;
+		return `Stats by Team Leader for ${periodLabel}. ${rows.length} team leader${rows.length === 1 ? '' : 's'}, ${totalOngoing} ongoing, ${totalResolved} resolved, ${unassignedTotal} unassigned, ${grandTotal} total.`;
 	});
 
 	const hasActionStatusData = $derived(incidentsByActionStatus.length > 0);
@@ -3680,6 +3714,48 @@
 													</td>
 												</tr>
 											{/each}
+											{#if statsByTeamLeader.unassignedTotal > 0}
+												<tr
+													class="border-t border-warm-200 bg-warm-50/60 dark:bg-warm-200/30"
+												>
+													<th
+														scope="row"
+														class="px-2 py-1.5 font-medium italic text-warm-600 sm:px-3"
+													>
+														Unassigned
+													</th>
+													<td
+														class="px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
+														aria-hidden="true"
+													>
+														—
+													</td>
+													<td
+														class="px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
+														aria-hidden="true"
+													>
+														—
+													</td>
+													<td
+														class="px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
+														aria-hidden="true"
+													>
+														—
+													</td>
+													<td
+														class="px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
+														aria-hidden="true"
+													>
+														—
+													</td>
+													<td
+														class="px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
+														title="Ongoing + Resolved with no Responded By"
+													>
+														{statsByTeamLeader.unassignedTotal}
+													</td>
+												</tr>
+											{/if}
 										</tbody>
 										<tfoot
 											class="sticky bottom-0 border-t border-warm-200 bg-warm-50 dark:bg-warm-200"
@@ -3713,6 +3789,7 @@
 												</td>
 												<td
 													class="px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
+													title="Team leaders + Unassigned"
 												>
 													{statsByTeamLeader.grandTotal}
 												</td>
