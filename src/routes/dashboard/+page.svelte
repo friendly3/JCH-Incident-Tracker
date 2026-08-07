@@ -2651,23 +2651,18 @@
 	 * Ongoing = resolution status Ongoing.
 	 * Resolved = any resolution status except Ongoing and New (same rule as KPI tiles).
 	 * Each % is that column’s share of its own total among assigned leaders (1 decimal).
-	 * Unassigned = Responded By is null/empty only (separate bottom row, Total only).
+	 *
+	 * Unassigned = Responded By is null/blank only (any resolution status, including New).
+	 * Shown as a bottom row with Total only — new/unanswered items often have no Responded By yet.
 	 */
 	const statsByTeamLeader = $derived.by(() => {
 		const byLeader = new Map<
 			string,
 			{ key: string; label: string; ongoing: number; resolved: number }
 		>();
-		/** Ongoing + Resolved where Responded By is null/blank (no per-status breakdown). */
+		/** Any period incident with null/blank Responded By (no status filter, no Ongoing/Resolved split). */
 		let unassignedTotal = 0;
 		for (const incident of periodIncidents) {
-			const action = (incident.action ?? '').trim().toUpperCase();
-			const isOngoing = action === 'ONGOING';
-			const isNew = action === 'NEW';
-			// Resolved = not Ongoing and not New
-			const isResolved = !isOngoing && !isNew;
-			if (!isOngoing && !isResolved) continue;
-
 			// Strict: only null/undefined/whitespace counts as Unassigned (not the label "Unassigned")
 			const respondedByRaw = incident.response;
 			const respondedByEmpty =
@@ -2677,6 +2672,13 @@
 				unassignedTotal += 1;
 				continue;
 			}
+
+			const action = (incident.action ?? '').trim().toUpperCase();
+			const isOngoing = action === 'ONGOING';
+			const isNew = action === 'NEW';
+			// Resolved = not Ongoing and not New — New is excluded from leader Ongoing/Resolved columns
+			const isResolved = !isOngoing && !isNew;
+			if (!isOngoing && !isResolved) continue;
 
 			const r = normalizeAggregationKey(incident.response, 'Unassigned');
 			let row = byLeader.get(r.key);
@@ -3757,7 +3759,7 @@
 													</td>
 													<td
 														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
-														title="Ongoing + Resolved where Responded By is empty"
+														title="All period incidents with empty Responded By (any status)"
 													>
 														{statsByTeamLeader.unassignedTotal}
 													</td>
