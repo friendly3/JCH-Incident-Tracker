@@ -698,30 +698,50 @@ body {
 	}
 
 	/*
-	 * Incidents list: shrink filter chrome so the table can use ~2/3 of the viewport.
-	 * Overrides global coarse-pointer min-height (44px) inside the filter strip only.
+	 * Incidents list: keep chrome to ~1/4 of the viewport so the table can use ~3/4.
+	 * Overrides global coarse-pointer min-height inside the filter strip only.
+	 * Desktop (>1366px) is outside this media block and stays unchanged.
 	 */
 	.incidents-list-header {
-		padding-top: 0.5rem !important;
-		padding-bottom: 0.5rem !important;
+		padding-top: 0.35rem !important;
+		padding-bottom: 0.35rem !important;
+		padding-left: 0.75rem !important;
+		padding-right: 0.75rem !important;
 	}
 
 	.incidents-list-header h1 {
-		font-size: 1.125rem !important;
-		line-height: 1.3;
+		font-size: 1rem !important;
+		line-height: 1.25;
 	}
 
+	/* Hide secondary status line under title to reclaim height */
 	.incidents-list-header p {
-		margin-top: 0.125rem !important;
-		font-size: 0.75rem !important;
+		display: none !important;
+	}
+
+	/* Compact decorative truck (first flex child in header) */
+	.incidents-list-header > div > div:first-child {
+		height: 2rem !important;
+		width: 2rem !important;
+		margin-top: 0 !important;
+	}
+
+	.incidents-list-header > div > div:first-child svg {
+		height: 1.15rem !important;
+		width: 1.15rem !important;
+	}
+
+	.incidents-list-header > div {
+		gap: 0.5rem !important;
+		align-items: center !important;
 	}
 
 	.incidents-filters {
-		padding: 0.5rem 0.65rem !important;
+		padding: 0.35rem 0.5rem !important;
 	}
 
 	.incidents-filters-row {
-		gap: 0.35rem !important;
+		gap: 0.3rem !important;
 	}
 
 	.incidents-filters .incidents-filter-ctrl,
@@ -729,36 +749,40 @@ body {
 	.incidents-filters input.incidents-filter-ctrl,
 	.incidents-filters button.incidents-filter-ctrl,
 	.incidents-list-actions .incidents-filter-ctrl {
-		min-height: 1.875rem !important;
-		padding-top: 0.2rem !important;
-		padding-bottom: 0.2rem !important;
-		padding-left: 0.5rem !important;
-		padding-right: 0.5rem !important;
-		font-size: 0.75rem !important;
-		line-height: 1.25 !important;
+		min-height: 1.65rem !important;
+		padding-top: 0.1rem !important;
+		padding-bottom: 0.1rem !important;
+		padding-left: 0.4rem !important;
+		padding-right: 0.4rem !important;
+		font-size: 0.7rem !important;
+		line-height: 1.2 !important;
 	}
 
 	.incidents-filters-meta {
-		margin-top: 0.35rem !important;
-		font-size: 0.7rem !important;
+		margin-top: 0.2rem !important;
+		font-size: 0.65rem !important;
+		line-height: 1.2 !important;
 	}
 
 	.incidents-list-actions {
-		margin-top: 0.4rem !important;
+		margin-top: 0.25rem !important;
 		margin-bottom: 0 !important;
+		gap: 0.35rem !important;
 	}
 
 	.incidents-table-pane {
-		margin-top: 0.4rem !important;
-		/* Prefer list filling remaining column height (~2/3+ after compact chrome) */
+		margin-top: 0.25rem !important;
 		min-height: 0;
-		flex: 1 1 auto;
+		/* Claim ~3/4 of the dynamic viewport for the list */
+		flex: 1 1 75dvh !important;
+		min-height: 75dvh !important;
 	}
 
 	.incidents-table-scroll {
 		max-height: none !important;
-		/* Fallback floor so the table never collapses under chrome */
-		min-height: min(66dvh, 100%);
+		min-height: 100% !important;
+		height: 100% !important;
+		flex: 1 1 auto !important;
 	}
 
 	/*
@@ -849,7 +873,7 @@ body {
 	.incidents-filters button,
 	.incidents-list-actions .incidents-filter-ctrl,
 	.incidents-list-actions button {
-		min-height: 2rem !important;
+		min-height: 1.75rem !important;
 	}
 }
 

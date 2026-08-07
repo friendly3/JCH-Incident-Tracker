@@ -999,12 +999,14 @@
 					Clear filters
 				</button>
 			</div>
-			<p class="incidents-filters-meta mt-2 text-xs text-warm-500 sm:text-sm">
-				{filtered.length} {filtered.length === 1 ? 'incident' : 'incidents'} found
-			</p>
-		</div>
-		<!-- Actions under filters: Add, Refresh (also runs parse subjects → DB) -->
-		<div class="incidents-list-actions mt-2 flex flex-wrap items-center justify-start gap-2 px-1 sm:mt-3 sm:pl-[2ch]">
+			<!-- Count + primary actions on one row to save vertical space (esp. tablet) -->
+			<div
+				class="incidents-list-actions mt-1.5 flex flex-wrap items-center justify-between gap-2 border-t border-warm-100 pt-1.5 sm:mt-2 sm:pt-2"
+			>
+				<p class="incidents-filters-meta m-0 text-xs text-warm-500 sm:text-sm">
+					{filtered.length} {filtered.length === 1 ? 'incident' : 'incidents'} found
+				</p>
+				<div class="flex flex-wrap items-center gap-2">
 			<button
 				type="button"
 				bind:this={addIncidentBtn}
@@ -1036,6 +1038,8 @@
 					/>
 				</svg>
 			</button>
+				</div>
+			</div>
 		</div>
 		{#if parseSubjectsResult}
 			<div
