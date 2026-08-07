@@ -198,16 +198,22 @@
 	}
 
 	function clearDrillDown() {
+		// Drop every filter applied by the drill-down so the full list is shown again
 		drillSource = null;
 		filterDriver = '';
 		filterType = '';
-		// Keep period so the user stays in the same window
+		filterDateRange = 'all';
+		// Prevent applyUrlFiltersFromSearch from re-applying the old query string
+		// if navigation is slightly delayed; empty URL key matches a clean list.
 		appliedDrillKey = '';
 		void goto('/', { replaceState: true, keepFocus: true, noScroll: true });
 	}
 
 	function clearDrillDownAndGoDashboard() {
 		drillSource = null;
+		filterDriver = '';
+		filterType = '';
+		filterDateRange = 'all';
 		appliedDrillKey = '';
 		void goto('/dashboard');
 	}
