@@ -745,11 +745,11 @@
 		aria-hidden={isFormExpanded || undefined}
 	>
 	<header
-		class="incidents-list-header flex-shrink-0 border-b border-warm-200 bg-white/80 px-4 py-3 backdrop-blur sm:px-6 sm:py-4"
+		class="page-app-header incidents-list-header flex-shrink-0 border-b border-warm-200 bg-white/80 px-4 py-3 backdrop-blur sm:px-6 sm:py-4"
 	>
-		<div class="flex w-full min-w-0 items-start gap-3">
+		<div class="page-app-header__inner flex w-full min-w-0 items-start gap-3">
 			<CourierTruckIcon />
-			<div class="min-w-0">
+			<div class="page-app-header__text min-w-0">
 				<h1 class="text-xl font-bold text-warm-800 sm:text-2xl">
 					JCH Pham AusPost Incident Tracker
 				</h1>

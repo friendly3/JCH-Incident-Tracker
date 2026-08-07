@@ -10,37 +10,9 @@
 
 	let { children, data } = $props();
 
-	/**
-	 * Sidebar open by default on desktop; starts collapsed on tablet-sized viewports
-	 * (portrait 11–13″ and narrow landscape) so content has room. User can always toggle.
-	 */
-	function preferredNavOpen(): boolean {
-		if (typeof window === 'undefined') return true;
-		try {
-			// ~iPad portrait / compact tablet width — keep main pane wide
-			if (window.matchMedia('(max-width: 1023px)').matches) return false;
-			// Landscape tablet with limited height still benefits from more content width
-			if (
-				window.matchMedia('(orientation: portrait) and (max-width: 1180px)').matches
-			) {
-				return false;
-			}
-		} catch {
-			/* ignore */
-		}
-		return true;
-	}
-
-	let isNavOpen = $state(true);
+	/** Icon rail by default; user can expand via the menu control. */
+	let isNavOpen = $state(false);
 	let showUserMenu = $state(false);
-	let navPreferenceApplied = $state(false);
-
-	$effect(() => {
-		if (typeof window === 'undefined' || navPreferenceApplied) return;
-		// Apply preferred open state once on mount (don't fight the user after they toggle)
-		navPreferenceApplied = true;
-		isNavOpen = preferredNavOpen();
-	});
 
 	/** Format Supabase `last_sign_in_at` for the nav (local en-AU date + time). */
 	function formatLastLoginAt(iso: string | undefined | null): string {

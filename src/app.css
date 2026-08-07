@@ -698,42 +698,52 @@ body {
 	}
 
 	/*
-	 * Incidents list: keep chrome to ~1/4 of the viewport so the table can use ~3/4.
-	 * Overrides global coarse-pointer min-height inside the filter strip only.
+	 * Shared page header + truck icon — compact on tablet only.
 	 * Desktop (>1366px) is outside this media block and stays unchanged.
 	 */
-	.incidents-list-header {
-		padding-top: 0.35rem !important;
-		padding-bottom: 0.35rem !important;
-		padding-left: 0.75rem !important;
-		padding-right: 0.75rem !important;
+	.page-app-header {
+		padding-top: 0.3rem !important;
+		padding-bottom: 0.3rem !important;
+		padding-left: 0.65rem !important;
+		padding-right: 0.65rem !important;
 	}
 
-	.incidents-list-header h1 {
-		font-size: 1rem !important;
-		line-height: 1.25;
+	.page-app-header__inner {
+		gap: 0.4rem !important;
+		align-items: center !important;
+		row-gap: 0.35rem !important;
 	}
 
-	/* Hide secondary status line under title to reclaim height */
+	.page-app-header h1 {
+		font-size: 0.95rem !important;
+		line-height: 1.2 !important;
+		font-weight: 700;
+	}
+
+	/* Hide secondary subtitle under title to reclaim height */
+	.page-app-header__sub,
+	.page-app-header__text > p,
 	.incidents-list-header p {
 		display: none !important;
 	}
 
-	/* Compact decorative truck (first flex child in header) */
-	.incidents-list-header > div > div:first-child {
-		height: 2rem !important;
-		width: 2rem !important;
+	/* Decorative truck — small tile on tablet */
+	.courier-truck-icon {
+		height: 1.75rem !important;
+		width: 1.75rem !important;
 		margin-top: 0 !important;
+		border-radius: 0.35rem !important;
 	}
 
-	.incidents-list-header > div > div:first-child svg {
-		height: 1.15rem !important;
-		width: 1.15rem !important;
+	.courier-truck-icon__svg {
+		height: 1rem !important;
+		width: 1rem !important;
 	}
 
-	.incidents-list-header > div {
-		gap: 0.5rem !important;
-		align-items: center !important;
+	/* Incidents list: keep remaining chrome small so the table can use ~3/4 */
+	.incidents-list-header {
+		padding-top: 0.3rem !important;
+		padding-bottom: 0.3rem !important;
 	}
 
 	.incidents-filters {
@@ -767,6 +777,22 @@ body {
 	.incidents-list-actions {
 		margin-top: 0.25rem !important;
 		margin-bottom: 0 !important;
+		gap: 0.35rem !important;
+	}
+
+	/* Dashboard header period control — smaller on tablet */
+	.page-app-header select.touch-target-inline,
+	.page-app-header select {
+		min-height: 1.75rem !important;
+		padding-top: 0.15rem !important;
+		padding-bottom: 0.15rem !important;
+		padding-left: 0.45rem !important;
+		padding-right: 0.45rem !important;
+		font-size: 0.75rem !important;
+	}
+
+	.page-app-header label {
+		font-size: 0.75rem !important;
 		gap: 0.35rem !important;
 	}
 

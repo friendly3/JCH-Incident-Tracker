@@ -3326,15 +3326,19 @@
 		class="scroll-touch flex min-h-0 flex-1 flex-col overflow-auto bg-warm-50"
 	>
 	<header
-		class="flex-shrink-0 border-b border-warm-200 bg-white/80 px-3 py-3 backdrop-blur sm:px-4"
+		class="page-app-header flex-shrink-0 border-b border-warm-200 bg-white/80 px-3 py-3 backdrop-blur sm:px-4"
 	>
 		<!-- Period sits immediately to the right of the title block (not page right-aligned) -->
-		<div class="flex w-full min-w-0 flex-wrap items-center gap-x-4 gap-y-2 sm:gap-x-5">
+		<div
+			class="page-app-header__inner flex w-full min-w-0 flex-wrap items-center gap-x-4 gap-y-2 sm:gap-x-5"
+		>
 			<div class="flex min-w-0 items-start gap-2">
 				<CourierTruckIcon />
-				<div class="min-w-0">
+				<div class="page-app-header__text min-w-0">
 					<h1 class="text-lg font-bold text-warm-800 sm:text-xl">Dashboard</h1>
-					<p class="mt-0.5 text-sm text-warm-500">Overview of incident tracking metrics</p>
+					<p class="page-app-header__sub mt-0.5 text-sm text-warm-500">
+						Overview of incident tracking metrics
+					</p>
 				</div>
 			</div>
 			{#if !data.loadError && !incidentStore.isLoading && !incidentStore.error}

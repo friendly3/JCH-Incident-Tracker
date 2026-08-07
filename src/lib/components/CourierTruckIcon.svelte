@@ -1,14 +1,14 @@
 <!--
   Heroicons outline truck (MIT) — shared courier/van mark for page titles.
-  Sized ~50% larger than the original h-6 / h-10 badge (h-9 icon, 3.75rem tile).
+  Desktop: h-9 icon in 3.75rem tile. Tablet: compact via .courier-truck-icon CSS.
 -->
 <span
-	class="mt-0.5 flex h-[3.75rem] w-[3.75rem] shrink-0 items-center justify-center rounded-lg bg-accent-50 text-accent-600 dark:bg-accent-100 dark:text-accent-600"
+	class="courier-truck-icon mt-0.5 flex h-[3.75rem] w-[3.75rem] shrink-0 items-center justify-center rounded-lg bg-accent-50 text-accent-600 dark:bg-accent-100 dark:text-accent-600"
 	aria-hidden="true"
 >
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
-		class="h-9 w-9"
+		class="courier-truck-icon__svg h-9 w-9"
 		fill="none"
 		viewBox="0 0 24 24"
 		stroke="currentColor"
