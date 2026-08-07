@@ -506,6 +506,8 @@
 	});
 
 	function isMonthExpanded(key: string): boolean {
+		// Drill-down from dashboard: expand every month group so all matching rows are visible
+		if (drillSource) return true;
 		if (expandedMonths !== null) {
 			return expandedMonths.has(key);
 		}
@@ -1070,9 +1072,8 @@
 	{#if mode === 'list' && !data.loadError && !incidentStore.isLoading && !incidentStore.error}
 	<div class="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden px-1 sm:mt-4 sm:px-0">
 		<div
-			class="incidents-table-scroll scroll-touch flex-1 overflow-auto rounded-lg border border-warm-200 bg-white shadow-sm"
-		>
-			style="max-height: calc(100vh - 280px);"
+			class="incidents-table-scroll scroll-touch min-h-0 flex-1 overflow-auto rounded-lg border border-warm-200 bg-white shadow-sm"
+			style="max-height: calc(100dvh - 280px);"
 		>
 			<table class="incidents-table w-full table-fixed text-left text-sm min-w-[1480px]">
 				<colgroup>
