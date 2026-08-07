@@ -2089,7 +2089,7 @@
 			pdf.setFontSize(7);
 			pdf.text(periodLabel, m + 3, y + 9);
 			pdf.text(
-				SHOW_TYPE_OVER_TIME_CHART ? periodLabel : `${periodLabel} · Ongoing only`,
+				SHOW_TYPE_OVER_TIME_CHART ? periodLabel : `${periodLabel} · Ongoing & Resolved`,
 				m + halfW + 7,
 				y + 9
 			);
@@ -2109,31 +2109,38 @@
 					'NONE'
 				);
 			} else if (!SHOW_TYPE_OVER_TIME_CHART) {
-				// Vector table: Team Leader | Ongoing | %
+				// Vector table: Team Leader | Ongoing | % | Resolved | % | Total
 				const tableX = m + halfW + 6;
 				const tableW = halfW - 8;
-				const colTeam = tableW * 0.5;
-				const colOngoing = tableW * 0.25;
-				const colPct = tableW * 0.25;
+				const colTeam = tableW * 0.3;
+				const colNum = tableW * 0.14;
+				const xOngoing = tableX + colTeam + colNum;
+				const xOngoingPct = xOngoing + colNum;
+				const xResolved = xOngoingPct + colNum;
+				const xResolvedPct = xResolved + colNum;
+				const xTotal = tableX + tableW;
 				let ty = y + 13;
 				const rowH = 5.2;
 				const maxRows = Math.max(0, Math.floor((plotH - 8) / rowH) - 1);
 				setText(ink);
 				pdf.setFont('helvetica', 'bold');
-				pdf.setFontSize(7.5);
+				pdf.setFontSize(6);
 				pdf.text('Team Leader', tableX, ty);
-				pdf.text('Ongoing', tableX + colTeam + colOngoing - 1, ty, { align: 'right' });
-				pdf.text('%', tableX + tableW - 1, ty, { align: 'right' });
+				pdf.text('Ongoing', xOngoing - 1, ty, { align: 'right' });
+				pdf.text('%', xOngoingPct - 1, ty, { align: 'right' });
+				pdf.text('Resolved', xResolved - 1, ty, { align: 'right' });
+				pdf.text('%', xResolvedPct - 1, ty, { align: 'right' });
+				pdf.text('Total', xTotal - 1, ty, { align: 'right' });
 				ty += 2;
 				setDraw(rule);
 				pdf.setLineWidth(0.2);
 				pdf.line(tableX, ty, tableX + tableW, ty);
 				ty += 3.5;
 				pdf.setFont('helvetica', 'normal');
-				pdf.setFontSize(7.5);
+				pdf.setFontSize(6);
 				if (teamLeaderStats.rows.length === 0) {
 					setText(muted);
-					pdf.text('No ongoing incidents in this period', tableX, ty + 4);
+					pdf.text('No ongoing or resolved incidents in this period', tableX, ty + 4);
 				} else {
 					const visible = teamLeaderStats.rows.slice(0, maxRows);
 					for (const row of visible) {
@@ -2141,15 +2148,20 @@
 						setText(ink);
 						const name = pdf.splitTextToSize(row.label, colTeam - 2);
 						pdf.text(name[0] ?? row.label, tableX, ty);
-						pdf.text(String(row.ongoing), tableX + colTeam + colOngoing - 1, ty, {
+						pdf.text(String(row.ongoing), xOngoing - 1, ty, { align: 'right' });
+						pdf.text(`${row.ongoingPct.toFixed(1)}%`, xOngoingPct - 1, ty, {
 							align: 'right'
 						});
-						pdf.text(`${row.pct.toFixed(1)}%`, tableX + tableW - 1, ty, { align: 'right' });
+						pdf.text(String(row.resolved), xResolved - 1, ty, { align: 'right' });
+						pdf.text(`${row.resolvedPct.toFixed(1)}%`, xResolvedPct - 1, ty, {
+							align: 'right'
+						});
+						pdf.text(String(row.total), xTotal - 1, ty, { align: 'right' });
 						ty += rowH;
 					}
 					if (teamLeaderStats.rows.length > visible.length) {
 						setText(muted);
-						pdf.setFontSize(6.5);
+						pdf.setFontSize(5.5);
 						pdf.text(
 							`+${teamLeaderStats.rows.length - visible.length} more…`,
 							tableX,
@@ -2614,48 +2626,72 @@
 	}));
 
 	/**
-	 * Stats by Team Leader: Ongoing incidents in the selected period,
-	 * grouped by Responded By (labelled Team Leader). % is share of that Ongoing tally.
+	 * Stats by Team Leader: grouped by Responded By (labelled Team Leader).
+	 * Ongoing = resolution status Ongoing.
+	 * Resolved = any resolution status except Ongoing and New (same rule as KPI tiles).
+	 * Each % is that column’s share of its own total (1 decimal).
 	 */
 	const statsByTeamLeader = $derived.by(() => {
-		const byLeader = new Map<string, { key: string; label: string; ongoing: number }>();
+		const byLeader = new Map<
+			string,
+			{ key: string; label: string; ongoing: number; resolved: number }
+		>();
 		for (const incident of periodIncidents) {
 			const action = (incident.action ?? '').trim().toUpperCase();
-			if (action !== 'ONGOING') continue;
+			const isOngoing = action === 'ONGOING';
+			const isNew = action === 'NEW';
+			// Resolved = not Ongoing and not New
+			const isResolved = !isOngoing && !isNew;
+			if (!isOngoing && !isResolved) continue;
+
 			const r = normalizeAggregationKey(incident.response, 'Unassigned');
-			const existing = byLeader.get(r.key);
-			if (existing) {
-				existing.ongoing += 1;
-			} else {
-				byLeader.set(r.key, { key: r.key, label: r.label, ongoing: 1 });
+			let row = byLeader.get(r.key);
+			if (!row) {
+				row = { key: r.key, label: r.label, ongoing: 0, resolved: 0 };
+				byLeader.set(r.key, row);
 			}
+			if (isOngoing) row.ongoing += 1;
+			else row.resolved += 1;
 		}
 		const rows = [...byLeader.values()].sort((a, b) => {
 			if (b.ongoing !== a.ongoing) return b.ongoing - a.ongoing;
+			if (b.resolved !== a.resolved) return b.resolved - a.resolved;
 			return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
 		});
 		const totalOngoing = rows.reduce((sum, row) => sum + row.ongoing, 0);
+		const totalResolved = rows.reduce((sum, row) => sum + row.resolved, 0);
+		const grandTotal = totalOngoing + totalResolved;
 		return {
 			periodLabel: timeRangeLabel,
 			totalOngoing,
-			rows: rows.map((row) => ({
-				key: row.key,
-				label: row.label,
-				ongoing: row.ongoing,
-				/** Share of total Ongoing in this table; 1 decimal for display. */
-				pct: totalOngoing > 0 ? (row.ongoing / totalOngoing) * 100 : 0
-			}))
+			totalResolved,
+			grandTotal,
+			rows: rows.map((row) => {
+				const total = row.ongoing + row.resolved;
+				return {
+					key: row.key,
+					label: row.label,
+					ongoing: row.ongoing,
+					/** Share of total Ongoing in this table; 1 decimal for display. */
+					ongoingPct: totalOngoing > 0 ? (row.ongoing / totalOngoing) * 100 : 0,
+					resolved: row.resolved,
+					/** Share of total Resolved in this table; 1 decimal for display. */
+					resolvedPct: totalResolved > 0 ? (row.resolved / totalResolved) * 100 : 0,
+					/** Ongoing + Resolved for this team leader. */
+					total
+				};
+			})
 		};
 	});
 
 	const hasStatsByTeamLeader = $derived(statsByTeamLeader.rows.length > 0);
 
 	const statsByTeamLeaderAriaLabel = $derived.by(() => {
-		const { rows, totalOngoing, periodLabel } = statsByTeamLeader;
+		const { rows, totalOngoing, totalResolved, grandTotal, periodLabel } = statsByTeamLeader;
 		if (rows.length === 0) {
-			return `Stats by Team Leader (${periodLabel}): no ongoing incidents in this period`;
+			return `Stats by Team Leader (${periodLabel}): no ongoing or resolved incidents in this period`;
 		}
-		return `Stats by Team Leader for ${periodLabel}. ${rows.length} team leader${rows.length === 1 ? '' : 's'}, ${totalOngoing} ongoing incident${totalOngoing === 1 ? '' : 's'}.`;
+		return `Stats by Team Leader for ${periodLabel}. ${rows.length} team leader${rows.length === 1 ? '' : 's'}, ${totalOngoing} ongoing, ${totalResolved} resolved, ${grandTotal} total.`;
 	});
 
 	const hasActionStatusData = $derived(incidentsByActionStatus.length > 0);
@@ -3547,41 +3583,64 @@
 								Stats by Team Leader
 							</h2>
 							<p class="dashboard-chart-meta text-xs text-warm-500">
-								{statsByTeamLeader.periodLabel} · Ongoing only
+								{statsByTeamLeader.periodLabel} · Ongoing &amp; Resolved
 							</p>
 						</div>
 						<p id="stats-by-team-leader-summary" class="sr-only">{statsByTeamLeaderAriaLabel}</p>
 						<div class="dashboard-chart-plot dashboard-team-leader-stats-plot relative flex min-h-0 w-full flex-col">
 							{#if !hasStatsByTeamLeader}
 								<div class="flex h-full flex-1 items-center justify-center">
-									<p class="text-sm text-warm-500">No ongoing incidents in this period.</p>
+									<p class="text-sm text-warm-500">
+										No ongoing or resolved incidents in this period.
+									</p>
 								</div>
 							{:else}
 								<div
 									class="dashboard-team-leader-stats-scroll min-h-0 flex-1 overflow-auto rounded-md border border-warm-200"
 								>
-									<table class="w-full border-collapse text-left text-sm">
+									<table class="w-full min-w-[20rem] border-collapse text-left text-sm">
 										<thead
 											class="sticky top-0 z-10 border-b border-warm-200 bg-warm-50 dark:bg-warm-200"
 										>
 											<tr>
 												<th
 													scope="col"
-													class="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-warm-600"
+													class="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-3"
 												>
 													Team Leader
 												</th>
 												<th
 													scope="col"
-													class="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600"
+													class="px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
 												>
 													Ongoing
 												</th>
 												<th
 													scope="col"
-													class="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600"
+													class="px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+													title="Share of total Ongoing"
 												>
 													%
+												</th>
+												<th
+													scope="col"
+													class="px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+												>
+													Resolved
+												</th>
+												<th
+													scope="col"
+													class="px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+													title="Share of total Resolved"
+												>
+													%
+												</th>
+												<th
+													scope="col"
+													class="px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-700 sm:px-2"
+													title="Ongoing + Resolved"
+												>
+													Total
 												</th>
 											</tr>
 										</thead>
@@ -3590,19 +3649,34 @@
 												<tr class="hover:bg-warm-50/80 dark:hover:bg-warm-200/40">
 													<th
 														scope="row"
-														class="px-3 py-1.5 font-medium text-warm-800"
+														class="px-2 py-1.5 font-medium text-warm-800 sm:px-3"
 													>
 														{row.label}
 													</th>
 													<td
-														class="px-3 py-1.5 text-center tabular-nums font-semibold text-warm-900"
+														class="px-1.5 py-1.5 text-center tabular-nums font-semibold text-warm-900 sm:px-2"
 													>
 														{row.ongoing}
 													</td>
 													<td
-														class="px-3 py-1.5 text-center tabular-nums text-warm-700"
+														class="px-1.5 py-1.5 text-center tabular-nums text-warm-700 sm:px-2"
 													>
-														{row.pct.toFixed(1)}%
+														{row.ongoingPct.toFixed(1)}%
+													</td>
+													<td
+														class="px-1.5 py-1.5 text-center tabular-nums font-semibold text-warm-900 sm:px-2"
+													>
+														{row.resolved}
+													</td>
+													<td
+														class="px-1.5 py-1.5 text-center tabular-nums text-warm-700 sm:px-2"
+													>
+														{row.resolvedPct.toFixed(1)}%
+													</td>
+													<td
+														class="px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
+													>
+														{row.total}
 													</td>
 												</tr>
 											{/each}
@@ -3613,19 +3687,34 @@
 											<tr>
 												<th
 													scope="row"
-													class="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-warm-700"
+													class="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-warm-700 sm:px-3"
 												>
 													All
 												</th>
 												<td
-													class="px-3 py-2 text-center text-sm font-bold tabular-nums text-warm-900"
+													class="px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
 												>
 													{statsByTeamLeader.totalOngoing}
 												</td>
 												<td
-													class="px-3 py-2 text-center text-sm font-bold tabular-nums text-warm-900"
+													class="px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
 												>
 													{statsByTeamLeader.totalOngoing > 0 ? '100.0%' : '—'}
+												</td>
+												<td
+													class="px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
+												>
+													{statsByTeamLeader.totalResolved}
+												</td>
+												<td
+													class="px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
+												>
+													{statsByTeamLeader.totalResolved > 0 ? '100.0%' : '—'}
+												</td>
+												<td
+													class="px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
+												>
+													{statsByTeamLeader.grandTotal}
 												</td>
 											</tr>
 										</tfoot>
