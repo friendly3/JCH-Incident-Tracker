@@ -2651,14 +2651,14 @@
 	 * Ongoing = resolution status Ongoing.
 	 * Resolved = any resolution status except Ongoing and New (same rule as KPI tiles).
 	 * Each % is that column’s share of its own total among assigned leaders (1 decimal).
-	 * Unassigned Responded By is a separate bottom row with Total only (no Ongoing/Resolved split).
+	 * Unassigned = Responded By is null/empty only (separate bottom row, Total only).
 	 */
 	const statsByTeamLeader = $derived.by(() => {
 		const byLeader = new Map<
 			string,
 			{ key: string; label: string; ongoing: number; resolved: number }
 		>();
-		/** Ongoing + Resolved with blank/unassigned Responded By (no per-status breakdown). */
+		/** Ongoing + Resolved where Responded By is null/blank (no per-status breakdown). */
 		let unassignedTotal = 0;
 		for (const incident of periodIncidents) {
 			const action = (incident.action ?? '').trim().toUpperCase();
@@ -2668,12 +2668,17 @@
 			const isResolved = !isOngoing && !isNew;
 			if (!isOngoing && !isResolved) continue;
 
-			const r = normalizeAggregationKey(incident.response, 'Unassigned');
-			if (isUnassignedCategory(r.label) || r.key === 'UNASSIGNED') {
+			// Strict: only null/undefined/whitespace counts as Unassigned (not the label "Unassigned")
+			const respondedByRaw = incident.response;
+			const respondedByEmpty =
+				respondedByRaw == null ||
+				(typeof respondedByRaw === 'string' && !respondedByRaw.trim());
+			if (respondedByEmpty) {
 				unassignedTotal += 1;
 				continue;
 			}
 
+			const r = normalizeAggregationKey(incident.response, 'Unassigned');
 			let row = byLeader.get(r.key);
 			if (!row) {
 				row = { key: r.key, label: r.label, ongoing: 0, resolved: 0 };
@@ -3632,7 +3637,9 @@
 								<div
 									class="dashboard-team-leader-stats-scroll min-h-0 flex-1 overflow-auto rounded-md border border-warm-200"
 								>
-									<table class="w-full min-w-[20rem] border-collapse text-left text-sm">
+									<table
+										class="tls-stats-table w-full min-w-[20rem] border-collapse text-left text-sm"
+									>
 										<thead
 											class="sticky top-0 z-10 border-b border-warm-200 bg-warm-50 dark:bg-warm-200"
 										>
@@ -3645,33 +3652,33 @@
 												</th>
 												<th
 													scope="col"
-													class="px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+													class="tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
 												>
 													Ongoing
 												</th>
 												<th
 													scope="col"
-													class="px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+													class="tls-col-group-end px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
 													title="Share of total Ongoing"
 												>
 													%
 												</th>
 												<th
 													scope="col"
-													class="px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+													class="tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
 												>
 													Resolved
 												</th>
 												<th
 													scope="col"
-													class="px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+													class="tls-col-group-end px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
 													title="Share of total Resolved"
 												>
 													%
 												</th>
 												<th
 													scope="col"
-													class="px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-700 sm:px-2"
+													class="tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-700 sm:px-2"
 													title="Ongoing + Resolved"
 												>
 													Total
@@ -3688,27 +3695,27 @@
 														{row.label}
 													</th>
 													<td
-														class="px-1.5 py-1.5 text-center tabular-nums font-semibold text-warm-900 sm:px-2"
+														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-semibold text-warm-900 sm:px-2"
 													>
 														{row.ongoing}
 													</td>
 													<td
-														class="px-1.5 py-1.5 text-center tabular-nums text-warm-700 sm:px-2"
+														class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-700 sm:px-2"
 													>
 														{row.ongoingPct.toFixed(1)}%
 													</td>
 													<td
-														class="px-1.5 py-1.5 text-center tabular-nums font-semibold text-warm-900 sm:px-2"
+														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-semibold text-warm-900 sm:px-2"
 													>
 														{row.resolved}
 													</td>
 													<td
-														class="px-1.5 py-1.5 text-center tabular-nums text-warm-700 sm:px-2"
+														class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-700 sm:px-2"
 													>
 														{row.resolvedPct.toFixed(1)}%
 													</td>
 													<td
-														class="px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
+														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
 													>
 														{row.total}
 													</td>
@@ -3725,32 +3732,32 @@
 														Unassigned
 													</th>
 													<td
-														class="px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
+														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
 														aria-hidden="true"
 													>
 														—
 													</td>
 													<td
-														class="px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
+														class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
 														aria-hidden="true"
 													>
 														—
 													</td>
 													<td
-														class="px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
+														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
 														aria-hidden="true"
 													>
 														—
 													</td>
 													<td
-														class="px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
+														class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
 														aria-hidden="true"
 													>
 														—
 													</td>
 													<td
-														class="px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
-														title="Ongoing + Resolved with no Responded By"
+														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
+														title="Ongoing + Resolved where Responded By is empty"
 													>
 														{statsByTeamLeader.unassignedTotal}
 													</td>
@@ -3768,27 +3775,27 @@
 													All
 												</th>
 												<td
-													class="px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
+													class="tls-col-group-start px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
 												>
 													{statsByTeamLeader.totalOngoing}
 												</td>
 												<td
-													class="px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
+													class="tls-col-group-end px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
 												>
 													{statsByTeamLeader.totalOngoing > 0 ? '100.0%' : '—'}
 												</td>
 												<td
-													class="px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
+													class="tls-col-group-start px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
 												>
 													{statsByTeamLeader.totalResolved}
 												</td>
 												<td
-													class="px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
+													class="tls-col-group-end px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
 												>
 													{statsByTeamLeader.totalResolved > 0 ? '100.0%' : '—'}
 												</td>
 												<td
-													class="px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
+													class="tls-col-group-start px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
 													title="Team leaders + Unassigned"
 												>
 													{statsByTeamLeader.grandTotal}
@@ -4476,6 +4483,26 @@
 	:global(.dashboard-team-leader-stats-scroll) {
 		min-height: 0;
 		height: 100%;
+	}
+
+	/*
+	 * Feint vertical rules group Ongoing+% and Resolved+% pairs
+	 * (and separate Total). Soft gray so it reads as structure, not grid.
+	 */
+	:global(.tls-stats-table .tls-col-group-start) {
+		border-left: 1px solid rgba(0, 0, 0, 0.08);
+	}
+
+	:global(.tls-stats-table .tls-col-group-end) {
+		border-right: 1px solid rgba(0, 0, 0, 0.08);
+	}
+
+	:global(.dark .tls-stats-table .tls-col-group-start) {
+		border-left-color: rgba(255, 255, 255, 0.1);
+	}
+
+	:global(.dark .tls-stats-table .tls-col-group-end) {
+		border-right-color: rgba(255, 255, 255, 0.1);
 	}
 
 	/* +10px so multi-line type legends are not clipped */
