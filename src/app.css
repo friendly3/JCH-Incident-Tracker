@@ -696,6 +696,161 @@ body {
 		padding-left: max(1rem, env(safe-area-inset-left, 0px));
 		padding-right: max(1rem, env(safe-area-inset-right, 0px));
 	}
+
+	/*
+	 * Incidents list: shrink filter chrome so the table can use ~2/3 of the viewport.
+	 * Overrides global coarse-pointer min-height (44px) inside the filter strip only.
+	 */
+	.incidents-list-header {
+		padding-top: 0.5rem !important;
+		padding-bottom: 0.5rem !important;
+	}
+
+	.incidents-list-header h1 {
+		font-size: 1.125rem !important;
+		line-height: 1.3;
+	}
+
+	.incidents-list-header p {
+		margin-top: 0.125rem !important;
+		font-size: 0.75rem !important;
+	}
+
+	.incidents-filters {
+		padding: 0.5rem 0.65rem !important;
+	}
+
+	.incidents-filters-row {
+		gap: 0.35rem !important;
+	}
+
+	.incidents-filters .incidents-filter-ctrl,
+	.incidents-filters select.incidents-filter-ctrl,
+	.incidents-filters input.incidents-filter-ctrl,
+	.incidents-filters button.incidents-filter-ctrl,
+	.incidents-list-actions .incidents-filter-ctrl {
+		min-height: 1.875rem !important;
+		padding-top: 0.2rem !important;
+		padding-bottom: 0.2rem !important;
+		padding-left: 0.5rem !important;
+		padding-right: 0.5rem !important;
+		font-size: 0.75rem !important;
+		line-height: 1.25 !important;
+	}
+
+	.incidents-filters-meta {
+		margin-top: 0.35rem !important;
+		font-size: 0.7rem !important;
+	}
+
+	.incidents-list-actions {
+		margin-top: 0.4rem !important;
+		margin-bottom: 0 !important;
+	}
+
+	.incidents-table-pane {
+		margin-top: 0.4rem !important;
+		/* Prefer list filling remaining column height (~2/3+ after compact chrome) */
+		min-height: 0;
+		flex: 1 1 auto;
+	}
+
+	.incidents-table-scroll {
+		max-height: none !important;
+		/* Fallback floor so the table never collapses under chrome */
+		min-height: min(66dvh, 100%);
+	}
+
+	/*
+	 * Column headers: table-fixed + nowrap was causing labels to paint over
+	 * neighbours on ~11–13″ widths. Allow 2-line wrap and clip overflow.
+	 * Desktop (>1366px) is outside this media block and stays unchanged.
+	 */
+	.incidents-table {
+		/* Slightly denser min width so more columns fit before scroll */
+		min-width: 1320px !important;
+	}
+
+	.incidents-table thead th {
+		padding: 0.4rem 0.3rem !important;
+		font-size: 0.65rem !important;
+		font-weight: 600 !important;
+		letter-spacing: 0.01em;
+		line-height: 1.15 !important;
+		vertical-align: bottom;
+		white-space: normal !important;
+		overflow: hidden !important;
+		text-overflow: clip;
+		word-break: break-word;
+		hyphens: auto;
+		/* Solid sticky background so multi-line headers don’t show rows through */
+		background-color: var(--color-warm-50) !important;
+		box-shadow: inset 0 -1px 0 var(--color-warm-200);
+	}
+
+	.dark .incidents-table thead th {
+		background-color: var(--color-warm-100) !important;
+	}
+
+	.incidents-table thead th button {
+		display: inline-flex;
+		max-width: 100%;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: 0.15rem;
+		white-space: normal !important;
+		line-height: 1.15 !important;
+		font-size: inherit !important;
+		font-weight: inherit !important;
+		text-align: left;
+	}
+
+	/* Give long header labels a bit more room; tighten email subject */
+	.incidents-table col:nth-child(1) {
+		width: 6.5rem !important;
+	}
+	.incidents-table col:nth-child(2) {
+		width: 5.75rem !important;
+	}
+	.incidents-table col:nth-child(3) {
+		width: 6.25rem !important; /* Resolution Status */
+	}
+	.incidents-table col:nth-child(4) {
+		width: 4.25rem !important; /* Priority */
+	}
+	.incidents-table col:nth-child(5) {
+		width: 6.5rem !important; /* Type */
+	}
+	.incidents-table col:nth-child(8) {
+		width: 5.75rem !important; /* Driver */
+	}
+	.incidents-table col:nth-child(9) {
+		width: 6.5rem !important; /* Responded By */
+	}
+	.incidents-table col:nth-child(10) {
+		width: 5.75rem !important; /* Date Responded */
+	}
+	.incidents-table col:nth-child(11) {
+		width: 6.25rem !important; /* Record Actions */
+	}
+
+	.incidents-table tbody td {
+		padding-left: 0.3rem !important;
+		padding-right: 0.3rem !important;
+		font-size: 0.75rem;
+	}
+}
+
+/* Coarse pointer on tablet: keep filter strip compact (table actions stay tappable) */
+@media (pointer: coarse) and (min-width: 768px) and (max-width: 1366px) {
+	.incidents-filters .incidents-filter-ctrl,
+	.incidents-filters select,
+	.incidents-filters input:not([type='checkbox']):not([type='radio']),
+	.incidents-filters button,
+	.incidents-list-actions .incidents-filter-ctrl,
+	.incidents-list-actions button {
+		min-height: 2rem !important;
+	}
 }
 
 /* Portrait tablet: prefer single-column chart stacks, slightly taller plots */

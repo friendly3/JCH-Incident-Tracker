@@ -745,7 +745,7 @@
 		aria-hidden={isFormExpanded || undefined}
 	>
 	<header
-		class="flex-shrink-0 border-b border-warm-200 bg-white/80 px-4 py-4 backdrop-blur sm:px-6 sm:py-5"
+		class="incidents-list-header flex-shrink-0 border-b border-warm-200 bg-white/80 px-4 py-3 backdrop-blur sm:px-6 sm:py-4"
 	>
 		<div class="flex w-full min-w-0 items-start gap-3">
 			<CourierTruckIcon />
@@ -873,20 +873,20 @@
 			</div>
 		{/if}
 		<div
-			class="rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-5 {drillSource
+			class="incidents-filters shrink-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4 {drillSource
 				? 'ring-2 ring-accent-400/60 ring-offset-2 ring-offset-warm-50 dark:ring-offset-warm-100'
 				: ''}"
 		>
-			<div class="flex flex-wrap items-stretch gap-2 sm:gap-3">
+			<div class="incidents-filters-row flex flex-wrap items-stretch gap-2 sm:gap-2.5">
 				<input
 					type="text"
 					placeholder="Search ref, driver, type..."
 					bind:value={search}
-					class="touch-target-inline w-full min-w-[12rem] max-w-full flex-1 rounded-lg border border-warm-200 bg-warm-50 px-4 py-2.5 text-sm text-warm-800 placeholder-warm-400 input-focus sm:max-w-xs"
+					class="incidents-filter-ctrl touch-target-inline w-full min-w-[10rem] max-w-full flex-1 rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-800 placeholder-warm-400 input-focus sm:max-w-xs"
 				/>
 				<select
 					bind:value={filterType}
-					class="touch-target-inline min-w-[8.5rem] flex-1 rounded-lg border border-warm-200 bg-warm-50 px-3 py-2.5 text-sm text-warm-700 input-focus uppercase sm:flex-none"
+					class="incidents-filter-ctrl touch-target-inline min-w-[7.5rem] flex-1 rounded-lg border border-warm-200 bg-warm-50 px-2.5 py-2 text-sm text-warm-700 input-focus uppercase sm:flex-none"
 				>
 					<option value="" class="normal-case">All Types</option>
 					<option value={TYPE_FILTER_UNSPECIFIED} class="normal-case">Unspecified</option>
@@ -897,7 +897,7 @@
 				</select>
 				<select
 					bind:value={filterDriver}
-					class="touch-target-inline min-w-[8.5rem] flex-1 rounded-lg border border-warm-200 bg-warm-50 px-3 py-2.5 text-sm text-warm-700 input-focus uppercase sm:flex-none"
+					class="incidents-filter-ctrl touch-target-inline min-w-[7.5rem] flex-1 rounded-lg border border-warm-200 bg-warm-50 px-2.5 py-2 text-sm text-warm-700 input-focus uppercase sm:flex-none"
 				>
 					<option value="" class="normal-case">All Drivers</option>
 					<option value={DRIVER_FILTER_UNASSIGNED} class="normal-case">Unassigned</option>
@@ -908,21 +908,21 @@
 				</select>
 				<select
 					bind:value={filterTeamLeader}
-					class="touch-target-inline min-w-[8.5rem] flex-1 rounded-lg border border-warm-200 bg-warm-50 px-3 py-2.5 text-sm text-warm-700 input-focus uppercase sm:flex-none"
+					class="incidents-filter-ctrl touch-target-inline min-w-[7.5rem] flex-1 rounded-lg border border-warm-200 bg-warm-50 px-2.5 py-2 text-sm text-warm-700 input-focus uppercase sm:flex-none"
 				>
 					<option value="" class="normal-case">All Team Leaders</option>
 					{#each data.teamLeaders ?? [] as tl}<option value={tl.name} class="uppercase">{tl.name}</option>{/each}
 				</select>
 				<select
 					bind:value={filterAction}
-					class="touch-target-inline min-w-[9rem] flex-1 rounded-lg border border-warm-200 bg-warm-50 px-3 py-2.5 text-sm text-warm-700 input-focus uppercase sm:flex-none"
+					class="incidents-filter-ctrl touch-target-inline min-w-[8rem] flex-1 rounded-lg border border-warm-200 bg-warm-50 px-2.5 py-2 text-sm text-warm-700 input-focus uppercase sm:flex-none"
 				>
 					<option value="" class="normal-case">All Resolution Statuses</option>
 					{#each data.incidentActions ?? [] as a}<option value={a.name} class="uppercase">{a.name}</option>{/each}
 				</select>
 				<select
 					bind:value={filterRespondedBy}
-					class="touch-target-inline min-w-[9rem] flex-1 rounded-lg border border-warm-200 bg-warm-50 px-3 py-2.5 text-sm text-warm-700 input-focus sm:flex-none"
+					class="incidents-filter-ctrl touch-target-inline min-w-[8rem] flex-1 rounded-lg border border-warm-200 bg-warm-50 px-2.5 py-2 text-sm text-warm-700 input-focus sm:flex-none"
 					aria-label="Filter by Responded By"
 					title="Filter by who responded (Responded By field)"
 				>
@@ -940,7 +940,7 @@
 					onclick={() => (filterMissingMapLocation = !filterMissingMapLocation)}
 					aria-pressed={filterMissingMapLocation}
 					title="Incidents with a reference number but no suburb/street for the NSW map (blank ref excluded)"
-					class="touch-target-inline inline-flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition input-focus {filterMissingMapLocation
+					class="incidents-filter-ctrl touch-target-inline inline-flex items-center gap-2 rounded-lg border px-2.5 py-2 text-sm font-medium transition input-focus {filterMissingMapLocation
 						? 'border-accent-500 bg-accent-50 text-accent-800 ring-1 ring-accent-400'
 						: 'border-warm-200 bg-warm-50 text-warm-700 hover:bg-warm-100'}"
 				>
@@ -960,14 +960,16 @@
 					{/if}
 				</button>
 				<!-- Date received: same relative + months-with-data pattern as dashboard Period -->
-				<label class="flex min-w-[10rem] flex-1 items-center gap-2 text-sm text-warm-600 sm:flex-none">
-					<span class="shrink-0 text-xs font-medium uppercase tracking-wide text-warm-500"
+				<label
+					class="incidents-filter-date flex min-w-[9rem] flex-1 items-center gap-1.5 text-sm text-warm-600 sm:flex-none"
+				>
+					<span class="shrink-0 text-[10px] font-medium uppercase tracking-wide text-warm-500"
 						>Date received</span
 					>
 					<select
 						value={filterDateRange}
 						onchange={onDateRangeChange}
-						class="touch-target-inline max-w-[17.6rem] flex-1 rounded-lg border border-warm-200 bg-white px-3 py-2.5 text-sm text-warm-700 input-focus dark:bg-warm-200"
+						class="incidents-filter-ctrl touch-target-inline max-w-[15rem] flex-1 rounded-lg border border-warm-200 bg-white px-2.5 py-2 text-sm text-warm-700 input-focus dark:bg-warm-200"
 						aria-label="Filter by date received period"
 						title="Relative period or a calendar month with incident data"
 					>
@@ -992,20 +994,22 @@
 					onclick={clearFilters}
 					disabled={!hasFilters}
 					aria-label="Clear all filters"
-					class="touch-target-inline rounded-lg border border-warm-200 bg-white px-4 py-2.5 text-sm font-medium text-warm-700 transition hover:bg-warm-100 input-focus disabled:cursor-not-allowed disabled:opacity-40 dark:bg-warm-100"
+					class="incidents-filter-ctrl touch-target-inline rounded-lg border border-warm-200 bg-white px-3 py-2 text-sm font-medium text-warm-700 transition hover:bg-warm-100 input-focus disabled:cursor-not-allowed disabled:opacity-40 dark:bg-warm-100"
 				>
 					Clear filters
 				</button>
 			</div>
-			<p class="mt-3 text-sm text-warm-500">{filtered.length} {filtered.length === 1 ? 'incident' : 'incidents'} found</p>
+			<p class="incidents-filters-meta mt-2 text-xs text-warm-500 sm:text-sm">
+				{filtered.length} {filtered.length === 1 ? 'incident' : 'incidents'} found
+			</p>
 		</div>
 		<!-- Actions under filters: Add, Refresh (also runs parse subjects → DB) -->
-		<div class="mt-3 flex flex-wrap items-center justify-start gap-2 px-1 sm:pl-[2ch]">
+		<div class="incidents-list-actions mt-2 flex flex-wrap items-center justify-start gap-2 px-1 sm:mt-3 sm:pl-[2ch]">
 			<button
 				type="button"
 				bind:this={addIncidentBtn}
 				onclick={openAdd}
-				class="touch-target-inline rounded-lg bg-accent-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-accent-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+				class="incidents-filter-ctrl touch-target-inline rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
 			>
 				+ Add Incident
 			</button>
@@ -1014,12 +1018,12 @@
 				onclick={handleRefresh}
 				title="Refresh data, then parse subjects → DB in the background"
 				aria-label="Refresh incidents data and parse email subjects"
-				class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-warm-200 bg-white p-2.5 text-warm-500 transition hover:border-warm-300 hover:text-warm-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-40"
+				class="incidents-filter-ctrl inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border border-warm-200 bg-white p-2 text-warm-500 transition hover:border-warm-300 hover:text-warm-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-40"
 				disabled={isRefreshing}
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
-					class="h-5 w-5 {isRefreshing ? 'animate-spin' : ''}"
+					class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}"
 					fill="none"
 					viewBox="0 0 24 24"
 					stroke="currentColor"
@@ -1087,12 +1091,11 @@
 		{/if}
 	{/if}
 
-	<!-- Table Container - scrollable body -->
+	<!-- Table Container - flex-fill remaining height (filters stay compact on tablet) -->
 	{#if mode === 'list' && !data.loadError && !incidentStore.isLoading && !incidentStore.error}
-	<div class="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden px-1 sm:mt-4 sm:px-0">
+	<div class="incidents-table-pane mt-2 flex min-h-0 flex-1 flex-col overflow-hidden px-1 sm:mt-3 sm:px-0">
 		<div
 			class="incidents-table-scroll scroll-touch min-h-0 flex-1 overflow-auto rounded-lg border border-warm-200 bg-white shadow-sm"
-			style="max-height: calc(100dvh - 280px);"
 		>
 			<table class="incidents-table w-full table-fixed text-left text-sm min-w-[1480px]">
 				<colgroup>
