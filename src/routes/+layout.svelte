@@ -10,8 +10,37 @@
 
 	let { children, data } = $props();
 
+	/**
+	 * Sidebar open by default on desktop; starts collapsed on tablet-sized viewports
+	 * (portrait 11–13″ and narrow landscape) so content has room. User can always toggle.
+	 */
+	function preferredNavOpen(): boolean {
+		if (typeof window === 'undefined') return true;
+		try {
+			// ~iPad portrait / compact tablet width — keep main pane wide
+			if (window.matchMedia('(max-width: 1023px)').matches) return false;
+			// Landscape tablet with limited height still benefits from more content width
+			if (
+				window.matchMedia('(orientation: portrait) and (max-width: 1180px)').matches
+			) {
+				return false;
+			}
+		} catch {
+			/* ignore */
+		}
+		return true;
+	}
+
 	let isNavOpen = $state(true);
 	let showUserMenu = $state(false);
+	let navPreferenceApplied = $state(false);
+
+	$effect(() => {
+		if (typeof window === 'undefined' || navPreferenceApplied) return;
+		// Apply preferred open state once on mount (don't fight the user after they toggle)
+		navPreferenceApplied = true;
+		isNavOpen = preferredNavOpen();
+	});
 
 	/** Format Supabase `last_sign_in_at` for the nav (local en-AU date + time). */
 	function formatLastLoginAt(iso: string | undefined | null): string {
@@ -90,21 +119,29 @@
 	<link rel="apple-touch-icon" href={favicon} />
 </svelte:head>
 
-<div class="flex h-screen overflow-hidden bg-warm-50">
+<div class="flex h-dvh max-h-dvh overflow-hidden bg-warm-50 safe-pad-b">
 	{#if data.user}
-	<!-- Collapsible Left Navigation -->
-	<div class="flex flex-col border-r border-warm-200 bg-warm-100 dark:bg-warm-50 transition-all duration-300 {isNavOpen ? 'w-64' : 'w-24'}">
+	<!-- Collapsible Left Navigation — touch-friendly targets on tablet -->
+	<div
+		class="flex shrink-0 flex-col border-r border-warm-200 bg-warm-100 transition-all duration-300 dark:bg-warm-50 {isNavOpen
+			? 'w-64'
+			: 'w-[4.5rem] sm:w-24'}"
+	>
 		<!-- Header with Hamburger -->
-		<div class="flex items-center justify-between border-b border-warm-200 px-4 py-4">
+		<div class="flex items-center justify-between border-b border-warm-200 px-3 py-3 sm:px-4 sm:py-4">
 			{#if isNavOpen}
 				<div class="font-semibold text-warm-800">Menu</div>
 			{/if}
 			<div class="flex items-center gap-1">
-				<ThemeToggle class="hover:!bg-warm-200 dark:hover:!bg-warm-300" />
-				<button onclick={() => (isNavOpen = !isNavOpen)}
-					class="rounded-lg p-2 text-warm-500 hover:bg-warm-200 hover:text-warm-700"
+				<ThemeToggle class="min-h-11 min-w-11 hover:!bg-warm-200 dark:hover:!bg-warm-300" />
+				<button
+					type="button"
+					onclick={() => (isNavOpen = !isNavOpen)}
+					class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg p-2 text-warm-500 hover:bg-warm-200 hover:text-warm-700"
 					aria-label="Toggle navigation"
-					title="Toggle navigation">
+					aria-expanded={isNavOpen}
+					title="Toggle navigation"
+				>
 					<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
 					</svg>
@@ -113,12 +150,12 @@
 		</div>
 
 		<!-- Nav Content -->
-		<div class="flex-1 overflow-auto p-3 text-sm">
+		<div class="scroll-touch flex-1 overflow-auto p-2 text-sm sm:p-3">
 			{#if isNavOpen}
 				<nav class="space-y-1 text-warm-600">
 					<a
 						href="/dashboard"
-						class="block rounded-lg px-3 py-2 transition {currentPath === '/dashboard'
+						class="flex min-h-11 items-center rounded-lg px-3 py-2.5 transition {currentPath === '/dashboard'
 							? 'bg-accent-100 text-accent-700 font-medium'
 							: 'hover:bg-warm-200'}"
 					>
@@ -126,7 +163,7 @@
 					</a>
 					<a
 						href="/"
-						class="block rounded-lg px-3 py-2 transition {currentPath === '/'
+						class="flex min-h-11 items-center rounded-lg px-3 py-2.5 transition {currentPath === '/'
 							? 'bg-accent-100 text-accent-700 font-medium'
 							: 'hover:bg-warm-200'}"
 					>
@@ -139,7 +176,7 @@
 							aria-expanded={isConfigExpanded}
 							aria-controls="nav-configuration"
 							aria-label="{isConfigExpanded ? 'Collapse' : 'Expand'} Configuration section"
-							class="flex w-full items-center gap-1 rounded-lg px-3 py-2 text-left transition hover:bg-warm-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {isConfigRoute
+							class="flex min-h-11 w-full items-center gap-1 rounded-lg px-3 py-2.5 text-left transition hover:bg-warm-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {isConfigRoute
 								? 'text-warm-800 font-medium'
 								: ''}"
 						>
@@ -165,7 +202,7 @@
 						>
 							<a
 								href="/team"
-								class="block rounded-lg px-3 py-2 transition {currentPath === '/team' || currentPath.startsWith('/team/')
+								class="flex min-h-11 items-center rounded-lg px-3 py-2.5 transition {currentPath === '/team' || currentPath.startsWith('/team/')
 									? 'bg-accent-100 text-accent-700 font-medium'
 									: 'hover:bg-warm-200'}"
 							>
@@ -173,7 +210,7 @@
 							</a>
 							<a
 								href="/admin/dropdowns"
-								class="block rounded-lg px-3 py-2 transition {currentPath.startsWith('/admin/dropdowns')
+								class="flex min-h-11 items-center rounded-lg px-3 py-2.5 transition {currentPath.startsWith('/admin/dropdowns')
 									? 'bg-accent-100 text-accent-700 font-medium'
 									: 'hover:bg-warm-200'}"
 							>
@@ -183,15 +220,28 @@
 					</div>
 				</nav>
 			{:else}
-				<nav class="flex flex-col items-center gap-3 pt-4 text-xs text-warm-600 text-center">
-					<a href="/dashboard" title="Dashboard" class="rounded-lg px-1 py-1 hover:bg-warm-200 hover:text-warm-800 transition">Dashboard</a>
-					<a href="/" title="Incidents" class="rounded-lg px-1 py-1 hover:bg-warm-200 hover:text-warm-800 transition">Incidents</a>
-					<span class="text-[10px] uppercase tracking-wider text-warm-400 font-medium" title="Configuration">Config</span>
+				<nav class="flex flex-col items-center gap-2 pt-3 text-center text-xs text-warm-600">
+					<a
+						href="/dashboard"
+						title="Dashboard"
+						class="flex min-h-11 w-full items-center justify-center rounded-lg px-1 py-2 transition hover:bg-warm-200 hover:text-warm-800"
+						>Dash</a
+					>
+					<a
+						href="/"
+						title="Incidents"
+						class="flex min-h-11 w-full items-center justify-center rounded-lg px-1 py-2 transition hover:bg-warm-200 hover:text-warm-800"
+						>Incidents</a
+					>
+					<span class="text-[10px] font-medium uppercase tracking-wider text-warm-400" title="Configuration"
+						>Config</span
+					>
 					<a
 						href="/team"
 						title="Team"
-						class="rounded-lg px-1 py-1 transition {currentPath === '/team' || currentPath.startsWith('/team/')
-							? 'bg-accent-100 text-accent-700 font-medium'
+						class="flex min-h-11 w-full items-center justify-center rounded-lg px-1 py-2 transition {currentPath ===
+							'/team' || currentPath.startsWith('/team/')
+							? 'bg-accent-100 font-medium text-accent-700'
 							: 'hover:bg-warm-200 hover:text-warm-800'}"
 					>
 						Team
@@ -199,8 +249,10 @@
 					<a
 						href="/admin/dropdowns"
 						title="Dropdowns"
-						class="rounded-lg px-1 py-1 transition {currentPath.startsWith('/admin/dropdowns')
-							? 'bg-accent-100 text-accent-700 font-medium'
+						class="flex min-h-11 w-full items-center justify-center rounded-lg px-1 py-2 transition {currentPath.startsWith(
+							'/admin/dropdowns'
+						)
+							? 'bg-accent-100 font-medium text-accent-700'
 							: 'hover:bg-warm-200 hover:text-warm-800'}"
 					>
 						Dropdowns
@@ -211,7 +263,7 @@
 
 		<!-- User Profile, Logout & build version -->
 		{#if data.session?.user}
-			<div class="border-t border-warm-200 p-3 space-y-2">
+			<div class="safe-pad-b space-y-2 border-t border-warm-200 p-2 sm:p-3">
 				{#if isNavOpen}
 					<div class="px-3 py-2">
 						<div class="truncate text-xs text-warm-500" title={data.session.user.email}>
@@ -232,7 +284,7 @@
 					<button
 						type="button"
 						onclick={handleLogout}
-						class="w-full rounded-lg px-3 py-2 text-left text-warm-600 hover:bg-warm-200 transition text-sm"
+						class="flex min-h-11 w-full items-center rounded-lg px-3 py-2.5 text-left text-sm text-warm-600 transition hover:bg-warm-200"
 					>
 						Logout
 					</button>
@@ -249,7 +301,7 @@
 						type="button"
 						onclick={handleLogout}
 						title="Logout"
-						class="w-full rounded-lg px-1 py-2 text-center text-xs text-warm-600 hover:bg-warm-200 hover:text-warm-800 transition"
+						class="flex min-h-11 w-full items-center justify-center rounded-lg px-1 py-2 text-center text-xs text-warm-600 transition hover:bg-warm-200 hover:text-warm-800"
 					>
 						Logout
 					</button>

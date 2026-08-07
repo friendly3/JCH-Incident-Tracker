@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { invalidateAll } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { incidentStore } from '$lib/data/store.svelte';
 	import { formatDate, formatDateTimeFields } from '$lib/formatDate';
 	import type { Incident } from '$lib/data/incidents';
@@ -1252,8 +1252,33 @@
 	}
 
 	/**
+	 * Navigate to incidents list filtered to this driver × type segment
+	 * (and the dashboard period). Uses URL query params — shareable deep link.
+	 */
+	function drillDownDriverSegment(driverLabel: string, typeLabel: string) {
+		const params = new URLSearchParams();
+		const d = (driverLabel ?? '').trim();
+		const t = (typeLabel ?? '').trim();
+		// Match list-page sentinels for empty fields
+		if (!d || isUnassignedCategory(d)) {
+			params.set('driver', '__unassigned__');
+		} else {
+			params.set('driver', d);
+		}
+		if (!t || t.toUpperCase() === 'UNSPECIFIED') {
+			params.set('type', '__unspecified__');
+		} else {
+			params.set('type', t);
+		}
+		// Current dashboard period (relative or m:YYYY-MM)
+		params.set('period', untrack(() => timeRange));
+		params.set('drill', 'driver-chart');
+		void goto(`/?${params.toString()}`);
+	}
+
+	/**
 	 * Horizontal stacked bar: drivers on Y, segments = incident type.
-	 * Legend is HTML (footer) so plot height stays equal with siblings.
+	 * Legend is HTML (above plot). Click a segment → drill to incidents list.
 	 */
 	function buildDriverBarOptions(
 		colors: ReturnType<typeof getChartTheme>
@@ -1265,6 +1290,32 @@
 			layout: {
 				// Extra right pad so external total labels are not clipped
 				padding: { top: 2, right: 32, left: 2, bottom: 2 }
+			},
+			onHover: (event, elements) => {
+				const native = event.native;
+				const target = native?.target;
+				if (target instanceof HTMLElement) {
+					target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+				}
+			},
+			onClick: (_event, elements, chart) => {
+				if (!elements.length) return;
+				const hit = elements[0];
+				const driverLabel = String(chart.data.labels?.[hit.index] ?? '');
+				const ds = chart.data.datasets[hit.datasetIndex];
+				const typeLabel = String(ds?.label ?? '');
+				const raw = ds?.data?.[hit.index];
+				const value = typeof raw === 'number' ? raw : Number(raw);
+				if (!driverLabel || !Number.isFinite(value) || value <= 0) return;
+				// Skip hidden / legend-filtered series
+				if (ds?.hidden) return;
+				if (
+					typeof chart.isDatasetVisible === 'function' &&
+					!chart.isDatasetVisible(hit.datasetIndex)
+				) {
+					return;
+				}
+				drillDownDriverSegment(driverLabel, typeLabel);
 			},
 			plugins: {
 				legend: { display: false },
@@ -3268,15 +3319,20 @@
 	<title>Dashboard | Incident Tracker</title>
 </svelte:head>
 
-<div class="flex-1 flex flex-col bg-warm-50 text-warm-900 overflow-hidden">
-	<div id="dashboard-pdf-root" class="flex min-h-0 flex-1 flex-col overflow-auto bg-warm-50">
-	<header class="border-b border-warm-200 bg-white/80 px-4 py-3 backdrop-blur flex-shrink-0">
+<div class="flex flex-1 flex-col overflow-hidden bg-warm-50 text-warm-900">
+	<div
+		id="dashboard-pdf-root"
+		class="scroll-touch flex min-h-0 flex-1 flex-col overflow-auto bg-warm-50"
+	>
+	<header
+		class="flex-shrink-0 border-b border-warm-200 bg-white/80 px-3 py-3 backdrop-blur sm:px-4"
+	>
 		<!-- Period sits immediately to the right of the title block (not page right-aligned) -->
-		<div class="flex w-full min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
+		<div class="flex w-full min-w-0 flex-wrap items-center gap-x-4 gap-y-2 sm:gap-x-5">
 			<div class="flex min-w-0 items-start gap-2">
 				<CourierTruckIcon />
 				<div class="min-w-0">
-					<h1 class="text-xl font-bold text-warm-800">Dashboard</h1>
+					<h1 class="text-lg font-bold text-warm-800 sm:text-xl">Dashboard</h1>
 					<p class="mt-0.5 text-sm text-warm-500">Overview of incident tracking metrics</p>
 				</div>
 			</div>
@@ -3286,12 +3342,12 @@
 					aria-hidden="true"
 				></span>
 				<div class="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">
-					<label class="flex items-center gap-2 text-[0.9625rem] text-warm-600">
-						<span class="font-medium text-warm-700">Period</span>
+					<label class="flex min-w-0 items-center gap-2 text-[0.9625rem] text-warm-600">
+						<span class="shrink-0 font-medium text-warm-700">Period</span>
 						<select
 							value={timeRange}
 							onchange={onPeriodSelectChange}
-							class="max-w-[17.6rem] rounded-lg border border-warm-200 bg-white px-[0.6875rem] py-[0.4125rem] text-[0.9625rem] text-warm-700 shadow-sm input-focus dark:bg-warm-200"
+							class="touch-target-inline max-w-[min(17.6rem,100%)] rounded-lg border border-warm-200 bg-white px-3 py-2.5 text-[0.9625rem] text-warm-700 shadow-sm input-focus dark:bg-warm-200"
 							aria-controls="over-time-chart-canvas"
 							aria-label="Time period for dashboard summary and charts"
 							title="Relative period or a calendar month with incident data"
@@ -3403,7 +3459,7 @@
 			</button>
 		</div>
 	{:else}
-		<div class="w-full flex-1 px-3 py-3 sm:px-4">
+		<div class="w-full flex-1 px-2 py-3 sm:px-4">
 				<!-- Summary row: KPIs + status chart (plot 6.5rem × 1.1 ≈ 7.15rem) -->
 				<section
 					class="dashboard-summary mb-2"
@@ -3595,7 +3651,9 @@
 					Top row: Over Time | Stats by Team Leader (former type-over-time slot).
 					Type-over-time markup kept behind SHOW_TYPE_OVER_TIME_CHART for future use.
 				-->
-				<div class="dashboard-chart-row grid grid-cols-1 gap-2 lg:grid-cols-2 lg:items-stretch">
+				<div
+					class="dashboard-chart-row grid grid-cols-1 gap-2 md:grid-cols-2 md:items-stretch"
+				>
 					<section
 						class="dashboard-chart-card min-w-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="over-time-chart-title"
@@ -3943,7 +4001,7 @@
 
 				<!-- Driver table + bar chart side by side -->
 				<div
-					class="dashboard-driver-row mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2 lg:items-stretch"
+					class="dashboard-driver-row mt-2 grid grid-cols-1 gap-2 md:grid-cols-2 md:items-stretch"
 				>
 					<section
 						class="dashboard-driver-table-card flex h-full min-h-0 min-w-0 flex-col rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4 dark:bg-warm-100"
@@ -4117,10 +4175,13 @@
 								Incidents by Driver
 							</h2>
 							<p class="dashboard-chart-meta text-xs text-warm-500">
-								{timeRangeLabel} · stacked by type
+								{timeRangeLabel} · stacked by type · click a segment to open incidents
 							</p>
 						</div>
-						<p id="driver-chart-summary" class="sr-only">{driverChartAriaLabel}</p>
+						<p id="driver-chart-summary" class="sr-only">
+							{driverChartAriaLabel} Click a bar segment to view those incidents in the
+							list.
+						</p>
 						<!-- Type legend above the plot (click to toggle, hover to highlight) -->
 						<div class="dashboard-chart-legend dashboard-chart-legend--top">
 							{#if hasDriverData}

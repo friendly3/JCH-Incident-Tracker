@@ -22,7 +22,8 @@
 		loadExpandedMonths,
 		saveExpandedMonths
 	} from '$lib/incidentMonthExpand';
-	import { invalidateAll } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
+	import { page } from '$app/state';
 	import { tick } from 'svelte';
 	import {
 		incidentsFromPageData,
@@ -48,6 +49,11 @@
 	} from '$lib/incidentDuplicates';
 
 	let { data } = $props();
+
+	/** URL / filter sentinels for empty category fields */
+	const DRIVER_FILTER_UNASSIGNED = '__unassigned__';
+	const TYPE_FILTER_UNSPECIFIED = '__unspecified__';
+	const RESPONDED_BY_FILTER_UNASSIGNED = '__unassigned__';
 
 	const incidents = $derived(incidentsFromPageData(incidentStore.list, data.incidents));
 
@@ -112,15 +118,99 @@
 
 	let search = $state('');
 	let filterType = $state('');
-	/** Sentinel for driver filter: incidents with null/blank driver. */
-	const DRIVER_FILTER_UNASSIGNED = '__unassigned__';
 	let filterDriver = $state('');
 	let filterTeamLeader = $state('');
 	let filterAction = $state('');
+	/** Responded By (incident.response); sentinel = null/blank. */
+	let filterRespondedBy = $state('');
 	/** Only incidents with no manual suburb and no parseable subject location. */
 	let filterMissingMapLocation = $state(false);
 	/** Date Received column: newest-first (desc) by default; click header to toggle. */
 	let dateReceivedSort: 'asc' | 'desc' = $state('desc');
+
+	/**
+	 * Active dashboard drill-down (deep link). When set, list shows a context
+	 * banner. Cleared when the user clears filters or dismisses the banner.
+	 * Pattern: URL query params + contextual filter banner (analytics standard).
+	 */
+	let drillSource = $state<string | null>(null);
+	/** Last applied search string from the URL (avoid re-clobbering user edits). */
+	let appliedDrillKey = $state('');
+
+	function isValidListPeriod(value: string): value is TimeRangeKey {
+		return (
+			value === 'all' ||
+			value === 'today' ||
+			value === 'week' ||
+			value === '7' ||
+			value === '30' ||
+			value === '90' ||
+			isMonthTimeRange(value)
+		);
+	}
+
+	function applyUrlFiltersFromSearch(searchStr: string) {
+		if (searchStr === appliedDrillKey) return;
+		appliedDrillKey = searchStr;
+		const params = new URLSearchParams(searchStr.startsWith('?') ? searchStr.slice(1) : searchStr);
+
+		const driver = params.get('driver');
+		if (driver !== null) {
+			filterDriver = driver === '' ? DRIVER_FILTER_UNASSIGNED : driver;
+		}
+
+		const type = params.get('type');
+		if (type !== null) {
+			filterType = type === '' ? TYPE_FILTER_UNSPECIFIED : type;
+		}
+
+		const period = params.get('period');
+		if (period && isValidListPeriod(period)) {
+			filterDateRange = period;
+		}
+
+		const drill = params.get('drill');
+		drillSource = drill && drill.trim() ? drill.trim() : null;
+	}
+
+	// Deep-link filters from dashboard (and any future sources)
+	$effect(() => {
+		applyUrlFiltersFromSearch(page.url.search);
+	});
+
+	function drillDriverLabel(): string {
+		if (filterDriver === DRIVER_FILTER_UNASSIGNED || !filterDriver) return 'Unassigned';
+		return filterDriver;
+	}
+
+	function drillTypeLabel(): string {
+		if (filterType === TYPE_FILTER_UNSPECIFIED || !filterType) return 'Unspecified';
+		return filterType;
+	}
+
+	function drillPeriodLabel(): string {
+		const relative = TIME_RANGE_OPTIONS.find((o) => o.value === filterDateRange);
+		if (relative) return relative.label;
+		if (isMonthTimeRange(filterDateRange)) {
+			return formatMonthYearLabel(filterDateRange.slice(2));
+		}
+		return filterDateRange;
+	}
+
+	function clearDrillDown() {
+		drillSource = null;
+		filterDriver = '';
+		filterType = '';
+		// Keep period so the user stays in the same window
+		appliedDrillKey = '';
+		void goto('/', { replaceState: true, keepFocus: true, noScroll: true });
+	}
+
+	function clearDrillDownAndGoDashboard() {
+		drillSource = null;
+		appliedDrillKey = '';
+		void goto('/dashboard');
+	}
 
 	function toggleDateReceivedSort() {
 		dateReceivedSort = dateReceivedSort === 'desc' ? 'asc' : 'desc';
@@ -238,7 +328,11 @@
 				!(i.emailSender ?? '').toLowerCase().includes(q)
 			)
 				return false;
-			if (filterType && i.type !== filterType) return false;
+			if (filterType === TYPE_FILTER_UNSPECIFIED) {
+				if ((i.type ?? '').trim()) return false;
+			} else if (filterType && i.type !== filterType) {
+				return false;
+			}
 			if (filterDriver === DRIVER_FILTER_UNASSIGNED) {
 				// Null/blank driver only (not a username literally named "Unassigned")
 				if ((i.driver ?? '').trim()) return false;
@@ -247,6 +341,11 @@
 			}
 			if (filterTeamLeader && i.teamLeader !== filterTeamLeader) return false;
 			if (filterAction && i.action !== filterAction) return false;
+			if (filterRespondedBy === RESPONDED_BY_FILTER_UNASSIGNED) {
+				if ((i.response ?? '').trim()) return false;
+			} else if (filterRespondedBy && (i.response ?? '') !== filterRespondedBy) {
+				return false;
+			}
 			// Missing map: has a ref but no usable suburb/street (no-ref rows excluded)
 			if (
 				filterMissingMapLocation &&
@@ -294,8 +393,14 @@
 		filterDriver = '';
 		filterTeamLeader = '';
 		filterAction = '';
+		filterRespondedBy = '';
 		filterMissingMapLocation = false;
 		filterDateRange = 'all';
+		if (drillSource || page.url.search) {
+			drillSource = null;
+			appliedDrillKey = '';
+			void goto('/', { replaceState: true, keepFocus: true, noScroll: true });
+		}
 	}
 
 	const hasFilters = $derived(
@@ -305,8 +410,10 @@
 				filterDriver ||
 				filterTeamLeader ||
 				filterAction ||
+				filterRespondedBy ||
 				filterMissingMapLocation ||
-				filterDateRange !== 'all'
+				filterDateRange !== 'all' ||
+				drillSource
 		)
 	);
 
@@ -616,11 +723,15 @@
 		inert={isModalOpen || isFormExpanded || undefined}
 		aria-hidden={isFormExpanded || undefined}
 	>
-	<header class="border-b border-warm-200 bg-white/80 px-6 py-5 backdrop-blur flex-shrink-0">
+	<header
+		class="flex-shrink-0 border-b border-warm-200 bg-white/80 px-4 py-4 backdrop-blur sm:px-6 sm:py-5"
+	>
 		<div class="flex w-full min-w-0 items-start gap-3">
 			<CourierTruckIcon />
 			<div class="min-w-0">
-				<h1 class="text-2xl font-bold text-warm-800">JCH Pham AusPost Incident Tracker</h1>
+				<h1 class="text-xl font-bold text-warm-800 sm:text-2xl">
+					JCH Pham AusPost Incident Tracker
+				</h1>
 				{#if data.loadError}
 					<p class="mt-1 text-sm text-red-600 font-medium">Unable to load incidents</p>
 				{:else if incidentStore.error}
@@ -681,37 +792,134 @@
 			</button>
 		</div>
 	{:else if mode === 'list'}
-		<div class="rounded-lg border border-warm-200 bg-white p-5 shadow-sm">
-			<div class="flex flex-wrap gap-3">
+		{#if drillSource}
+			<!-- Analytics pattern: contextual drill-down banner (deep-linked filters) -->
+			<div
+				class="mb-3 rounded-lg border border-accent-200 bg-accent-50 px-3 py-3 shadow-sm dark:border-accent-200/40 dark:bg-accent-100/25 sm:px-4"
+				role="status"
+				aria-live="polite"
+			>
+				<div class="flex flex-wrap items-start justify-between gap-3">
+					<div class="min-w-0 flex-1">
+						<p class="text-xs font-semibold uppercase tracking-wide text-accent-700 dark:text-accent-600">
+							Drill-down from dashboard
+						</p>
+						<p class="mt-1 text-sm text-warm-800">
+							{#if drillSource === 'driver-chart'}
+								<span class="font-medium">Incidents by Driver</span>
+								<span class="text-warm-500"> · </span>
+							{/if}
+							<span class="inline-flex flex-wrap items-center gap-1.5">
+								<span
+									class="inline-flex items-center rounded-md border border-accent-200 bg-white px-2 py-0.5 text-xs font-medium text-warm-800 dark:bg-warm-100"
+								>
+									Driver: {drillDriverLabel()}
+								</span>
+								<span
+									class="inline-flex items-center rounded-md border border-accent-200 bg-white px-2 py-0.5 text-xs font-medium text-warm-800 dark:bg-warm-100"
+								>
+									Type: {drillTypeLabel()}
+								</span>
+								<span
+									class="inline-flex items-center rounded-md border border-accent-200 bg-white px-2 py-0.5 text-xs font-medium text-warm-800 dark:bg-warm-100"
+								>
+									Period: {drillPeriodLabel()}
+								</span>
+							</span>
+						</p>
+						<p class="mt-1 text-xs text-warm-500">
+							Filters below match this chart segment. Change them anytime, or clear the
+							drill-down.
+						</p>
+					</div>
+					<div class="flex shrink-0 flex-wrap items-center gap-2">
+						<button
+							type="button"
+							onclick={clearDrillDownAndGoDashboard}
+							class="touch-target-inline rounded-lg border border-warm-200 bg-white px-3 py-2 text-sm font-medium text-warm-700 transition hover:bg-warm-100 dark:bg-warm-100"
+						>
+							Back to dashboard
+						</button>
+						<button
+							type="button"
+							onclick={clearDrillDown}
+							class="touch-target-inline rounded-lg bg-accent-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-accent-500"
+						>
+							Clear drill-down
+						</button>
+					</div>
+				</div>
+			</div>
+		{/if}
+		<div
+			class="rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-5 {drillSource
+				? 'ring-2 ring-accent-400/60 ring-offset-2 ring-offset-warm-50 dark:ring-offset-warm-100'
+				: ''}"
+		>
+			<div class="flex flex-wrap items-stretch gap-2 sm:gap-3">
 				<input
 					type="text"
 					placeholder="Search ref, driver, type..."
 					bind:value={search}
-					class="w-full max-w-xs rounded-lg border border-warm-200 bg-warm-50 px-4 py-2 text-sm text-warm-800 placeholder-warm-400 input-focus"
+					class="touch-target-inline w-full min-w-[12rem] max-w-full flex-1 rounded-lg border border-warm-200 bg-warm-50 px-4 py-2.5 text-sm text-warm-800 placeholder-warm-400 input-focus sm:max-w-xs"
 				/>
-				<select bind:value={filterType} class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus uppercase">
+				<select
+					bind:value={filterType}
+					class="touch-target-inline min-w-[8.5rem] flex-1 rounded-lg border border-warm-200 bg-warm-50 px-3 py-2.5 text-sm text-warm-700 input-focus uppercase sm:flex-none"
+				>
 					<option value="" class="normal-case">All Types</option>
+					<option value={TYPE_FILTER_UNSPECIFIED} class="normal-case">Unspecified</option>
+					{#if filterType && filterType !== TYPE_FILTER_UNSPECIFIED && !(data.incidentTypes ?? []).some((t) => t.name === filterType)}
+						<option value={filterType} class="uppercase">{filterType}</option>
+					{/if}
 					{#each data.incidentTypes ?? [] as t}<option value={t.name} class="uppercase">{t.name}</option>{/each}
 				</select>
-				<select bind:value={filterDriver} class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus uppercase">
+				<select
+					bind:value={filterDriver}
+					class="touch-target-inline min-w-[8.5rem] flex-1 rounded-lg border border-warm-200 bg-warm-50 px-3 py-2.5 text-sm text-warm-700 input-focus uppercase sm:flex-none"
+				>
 					<option value="" class="normal-case">All Drivers</option>
 					<option value={DRIVER_FILTER_UNASSIGNED} class="normal-case">Unassigned</option>
+					{#if filterDriver && filterDriver !== DRIVER_FILTER_UNASSIGNED && !(data.drivers ?? []).some((d) => d.username === filterDriver)}
+						<option value={filterDriver} class="uppercase">{filterDriver}</option>
+					{/if}
 					{#each data.drivers ?? [] as d}<option value={d.username} class="uppercase">{d.username}</option>{/each}
 				</select>
-				<select bind:value={filterTeamLeader} class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus uppercase">
+				<select
+					bind:value={filterTeamLeader}
+					class="touch-target-inline min-w-[8.5rem] flex-1 rounded-lg border border-warm-200 bg-warm-50 px-3 py-2.5 text-sm text-warm-700 input-focus uppercase sm:flex-none"
+				>
 					<option value="" class="normal-case">All Team Leaders</option>
 					{#each data.teamLeaders ?? [] as tl}<option value={tl.name} class="uppercase">{tl.name}</option>{/each}
 				</select>
-				<select bind:value={filterAction} class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus uppercase">
+				<select
+					bind:value={filterAction}
+					class="touch-target-inline min-w-[9rem] flex-1 rounded-lg border border-warm-200 bg-warm-50 px-3 py-2.5 text-sm text-warm-700 input-focus uppercase sm:flex-none"
+				>
 					<option value="" class="normal-case">All Resolution Statuses</option>
 					{#each data.incidentActions ?? [] as a}<option value={a.name} class="uppercase">{a.name}</option>{/each}
+				</select>
+				<select
+					bind:value={filterRespondedBy}
+					class="touch-target-inline min-w-[9rem] flex-1 rounded-lg border border-warm-200 bg-warm-50 px-3 py-2.5 text-sm text-warm-700 input-focus sm:flex-none"
+					aria-label="Filter by Responded By"
+					title="Filter by who responded (Responded By field)"
+				>
+					<option value="">All Responded By</option>
+					<option value={RESPONDED_BY_FILTER_UNASSIGNED}>Unassigned</option>
+					{#if filterRespondedBy && filterRespondedBy !== RESPONDED_BY_FILTER_UNASSIGNED && !(data.respondedByOptions ?? []).some((o) => o.name === filterRespondedBy)}
+						<option value={filterRespondedBy}>{filterRespondedBy}</option>
+					{/if}
+					{#each data.respondedByOptions ?? [] as o (o.id)}
+						<option value={o.name}>{o.name}</option>
+					{/each}
 				</select>
 				<button
 					type="button"
 					onclick={() => (filterMissingMapLocation = !filterMissingMapLocation)}
 					aria-pressed={filterMissingMapLocation}
 					title="Incidents with a reference number but no suburb/street for the NSW map (blank ref excluded)"
-					class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition input-focus {filterMissingMapLocation
+					class="touch-target-inline inline-flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition input-focus {filterMissingMapLocation
 						? 'border-accent-500 bg-accent-50 text-accent-800 ring-1 ring-accent-400'
 						: 'border-warm-200 bg-warm-50 text-warm-700 hover:bg-warm-100'}"
 				>
@@ -731,12 +939,14 @@
 					{/if}
 				</button>
 				<!-- Date received: same relative + months-with-data pattern as dashboard Period -->
-				<label class="flex items-center gap-2 text-sm text-warm-600">
-					<span class="text-xs font-medium uppercase tracking-wide text-warm-500">Date received</span>
+				<label class="flex min-w-[10rem] flex-1 items-center gap-2 text-sm text-warm-600 sm:flex-none">
+					<span class="shrink-0 text-xs font-medium uppercase tracking-wide text-warm-500"
+						>Date received</span
+					>
 					<select
 						value={filterDateRange}
 						onchange={onDateRangeChange}
-						class="max-w-[17.6rem] rounded-lg border border-warm-200 bg-white px-3 py-2 text-sm text-warm-700 input-focus dark:bg-warm-200"
+						class="touch-target-inline max-w-[17.6rem] flex-1 rounded-lg border border-warm-200 bg-white px-3 py-2.5 text-sm text-warm-700 input-focus dark:bg-warm-200"
 						aria-label="Filter by date received period"
 						title="Relative period or a calendar month with incident data"
 					>
@@ -761,7 +971,7 @@
 					onclick={clearFilters}
 					disabled={!hasFilters}
 					aria-label="Clear all filters"
-					class="rounded-lg border border-warm-200 bg-white px-4 py-2 text-sm font-medium text-warm-700 transition hover:bg-warm-100 input-focus disabled:cursor-not-allowed disabled:opacity-40 dark:bg-warm-100"
+					class="touch-target-inline rounded-lg border border-warm-200 bg-white px-4 py-2.5 text-sm font-medium text-warm-700 transition hover:bg-warm-100 input-focus disabled:cursor-not-allowed disabled:opacity-40 dark:bg-warm-100"
 				>
 					Clear filters
 				</button>
@@ -769,12 +979,12 @@
 			<p class="mt-3 text-sm text-warm-500">{filtered.length} {filtered.length === 1 ? 'incident' : 'incidents'} found</p>
 		</div>
 		<!-- Actions under filters: Add, Refresh (also runs parse subjects → DB) -->
-		<div class="mt-3 flex flex-wrap items-center justify-start gap-2 pl-[2ch]">
+		<div class="mt-3 flex flex-wrap items-center justify-start gap-2 px-1 sm:pl-[2ch]">
 			<button
 				type="button"
 				bind:this={addIncidentBtn}
 				onclick={openAdd}
-				class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+				class="touch-target-inline rounded-lg bg-accent-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-accent-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
 			>
 				+ Add Incident
 			</button>
@@ -783,12 +993,12 @@
 				onclick={handleRefresh}
 				title="Refresh data, then parse subjects → DB in the background"
 				aria-label="Refresh incidents data and parse email subjects"
-				class="rounded-lg border border-warm-200 bg-white p-2 text-warm-500 transition hover:border-warm-300 hover:text-warm-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-40"
+				class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-warm-200 bg-white p-2.5 text-warm-500 transition hover:border-warm-300 hover:text-warm-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-40"
 				disabled={isRefreshing}
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
-					class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}"
+					class="h-5 w-5 {isRefreshing ? 'animate-spin' : ''}"
 					fill="none"
 					viewBox="0 0 24 24"
 					stroke="currentColor"
@@ -858,9 +1068,10 @@
 
 	<!-- Table Container - scrollable body -->
 	{#if mode === 'list' && !data.loadError && !incidentStore.isLoading && !incidentStore.error}
-	<div class="flex-1 min-h-0 mt-4 overflow-hidden flex flex-col">
+	<div class="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden px-1 sm:mt-4 sm:px-0">
 		<div
-			class="incidents-table-scroll flex-1 overflow-auto rounded-lg border border-warm-200 bg-white shadow-sm"
+			class="incidents-table-scroll scroll-touch flex-1 overflow-auto rounded-lg border border-warm-200 bg-white shadow-sm"
+		>
 			style="max-height: calc(100vh - 280px);"
 		>
 			<table class="incidents-table w-full table-fixed text-left text-sm min-w-[1480px]">
@@ -1149,12 +1360,12 @@
 		<div
 			class={isFormExpanded
 				? 'absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-white'
-				: 'fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none'}
+				: 'pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4'}
 		>
 			<div
 				class={isFormExpanded
 					? 'flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-white'
-					: 'pointer-events-auto flex h-[min(92vh,75.5rem)] max-h-[92vh] w-full max-w-4xl min-h-0 flex-col overflow-hidden rounded-lg border border-warm-200 bg-white shadow-2xl'}
+					: 'pointer-events-auto flex h-[min(92dvh,75.5rem)] max-h-[92dvh] w-full min-h-0 max-w-4xl flex-col overflow-hidden rounded-lg border border-warm-200 bg-white shadow-2xl md:max-w-5xl'}
 				onclick={(e) => {
 					if (!isFormExpanded) e.stopPropagation();
 				}}
@@ -1163,7 +1374,7 @@
 				aria-labelledby="incident-form-title"
 			>
 				<header
-					class="flex shrink-0 items-center justify-between gap-4 border-b border-warm-200 bg-warm-50 px-5 py-2.5"
+					class="flex shrink-0 items-center justify-between gap-4 border-b border-warm-200 bg-warm-50 px-4 py-3 sm:px-5 sm:py-2.5"
 				>
 					<div class="min-w-0">
 						<h2 id="incident-form-title" class="truncate text-lg font-semibold text-warm-800">

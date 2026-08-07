@@ -579,3 +579,168 @@ body {
 		box-shadow: 0 -2px 10px rgb(0 0 0 / 0.25);
 	}
 }
+
+/*
+ * Tablet / touch optimisation (~11–13″ iPad & Android landscape + portrait)
+ * - Larger hit targets (≈44px)
+ * - Faster taps (no 300ms double-tap zoom delay)
+ * - Smoother overflow scrolling
+ * - Safe-area insets for notched devices
+ */
+@layer base {
+	html {
+		-webkit-text-size-adjust: 100%;
+		text-size-adjust: 100%;
+	}
+
+	body {
+		/* Avoid horizontal rubber-band on the whole shell */
+		overscroll-behavior-x: none;
+	}
+
+	/* Prefer direct touch response on interactive controls */
+	button,
+	a,
+	select,
+	summary,
+	[role='button'],
+	input[type='checkbox'],
+	input[type='radio'],
+	label {
+		touch-action: manipulation;
+	}
+}
+
+@layer utilities {
+	.safe-pad-x {
+		padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+		padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+	}
+
+	.safe-pad-b {
+		padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+	}
+
+	.scroll-touch {
+		-webkit-overflow-scrolling: touch;
+		overscroll-behavior: contain;
+	}
+
+	/* Minimum comfortable touch target (Apple HIG / Material ≈ 44–48px) */
+	.touch-target {
+		min-height: 2.75rem;
+		min-width: 2.75rem;
+	}
+
+	.touch-target-inline {
+		min-height: 2.75rem;
+	}
+}
+
+/* Coarse pointer (finger): enlarge common controls globally */
+@media (pointer: coarse) {
+	@layer base {
+		button:not(.native-datetime):not([class*='h-2']):not([class*='h-3']),
+		select,
+		input:not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='range']):not(
+				.native-datetime
+			):not(.native-time),
+		textarea {
+			min-height: 2.75rem;
+		}
+
+		/* Checkbox / radio: larger hit area via padding on the label when possible */
+		input[type='checkbox'],
+		input[type='radio'] {
+			width: 1.25rem;
+			height: 1.25rem;
+		}
+
+		/* Table row actions / small pills stay readable but tappable */
+		.incidents-table-scroll td button,
+		.incidents-table-scroll td a {
+			min-height: 2.25rem;
+			padding-top: 0.35rem;
+			padding-bottom: 0.35rem;
+		}
+
+		/* Legend chips on dashboard */
+		.dashboard-legend-btn {
+			min-height: 2rem;
+			padding: 0.25rem 0.4rem;
+		}
+	}
+
+	/* Sticky table headers / filters less jumpy while flinging */
+	.incidents-table-scroll,
+	.dashboard-team-leader-stats-scroll,
+	.dashboard-driver-table-scroll,
+	#dashboard-pdf-root {
+		-webkit-overflow-scrolling: touch;
+		overscroll-behavior: contain;
+	}
+}
+
+/*
+ * Tablet width band: short-edge phones excluded; 11–13″ tablets sit here in both orientations.
+ * ~768–1366 CSS px covers most iPad / Android tablets without forcing desktop-only layouts.
+ */
+@media (min-width: 768px) and (max-width: 1366px) {
+	/* Comfortable reading size without looking like a phone UI */
+	.tablet-comfort {
+		font-size: 0.9375rem;
+	}
+
+	/* Dashboard / incidents main padding */
+	.tablet-page-pad {
+		padding-left: max(1rem, env(safe-area-inset-left, 0px));
+		padding-right: max(1rem, env(safe-area-inset-right, 0px));
+	}
+}
+
+/* Portrait tablet: prefer single-column chart stacks, slightly taller plots */
+@media (min-width: 768px) and (max-width: 1100px) and (orientation: portrait) {
+	.dashboard-chart-row,
+	.dashboard-driver-row {
+		grid-template-columns: 1fr !important;
+	}
+
+	.dashboard-chart-plot {
+		flex-basis: 18rem;
+		height: 18rem;
+		min-height: 18rem;
+		max-height: 18rem;
+	}
+
+	.dashboard-chart-plot canvas {
+		max-height: 18rem !important;
+	}
+}
+
+/* Landscape tablet: tighter gaps + slightly shorter plots so KPIs + charts fit */
+@media (min-width: 900px) and (orientation: landscape) and (max-height: 1000px) {
+	.dashboard-chart-row,
+	.dashboard-driver-row {
+		gap: 0.625rem;
+	}
+
+	.dashboard-chart-plot {
+		flex-basis: 16.5rem;
+		height: 16.5rem;
+		min-height: 16.5rem;
+		max-height: 16.5rem;
+	}
+
+	.dashboard-chart-plot canvas {
+		max-height: 16.5rem !important;
+	}
+
+	.dashboard-driver-table-card {
+		min-height: calc(3.25rem + 14rem + 2.85rem + 10px + 0.7rem);
+	}
+
+	.dashboard-driver-table-scroll,
+	.dashboard-chart-plot.dashboard-chart-plot--fill {
+		min-height: 14rem;
+	}
+}

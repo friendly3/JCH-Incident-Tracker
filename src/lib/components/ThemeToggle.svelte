@@ -17,7 +17,7 @@
 <button
 	type="button"
 	onclick={() => theme.toggle()}
-	class="rounded-lg p-2 text-warm-500 transition hover:bg-warm-100 hover:text-warm-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-warm-50 dark:hover:bg-warm-200 dark:hover:text-warm-800 dark:focus-visible:ring-offset-warm-100 {className}"
+	class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg p-2 text-warm-500 transition hover:bg-warm-100 hover:text-warm-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-warm-50 dark:hover:bg-warm-200 dark:hover:text-warm-800 dark:focus-visible:ring-offset-warm-100 {className}"
 	aria-label={mounted ? (theme.isDark ? 'Switch to light mode' : 'Switch to dark mode') : 'Theme'}
 	aria-pressed={mounted ? theme.isDark : undefined}
 	title={mounted ? (theme.isDark ? 'Light mode' : 'Dark mode') : 'Theme'}
