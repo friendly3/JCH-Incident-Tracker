@@ -12,8 +12,64 @@ function normalizeTypeKey(type: string): string {
 }
 
 /**
+ * Text colour only for incident types (same palette as pills, no bg/border).
+ * Use in dense tables (e.g. tablet list) where pills crowd the cell.
+ */
+export function getTypeTextClass(type: string): string {
+	const key = normalizeTypeKey(type);
+	if (!key) return 'text-warm-700 dark:text-warm-600';
+
+	if (key === 'DELIVERY COMPLAINT' || key.includes('DELIVERY COMPLAINT')) {
+		return 'text-blue-800 dark:text-blue-300';
+	}
+	if (key === 'DISPUTED DELIVERY' || key.includes('DISPUTED')) {
+		return 'text-orange-800 dark:text-orange-300';
+	}
+	if (key === 'REDELIVERY REQUEST' || key.includes('REDELIVERY')) {
+		return 'text-sky-800 dark:text-sky-300';
+	}
+	if (key === 'DELIVERY REQUEST' || (key.includes('DELIVERY REQUEST') && !key.includes('RE'))) {
+		return 'text-indigo-800 dark:text-indigo-300';
+	}
+	if (key === 'INCORRECT DELIVERY' || key.includes('INCORRECT')) {
+		return 'text-violet-800 dark:text-violet-300';
+	}
+	if (key === 'STOP DELIVERY' || (key.includes('STOP') && key.includes('DELIVERY'))) {
+		return 'text-red-800 dark:text-red-300';
+	}
+	if (key === 'CARDING ISSUE' || key.includes('CARDING')) {
+		return 'text-fuchsia-800 dark:text-fuchsia-300';
+	}
+	if (key === 'MISSING ITEM' || key.includes('MISSING')) {
+		return 'text-rose-800 dark:text-rose-300';
+	}
+	if (key === 'INVESTIGATION' || key.includes('INVESTIGATION')) {
+		return 'text-amber-800 dark:text-amber-300';
+	}
+	if (key === 'INCIDENT REPORT' || key.includes('INCIDENT REPORT') || key === 'INCIDENT') {
+		return 'text-purple-800 dark:text-purple-300';
+	}
+	if (key === 'FEEDBACK' || key.includes('FEEDBACK')) {
+		return 'text-emerald-800 dark:text-emerald-300';
+	}
+
+	if (key.includes('DELIVERY')) {
+		return 'text-cyan-800 dark:text-cyan-300';
+	}
+	if (key.includes('REPORT')) {
+		return 'text-purple-800 dark:text-purple-300';
+	}
+	if (key.includes('COMPLAINT')) {
+		return 'text-blue-800 dark:text-blue-300';
+	}
+
+	return 'text-warm-700 dark:text-warm-600';
+}
+
+/**
  * Tailwind color classes for incident type pills (bg, text, border).
  * Each known type gets a distinct hue so e.g. Delivery Complaint ≠ Disputed Delivery.
+ * Prefer getTypeTextClass for compact list cells.
  */
 export function getTypePillClass(type: string): string {
 	const key = normalizeTypeKey(type);

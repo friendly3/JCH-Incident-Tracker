@@ -6,7 +6,7 @@
 	import {
 		getActionPillClass,
 		getPriorityPillClass,
-		getTypePillClass,
+		getTypeTextClass,
 		normalizePriority
 	} from '$lib/pillClasses';
 	import {
@@ -1328,7 +1328,7 @@
 									<td class="px-3 py-3 text-center max-w-0 overflow-hidden">
 										{#if incident.type?.trim()}
 											<span
-												class="inline-block max-w-full break-words whitespace-normal rounded-full px-2.5 py-0.5 text-xs font-medium border uppercase {getTypePillClass(
+												class="inline-block max-w-full break-words whitespace-normal text-xs font-semibold uppercase {getTypeTextClass(
 													incident.type
 												)}"
 												title={incident.type}

@@ -7,7 +7,7 @@
 		getActionPillClass,
 		getActionStatusChartColor,
 		getPriorityPillClass,
-		getTypePillClass,
+		getTypeTextClass,
 		normalizePriority
 	} from '$lib/pillClasses';
 	import {
@@ -4494,7 +4494,7 @@
 										<td class="px-2 py-2">
 											{#if incident.type?.trim()}
 												<span
-													class="inline-block max-w-full break-words rounded-full border px-2 py-0.5 text-xs font-medium {getTypePillClass(
+													class="inline-block max-w-full break-words text-xs font-semibold {getTypeTextClass(
 														incident.type
 													)}"
 												>
