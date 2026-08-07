@@ -5,16 +5,29 @@
 
 const STORAGE_KEY = 'jch-dashboard-time-range';
 
-export type RelativeTimeRangeKey = 'all' | '7' | '30' | '90';
+export type RelativeTimeRangeKey = 'all' | 'today' | 'week' | '7' | '30' | '90';
 export type MonthTimeRangeKey = `m:${string}`;
 export type TimeRangeKey = RelativeTimeRangeKey | MonthTimeRangeKey;
 
 export const TIME_RANGE_OPTIONS: { value: RelativeTimeRangeKey; label: string }[] = [
 	{ value: 'all', label: 'All time' },
+	{ value: 'today', label: 'Today' },
+	{ value: 'week', label: 'This Week' },
 	{ value: '90', label: 'Last 90 days' },
 	{ value: '30', label: 'Last 30 days' },
 	{ value: '7', label: 'Last 7 days' }
 ];
+
+/**
+ * Local start of the current week (Sunday 00:00:00.000).
+ * Week is always Sunday → Saturday (not Monday-based).
+ */
+export function startOfWeekSunday(now = new Date()): Date {
+	const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+	// getDay(): 0 = Sunday … 6 = Saturday
+	start.setDate(start.getDate() - start.getDay());
+	return start;
+}
 
 export function isMonthTimeRange(range: string): range is MonthTimeRangeKey {
 	return /^m:\d{4}-\d{2}$/.test(range);
@@ -37,6 +50,8 @@ export function formatMonthYearLabel(ym: string): string {
  * Inclusive calendar window ending today (local) for relative ranges,
  * or a single calendar month (YYYY-MM) when range is m:YYYY-MM.
  * e.g. last 7 days = today and the previous 6 calendar days.
+ * `today` → current local calendar day only.
+ * `week` → this calendar week Sunday–Saturday (through today; no future days).
  * `all` → no lower bound.
  */
 export function isDateReceivedInTimeRange(
@@ -62,6 +77,18 @@ export function isDateReceivedInTimeRange(
 
 	if (range === 'all') return true;
 
+	// Today = current local calendar day only
+	if (range === 'today') {
+		const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+		return received >= start && received <= end;
+	}
+
+	// This week = Sunday 00:00 through today (week always Sun–Sat)
+	if (range === 'week') {
+		const start = startOfWeekSunday(now);
+		return received >= start && received <= end;
+	}
+
 	const days = parseInt(range, 10);
 	if (!Number.isFinite(days) || days < 1) return true;
 
@@ -72,7 +99,16 @@ export function isDateReceivedInTimeRange(
 }
 
 function isValidTimeRange(value: string): value is TimeRangeKey {
-	if (value === 'all' || value === '7' || value === '30' || value === '90') return true;
+	if (
+		value === 'all' ||
+		value === 'today' ||
+		value === 'week' ||
+		value === '7' ||
+		value === '30' ||
+		value === '90'
+	) {
+		return true;
+	}
 	return isMonthTimeRange(value);
 }
 

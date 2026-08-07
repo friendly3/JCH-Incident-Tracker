@@ -112,6 +112,8 @@
 
 	let search = $state('');
 	let filterType = $state('');
+	/** Sentinel for driver filter: incidents with null/blank driver. */
+	const DRIVER_FILTER_UNASSIGNED = '__unassigned__';
 	let filterDriver = $state('');
 	let filterTeamLeader = $state('');
 	let filterAction = $state('');
@@ -201,6 +203,8 @@
 		const next = el.value;
 		if (
 			next === 'all' ||
+			next === 'today' ||
+			next === 'week' ||
 			next === '7' ||
 			next === '30' ||
 			next === '90' ||
@@ -235,7 +239,12 @@
 			)
 				return false;
 			if (filterType && i.type !== filterType) return false;
-			if (filterDriver && i.driver !== filterDriver) return false;
+			if (filterDriver === DRIVER_FILTER_UNASSIGNED) {
+				// Null/blank driver only (not a username literally named "Unassigned")
+				if ((i.driver ?? '').trim()) return false;
+			} else if (filterDriver && i.driver !== filterDriver) {
+				return false;
+			}
 			if (filterTeamLeader && i.teamLeader !== filterTeamLeader) return false;
 			if (filterAction && i.action !== filterAction) return false;
 			// Missing map: has a ref but no usable suburb/street (no-ref rows excluded)
@@ -686,6 +695,7 @@
 				</select>
 				<select bind:value={filterDriver} class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus uppercase">
 					<option value="" class="normal-case">All Drivers</option>
+					<option value={DRIVER_FILTER_UNASSIGNED} class="normal-case">Unassigned</option>
 					{#each data.drivers ?? [] as d}<option value={d.username} class="uppercase">{d.username}</option>{/each}
 				</select>
 				<select bind:value={filterTeamLeader} class="rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700 input-focus uppercase">

@@ -1546,7 +1546,15 @@
 	let timeRange = $state<TimeRangeKey>(dashboardPeriod.value);
 
 	function setTimeRange(next: string) {
-		if (next !== 'all' && next !== '7' && next !== '30' && next !== '90' && !isMonthTimeRange(next)) {
+		if (
+			next !== 'all' &&
+			next !== 'today' &&
+			next !== 'week' &&
+			next !== '7' &&
+			next !== '30' &&
+			next !== '90' &&
+			!isMonthTimeRange(next)
+		) {
 			return;
 		}
 		const value = next as TimeRangeKey;
@@ -3648,40 +3656,60 @@
 											<tr>
 												<th
 													scope="col"
-													class="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-3"
+													class="tls-th-tip px-2 py-2 text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-3"
+													tabindex="0"
 												>
-													Team Leader
+													<span class="tls-th-label">Team Leader</span>
+													<span class="tls-th-popup" role="tooltip">
+														Category for the <strong>Responded By</strong> field — who
+														responded to the incident. Each row is one Responded By value
+														in the selected period.
+													</span>
 												</th>
 												<th
 													scope="col"
-													class="tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+													class="tls-th-tip tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+													tabindex="0"
 												>
-													Ongoing
+													<span class="tls-th-label">Ongoing</span>
+													<span class="tls-th-popup" role="tooltip">
+														<strong>Inclusion:</strong> resolution status is
+														<strong>Ongoing</strong> only, for that Responded By value.
+														Excludes New and all other statuses.
+													</span>
 												</th>
 												<th
 													scope="col"
 													class="tls-col-group-end px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
-													title="Share of total Ongoing"
+													title="Share of total Ongoing among assigned team leaders"
 												>
 													%
 												</th>
 												<th
 													scope="col"
-													class="tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+													class="tls-th-tip tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+													tabindex="0"
 												>
-													Resolved
+													<span class="tls-th-label">Resolved</span>
+													<span class="tls-th-popup" role="tooltip">
+														<strong>Inclusion:</strong> resolution status is
+														<strong>not Ongoing</strong> and
+														<strong>not New</strong> (e.g. Resolved, LIT, LPO, Ack, AP
+														staff, and other closed statuses), for that Responded By
+														value.
+													</span>
 												</th>
 												<th
 													scope="col"
 													class="tls-col-group-end px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
-													title="Share of total Resolved"
+													title="Share of total Resolved among assigned team leaders"
 												>
 													%
 												</th>
 												<th
 													scope="col"
 													class="tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-700 sm:px-2"
-													title="Ongoing + Resolved"
+													title="Ongoing + Resolved for the row"
 												>
 													Total
 												</th>
@@ -4093,41 +4121,8 @@
 							</p>
 						</div>
 						<p id="driver-chart-summary" class="sr-only">{driverChartAriaLabel}</p>
-						<div class="dashboard-chart-plot dashboard-chart-plot--fill relative w-full min-h-0">
-							{#if !hasDriverData}
-								<div class="flex h-full items-center justify-center">
-									<p class="text-sm text-warm-500">No incidents in this period.</p>
-								</div>
-							{/if}
-							<canvas
-								bind:this={driverCanvas}
-								class={!hasDriverData ? 'hidden' : 'block h-full w-full'}
-								aria-hidden="true"
-							></canvas>
-							<table class="sr-only" aria-labelledby="driver-chart-title">
-								<thead>
-									<tr>
-										<th scope="col">Driver</th>
-										{#each driverStackedBarData.typeLabels as typeLabel (typeLabel)}
-											<th scope="col">{typeLabel}</th>
-										{/each}
-										<th scope="col">Total</th>
-									</tr>
-								</thead>
-								<tbody>
-									{#each driverStackedBarData.driverRows as row (row.label)}
-										<tr>
-											<th scope="row">{row.label}</th>
-											{#each row.byType as count, i (`${row.label}-${driverStackedBarData.typeLabels[i] ?? i}`)}
-												<td>{count}</td>
-											{/each}
-											<td>{row.total}</td>
-										</tr>
-									{/each}
-								</tbody>
-							</table>
-						</div>
-						<div class="dashboard-chart-footer">
+						<!-- Type legend above the plot (click to toggle, hover to highlight) -->
+						<div class="dashboard-chart-legend dashboard-chart-legend--top">
 							{#if hasDriverData}
 								<ul
 									class="flex flex-wrap gap-x-1.5 gap-y-1"
@@ -4176,6 +4171,40 @@
 									{/each}
 								</ul>
 							{/if}
+						</div>
+						<div class="dashboard-chart-plot dashboard-chart-plot--fill relative w-full min-h-0">
+							{#if !hasDriverData}
+								<div class="flex h-full items-center justify-center">
+									<p class="text-sm text-warm-500">No incidents in this period.</p>
+								</div>
+							{/if}
+							<canvas
+								bind:this={driverCanvas}
+								class={!hasDriverData ? 'hidden' : 'block h-full w-full'}
+								aria-hidden="true"
+							></canvas>
+							<table class="sr-only" aria-labelledby="driver-chart-title">
+								<thead>
+									<tr>
+										<th scope="col">Driver</th>
+										{#each driverStackedBarData.typeLabels as typeLabel (typeLabel)}
+											<th scope="col">{typeLabel}</th>
+										{/each}
+										<th scope="col">Total</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each driverStackedBarData.driverRows as row (row.label)}
+										<tr>
+											<th scope="row">{row.label}</th>
+											{#each row.byType as count, i (`${row.label}-${driverStackedBarData.typeLabels[i] ?? i}`)}
+												<td>{count}</td>
+											{/each}
+											<td>{row.total}</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
 						</div>
 					</section>
 				</div>
@@ -4507,6 +4536,61 @@
 		border-right-color: rgba(255, 255, 255, 0.1);
 	}
 
+	/* Header definition popups (Team Leader / Ongoing / Resolved) */
+	:global(.tls-stats-table .tls-th-tip) {
+		position: relative;
+		cursor: help;
+	}
+
+	:global(.tls-stats-table .tls-th-label) {
+		border-bottom: 1px dotted currentColor;
+		padding-bottom: 0.05rem;
+	}
+
+	:global(.tls-stats-table .tls-th-popup) {
+		position: absolute;
+		left: 50%;
+		top: calc(100% + 0.35rem);
+		z-index: 40;
+		width: max-content;
+		max-width: min(16rem, 70vw);
+		padding: 0.5rem 0.65rem;
+		border-radius: 0.375rem;
+		border: 1px solid var(--color-warm-200, #e5e5e5);
+		background: var(--color-warm-50, #ffffff);
+		color: var(--color-warm-800, #1f1f1f);
+		font-size: 0.7rem;
+		font-weight: 400;
+		line-height: 1.35;
+		letter-spacing: normal;
+		text-transform: none;
+		text-align: left;
+		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+		opacity: 0;
+		visibility: hidden;
+		pointer-events: none;
+		transform: translateX(-50%) translateY(-2px);
+		transition:
+			opacity 0.12s ease,
+			visibility 0.12s ease,
+			transform 0.12s ease;
+	}
+
+	:global(.tls-stats-table .tls-th-tip:hover .tls-th-popup),
+	:global(.tls-stats-table .tls-th-tip:focus-visible .tls-th-popup),
+	:global(.tls-stats-table .tls-th-tip:focus-within .tls-th-popup) {
+		opacity: 1;
+		visibility: visible;
+		transform: translateX(-50%) translateY(0);
+	}
+
+	:global(.dark .tls-stats-table .tls-th-popup) {
+		background: var(--color-warm-100, #1a1a1a);
+		border-color: var(--color-warm-300, #3a3a3a);
+		color: var(--color-warm-800, #f0f0f0);
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+	}
+
 	/* +10px so multi-line type legends are not clipped */
 	:global(.dashboard-chart-footer) {
 		flex: 0 0 calc(2.85rem + 10px);
@@ -4514,6 +4598,18 @@
 		max-height: calc(2.85rem + 10px);
 		margin-top: 0.35rem;
 		overflow: hidden;
+	}
+
+	/* Driver chart: type legend above the plot */
+	:global(.dashboard-chart-legend) {
+		flex: 0 0 auto;
+		min-height: calc(2.85rem + 10px);
+		overflow: hidden;
+	}
+
+	:global(.dashboard-chart-legend--top) {
+		margin-top: 0.15rem;
+		margin-bottom: 0.35rem;
 	}
 
 	:global(.dashboard-legend-btn) {
