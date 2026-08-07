@@ -3765,195 +3765,211 @@
 									</p>
 								</div>
 							{:else}
+								<!--
+									All totals live *outside* the scroll box. Sticky <tfoot> on iOS/iPad
+									WebKit often keeps a composited stale layer when period/data changes
+									(body updates, footer numbers do not). Desktop is fine either way;
+									this structure is correct everywhere.
+								-->
 								<div
-									class="dashboard-team-leader-stats-scroll min-h-0 flex-1 overflow-auto rounded-md border border-warm-200"
+									class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-warm-200"
 								>
-									<table
-										class="tls-stats-table w-full min-w-[20rem] border-collapse text-left text-sm"
-									>
-										<thead
-											class="sticky top-0 z-10 border-b border-warm-200 bg-warm-50 dark:bg-warm-200"
+									{#key `${timeRange}-${statsByTeamLeader.grandTotal}-${statsByTeamLeader.totalOngoing}-${statsByTeamLeader.totalResolved}-${statsByTeamLeader.unassignedTotal}-${statsByTeamLeader.rows.length}`}
+										<div
+											class="dashboard-team-leader-stats-scroll min-h-0 flex-1 overflow-auto"
 										>
-											<tr>
-												<th
-													scope="col"
-													class="tls-th-tip px-2 py-2 text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-3"
-													tabindex="0"
+											<table
+												class="tls-stats-table w-full min-w-[20rem] border-collapse text-left text-sm"
+											>
+												<thead
+													class="sticky top-0 z-10 border-b border-warm-200 bg-warm-50 dark:bg-warm-200"
 												>
-													<span class="tls-th-label">Team Leader</span>
-													<span class="tls-th-popup" role="tooltip">
-														Category for the <strong>Responded By</strong> field — who
-														responded to the incident. Each row is one Responded By value
-														in the selected period.
-													</span>
-												</th>
-												<th
-													scope="col"
-													class="tls-th-tip tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
-													tabindex="0"
-												>
-													<span class="tls-th-label">Ongoing</span>
-													<span class="tls-th-popup" role="tooltip">
-														<strong>Inclusion:</strong> resolution status is
-														<strong>Ongoing</strong> only, for that Responded By value.
-														Excludes New and all other statuses.
-													</span>
-												</th>
-												<th
-													scope="col"
-													class="tls-col-group-end px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
-													title="Share of total Ongoing among assigned team leaders"
-												>
-													%
-												</th>
-												<th
-													scope="col"
-													class="tls-th-tip tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
-													tabindex="0"
-												>
-													<span class="tls-th-label">Resolved</span>
-													<span class="tls-th-popup" role="tooltip">
-														<strong>Inclusion:</strong> resolution status is
-														<strong>not Ongoing</strong> and
-														<strong>not New</strong> (e.g. Resolved, LIT, LPO, Ack, AP
-														staff, and other closed statuses), for that Responded By
-														value.
-													</span>
-												</th>
-												<th
-													scope="col"
-													class="tls-col-group-end px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
-													title="Share of total Resolved among assigned team leaders"
-												>
-													%
-												</th>
-												<th
-													scope="col"
-													class="tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-700 sm:px-2"
-													title="Ongoing + Resolved for the row"
-												>
-													Total
-												</th>
-											</tr>
-										</thead>
-										<tbody class="divide-y divide-warm-100">
-											{#each statsByTeamLeader.rows as row (row.key)}
-												<tr class="hover:bg-warm-50/80 dark:hover:bg-warm-200/40">
+													<tr>
+														<th
+															scope="col"
+															class="tls-th-tip px-2 py-2 text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-3"
+															tabindex="0"
+														>
+															<span class="tls-th-label">Team Leader</span>
+															<span class="tls-th-popup" role="tooltip">
+																Category for the <strong>Responded By</strong> field — who
+																responded to the incident. Each row is one Responded By
+																value in the selected period.
+															</span>
+														</th>
+														<th
+															scope="col"
+															class="tls-th-tip tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+															tabindex="0"
+														>
+															<span class="tls-th-label">Ongoing</span>
+															<span class="tls-th-popup" role="tooltip">
+																<strong>Inclusion:</strong> resolution status is
+																<strong>Ongoing</strong> only, for that Responded By
+																value. Excludes New and all other statuses.
+															</span>
+														</th>
+														<th
+															scope="col"
+															class="tls-col-group-end px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+															title="Share of total Ongoing among assigned team leaders"
+														>
+															%
+														</th>
+														<th
+															scope="col"
+															class="tls-th-tip tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+															tabindex="0"
+														>
+															<span class="tls-th-label">Resolved</span>
+															<span class="tls-th-popup" role="tooltip">
+																<strong>Inclusion:</strong> resolution status is
+																<strong>not Ongoing</strong> and
+																<strong>not New</strong> (e.g. Resolved, LIT, LPO, Ack, AP
+																staff, and other closed statuses), for that Responded By
+																value.
+															</span>
+														</th>
+														<th
+															scope="col"
+															class="tls-col-group-end px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+															title="Share of total Resolved among assigned team leaders"
+														>
+															%
+														</th>
+														<th
+															scope="col"
+															class="tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-700 sm:px-2"
+															title="Ongoing + Resolved for the row"
+														>
+															Total
+														</th>
+													</tr>
+												</thead>
+												<tbody class="divide-y divide-warm-100">
+													{#each statsByTeamLeader.rows as row (row.key)}
+														<tr class="hover:bg-warm-50/80 dark:hover:bg-warm-200/40">
+															<th
+																scope="row"
+																class="px-2 py-1.5 font-medium text-warm-800 sm:px-3"
+															>
+																{row.label}
+															</th>
+															<td
+																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-semibold text-warm-900 sm:px-2"
+															>
+																{row.ongoing}
+															</td>
+															<td
+																class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-700 sm:px-2"
+															>
+																{row.ongoingPct.toFixed(1)}%
+															</td>
+															<td
+																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-semibold text-warm-900 sm:px-2"
+															>
+																{row.resolved}
+															</td>
+															<td
+																class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-700 sm:px-2"
+															>
+																{row.resolvedPct.toFixed(1)}%
+															</td>
+															<td
+																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
+															>
+																{row.total}
+															</td>
+														</tr>
+													{/each}
+													{#if statsByTeamLeader.unassignedTotal > 0}
+														<tr
+															class="border-t border-warm-200 bg-warm-50/60 dark:bg-warm-200/30"
+														>
+															<th
+																scope="row"
+																class="px-2 py-1.5 font-medium italic text-warm-600 sm:px-3"
+															>
+																Unassigned
+															</th>
+															<td
+																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
+																aria-hidden="true"
+															>
+																—
+															</td>
+															<td
+																class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
+																aria-hidden="true"
+															>
+																—
+															</td>
+															<td
+																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
+																aria-hidden="true"
+															>
+																—
+															</td>
+															<td
+																class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
+																aria-hidden="true"
+															>
+																—
+															</td>
+															<td
+																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
+																title="All period incidents with empty Responded By (any status)"
+															>
+																{statsByTeamLeader.unassignedTotal}
+															</td>
+														</tr>
+													{/if}
+												</tbody>
+											</table>
+										</div>
+										<!-- All row: fixed under scroll area (not sticky tfoot) so iPad repaints totals -->
+										<table
+											class="tls-stats-table w-full min-w-[20rem] shrink-0 border-collapse border-t border-warm-200 bg-warm-50 text-left text-sm dark:bg-warm-200"
+											aria-label="Stats by Team Leader totals for {statsByTeamLeader.periodLabel}"
+										>
+											<tbody>
+												<tr>
 													<th
 														scope="row"
-														class="px-2 py-1.5 font-medium text-warm-800 sm:px-3"
+														class="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-warm-700 sm:px-3"
 													>
-														{row.label}
+														All
 													</th>
 													<td
-														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-semibold text-warm-900 sm:px-2"
+														class="tls-col-group-start px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
 													>
-														{row.ongoing}
+														{statsByTeamLeader.totalOngoing}
 													</td>
 													<td
-														class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-700 sm:px-2"
+														class="tls-col-group-end px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
 													>
-														{row.ongoingPct.toFixed(1)}%
+														{statsByTeamLeader.totalOngoing > 0 ? '100.0%' : '—'}
 													</td>
 													<td
-														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-semibold text-warm-900 sm:px-2"
+														class="tls-col-group-start px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
 													>
-														{row.resolved}
+														{statsByTeamLeader.totalResolved}
 													</td>
 													<td
-														class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-700 sm:px-2"
+														class="tls-col-group-end px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
 													>
-														{row.resolvedPct.toFixed(1)}%
+														{statsByTeamLeader.totalResolved > 0 ? '100.0%' : '—'}
 													</td>
 													<td
-														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
+														class="tls-col-group-start px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
+														title="Team leaders + Unassigned"
 													>
-														{row.total}
+														{statsByTeamLeader.grandTotal}
 													</td>
 												</tr>
-											{/each}
-											{#if statsByTeamLeader.unassignedTotal > 0}
-												<tr
-													class="border-t border-warm-200 bg-warm-50/60 dark:bg-warm-200/30"
-												>
-													<th
-														scope="row"
-														class="px-2 py-1.5 font-medium italic text-warm-600 sm:px-3"
-													>
-														Unassigned
-													</th>
-													<td
-														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
-														aria-hidden="true"
-													>
-														—
-													</td>
-													<td
-														class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
-														aria-hidden="true"
-													>
-														—
-													</td>
-													<td
-														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
-														aria-hidden="true"
-													>
-														—
-													</td>
-													<td
-														class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
-														aria-hidden="true"
-													>
-														—
-													</td>
-													<td
-														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
-														title="All period incidents with empty Responded By (any status)"
-													>
-														{statsByTeamLeader.unassignedTotal}
-													</td>
-												</tr>
-											{/if}
-										</tbody>
-										<tfoot
-											class="sticky bottom-0 border-t border-warm-200 bg-warm-50 dark:bg-warm-200"
-										>
-											<tr>
-												<th
-													scope="row"
-													class="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-warm-700 sm:px-3"
-												>
-													All
-												</th>
-												<td
-													class="tls-col-group-start px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
-												>
-													{statsByTeamLeader.totalOngoing}
-												</td>
-												<td
-													class="tls-col-group-end px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
-												>
-													{statsByTeamLeader.totalOngoing > 0 ? '100.0%' : '—'}
-												</td>
-												<td
-													class="tls-col-group-start px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
-												>
-													{statsByTeamLeader.totalResolved}
-												</td>
-												<td
-													class="tls-col-group-end px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
-												>
-													{statsByTeamLeader.totalResolved > 0 ? '100.0%' : '—'}
-												</td>
-												<td
-													class="tls-col-group-start px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
-													title="Team leaders + Unassigned"
-												>
-													{statsByTeamLeader.grandTotal}
-												</td>
-											</tr>
-										</tfoot>
-									</table>
+											</tbody>
+										</table>
+									{/key}
 								</div>
 							{/if}
 						</div>
