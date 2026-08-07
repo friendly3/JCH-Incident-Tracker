@@ -785,7 +785,9 @@
 	{/if}
 	<!-- List shell: inert under modal; visually hidden when form is expanded to full main pane -->
 	<div
-		class="flex min-h-0 flex-1 flex-col overflow-hidden {isFormExpanded ? 'invisible pointer-events-none' : ''}"
+		class="incidents-list-shell flex min-h-0 flex-1 flex-col overflow-hidden {isFormExpanded
+			? 'invisible pointer-events-none'
+			: ''}"
 		inert={isModalOpen || isFormExpanded || undefined}
 		aria-hidden={isFormExpanded || undefined}
 	>

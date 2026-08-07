@@ -809,6 +809,43 @@ body {
 		min-height: 100% !important;
 		height: 100% !important;
 		flex: 1 1 auto !important;
+		/* List is the only intentional vertical scroll surface */
+		touch-action: pan-x pan-y;
+		overscroll-behavior: contain;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	/*
+	 * iPad: do not pan/scroll the page when touching header or filters.
+	 * Dropdowns/buttons still receive taps (touch-action restored on controls).
+	 * Desktop is outside this media block and is unchanged.
+	 */
+	.incidents-list-shell {
+		overscroll-behavior: none;
+		/* Prevent the shell itself from becoming a scroll container */
+		overflow: hidden !important;
+	}
+
+	.incidents-list-header,
+	.incidents-filters,
+	.incidents-list-actions {
+		/* Block pan/zoom gestures that would scroll ancestors or the page */
+		touch-action: none;
+		overscroll-behavior: none;
+		/* Keep chrome from scrolling if content wraps taller than expected */
+		overflow: hidden;
+	}
+
+	.incidents-list-header a,
+	.incidents-list-header button,
+	.incidents-filters select,
+	.incidents-filters input,
+	.incidents-filters button,
+	.incidents-filters label,
+	.incidents-list-actions button,
+	.incidents-list-actions a {
+		/* Allow tap / focus without enabling page pan from the control */
+		touch-action: manipulation;
 	}
 
 	/*
