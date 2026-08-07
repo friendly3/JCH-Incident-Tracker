@@ -1713,8 +1713,8 @@
 			};
 
 			/**
-			 * Stacked vertical bar: segment counts inside slices + stack total on top.
-			 * Used for the full-page driver chart in the PDF.
+			 * Stacked horizontal bar (indexAxis y): segment counts inside slices +
+			 * stack total to the right of each bar. Full-page driver chart in the PDF.
 			 */
 			const pdfStackedBarDataLabels = {
 				labels: {
@@ -1740,9 +1740,10 @@
 						textStrokeWidth: 2
 					},
 					total: {
+						// Horizontal bar: end of stack = right side
 						anchor: 'end' as const,
-						align: 'top' as const,
-						offset: 2,
+						align: 'end' as const,
+						offset: 6,
 						clamp: false,
 						clip: false,
 						display: (context: {
@@ -1903,7 +1904,7 @@
 
 			const teamLeaderStats = statsByTeamLeader;
 
-			// Full-page chart raster (wide + tall) so page-2 fit keeps labels/legend readable
+			// Full-page horizontal stacked bars (drivers on Y) — matches live dashboard chart
 			const driverPng = await chartToPng(
 				'bar',
 				1600,
@@ -1925,34 +1926,34 @@
 					showLegend: true,
 					// Segment + stack-total labels (overrides default point-style datalabels)
 					datalabels: pdfStackedBarDataLabels,
-					// x-axis tick font +2pt vs previous PDF driver chart (11 → 13)
 					scales: {
+						// Values along X (horizontal bars)
 						x: {
 							stacked: true,
-							ticks: {
-								color: muted,
-								font: { size: 13, weight: 500 },
-								maxRotation: 45,
-								minRotation: 0,
-								autoSkip: true
-							},
-							grid: { display: false }
-						},
-						y: {
-							stacked: true,
 							beginAtZero: true,
-							grace: '12%',
+							grace: '18%',
 							ticks: {
 								color: muted,
-								font: { size: 11, weight: 500 },
+								font: { size: 12, weight: 500 },
 								precision: 0,
 								stepSize: 1
 							},
 							grid: { color: rule, drawBorder: false }
+						},
+						// Drivers along Y
+						y: {
+							stacked: true,
+							ticks: {
+								color: muted,
+								font: { size: 12, weight: 600 },
+								autoSkip: false
+							},
+							grid: { display: false }
 						}
 					},
 					chartOptions: {
-						layout: { padding: { top: 20, right: 16, bottom: 8, left: 8 } },
+						indexAxis: 'y' as const,
+						layout: { padding: { top: 12, right: 36, bottom: 8, left: 8 } },
 						plugins: {
 							legend: {
 								display: true,
@@ -2266,7 +2267,7 @@
 			setText(muted);
 			pdf.setFont('helvetica', 'normal');
 			pdf.setFontSize(9);
-			pdf.text(`${periodLabel} · stacked by type`, m, m + 11);
+			pdf.text(`${periodLabel} · stacked by type · horizontal`, m, m + 11);
 
 			const chartTop = m + 16;
 			const chartBottom = pageH - m - 6;
@@ -2278,7 +2279,7 @@
 				const imgPad = 4;
 				const maxImgW = contentW - imgPad * 2;
 				const maxImgH = chartBoxH - imgPad * 2 - 2;
-				// Source raster is 1600×900
+				// Source raster is 1600×900 (horizontal stacked bars)
 				const srcW = 1600;
 				const srcH = 900;
 				const scale = Math.min(maxImgW / srcW, maxImgH / srcH);
