@@ -1562,6 +1562,12 @@
 	}
 
 	/**
+	 * Set true to show "Incidents by Type Over Time" again (markup + PDF path kept).
+	 * Currently hidden; top-right slot shows Stats by Team Leader instead.
+	 */
+	const SHOW_TYPE_OVER_TIME_CHART = false;
+
+	/**
 	 * Legend filters for multi-series charts (row 3): labels listed here are hidden.
 	 * Click legend items to toggle. Reassigned as new arrays for Svelte reactivity.
 	 */
@@ -1810,28 +1816,33 @@
 				{ showLegend: false }
 			);
 
-			const typePng = await chartToPng(
-				'line',
-				720,
-				320,
-				{
-					labels: byType.labels,
-					datasets: byType.datasets
-						.filter((ds) => !hiddenTypeOverTimeLabels.includes(ds.label))
-						.map((ds) => ({
-							label: ds.label,
-							data: ds.data,
-							borderColor: ds.borderColor,
-							backgroundColor: 'transparent',
-							pointBackgroundColor: ds.borderColor,
-							borderWidth: 2,
-							pointRadius: 2,
-							tension: 0.3,
-							fill: false
-						}))
-				},
-				{ showLegend: true }
-			);
+			// Kept for future: type-over-time PNG when SHOW_TYPE_OVER_TIME_CHART is re-enabled
+			const typePng = SHOW_TYPE_OVER_TIME_CHART
+				? await chartToPng(
+						'line',
+						720,
+						320,
+						{
+							labels: byType.labels,
+							datasets: byType.datasets
+								.filter((ds) => !hiddenTypeOverTimeLabels.includes(ds.label))
+								.map((ds) => ({
+									label: ds.label,
+									data: ds.data,
+									borderColor: ds.borderColor,
+									backgroundColor: 'transparent',
+									pointBackgroundColor: ds.borderColor,
+									borderWidth: 2,
+									pointRadius: 2,
+									tension: 0.3,
+									fill: false
+								}))
+						},
+						{ showLegend: true }
+					)
+				: null;
+
+			const teamLeaderStats = statsByTeamLeader;
 
 			// Full-page chart raster (wide + tall) so page-2 fit keeps labels/legend readable
 			const driverPng = await chartToPng(
@@ -2056,7 +2067,7 @@
 				pdf.text('No resolution status data', m + 3, y + 20);
 			}
 
-			// Two line charts — use remaining page height (leave footer)
+			// Top-row pair: over time + Stats by Team Leader (or type-over-time if re-enabled)
 			y += statusH + 5;
 			const footerReserve = 10;
 			const remaining = pageH - y - footerReserve;
@@ -2068,17 +2079,25 @@
 			pdf.setFont('helvetica', 'bold');
 			pdf.setFontSize(9);
 			pdf.text('Incidents Over Time', m + 3, y + 5);
-			pdf.text('Incidents by Type Over Time', m + halfW + 7, y + 5);
+			pdf.text(
+				SHOW_TYPE_OVER_TIME_CHART ? 'Incidents by Type Over Time' : 'Stats by Team Leader',
+				m + halfW + 7,
+				y + 5
+			);
 			setText(muted);
 			pdf.setFont('helvetica', 'normal');
 			pdf.setFontSize(7);
 			pdf.text(periodLabel, m + 3, y + 9);
-			pdf.text(periodLabel, m + halfW + 7, y + 9);
+			pdf.text(
+				SHOW_TYPE_OVER_TIME_CHART ? periodLabel : `${periodLabel} · Ongoing only`,
+				m + halfW + 7,
+				y + 9
+			);
 			const plotH = midChartH - 12;
 			if (overTimePng && plotH > 20) {
 				pdf.addImage(overTimePng, 'PNG', m + 2, y + 11, halfW - 4, plotH, undefined, 'NONE');
 			}
-			if (typePng && plotH > 20) {
+			if (SHOW_TYPE_OVER_TIME_CHART && typePng && plotH > 20) {
 				pdf.addImage(
 					typePng,
 					'PNG',
@@ -2089,6 +2108,55 @@
 					undefined,
 					'NONE'
 				);
+			} else if (!SHOW_TYPE_OVER_TIME_CHART) {
+				// Vector table: Team Leader | Ongoing | %
+				const tableX = m + halfW + 6;
+				const tableW = halfW - 8;
+				const colTeam = tableW * 0.5;
+				const colOngoing = tableW * 0.25;
+				const colPct = tableW * 0.25;
+				let ty = y + 13;
+				const rowH = 5.2;
+				const maxRows = Math.max(0, Math.floor((plotH - 8) / rowH) - 1);
+				setText(ink);
+				pdf.setFont('helvetica', 'bold');
+				pdf.setFontSize(7.5);
+				pdf.text('Team Leader', tableX, ty);
+				pdf.text('Ongoing', tableX + colTeam + colOngoing - 1, ty, { align: 'right' });
+				pdf.text('%', tableX + tableW - 1, ty, { align: 'right' });
+				ty += 2;
+				setDraw(rule);
+				pdf.setLineWidth(0.2);
+				pdf.line(tableX, ty, tableX + tableW, ty);
+				ty += 3.5;
+				pdf.setFont('helvetica', 'normal');
+				pdf.setFontSize(7.5);
+				if (teamLeaderStats.rows.length === 0) {
+					setText(muted);
+					pdf.text('No ongoing incidents in this period', tableX, ty + 4);
+				} else {
+					const visible = teamLeaderStats.rows.slice(0, maxRows);
+					for (const row of visible) {
+						if (ty > y + midChartH - 6) break;
+						setText(ink);
+						const name = pdf.splitTextToSize(row.label, colTeam - 2);
+						pdf.text(name[0] ?? row.label, tableX, ty);
+						pdf.text(String(row.ongoing), tableX + colTeam + colOngoing - 1, ty, {
+							align: 'right'
+						});
+						pdf.text(`${row.pct.toFixed(1)}%`, tableX + tableW - 1, ty, { align: 'right' });
+						ty += rowH;
+					}
+					if (teamLeaderStats.rows.length > visible.length) {
+						setText(muted);
+						pdf.setFontSize(6.5);
+						pdf.text(
+							`+${teamLeaderStats.rows.length - visible.length} more…`,
+							tableX,
+							ty
+						);
+					}
+				}
 			}
 
 			pageFooter('Page 1 of 3 · Overview · JCH Incident Tracker');
@@ -2544,6 +2612,51 @@
 			}
 		]
 	}));
+
+	/**
+	 * Stats by Team Leader: Ongoing incidents in the selected period,
+	 * grouped by Responded By (labelled Team Leader). % is share of that Ongoing tally.
+	 */
+	const statsByTeamLeader = $derived.by(() => {
+		const byLeader = new Map<string, { key: string; label: string; ongoing: number }>();
+		for (const incident of periodIncidents) {
+			const action = (incident.action ?? '').trim().toUpperCase();
+			if (action !== 'ONGOING') continue;
+			const r = normalizeAggregationKey(incident.response, 'Unassigned');
+			const existing = byLeader.get(r.key);
+			if (existing) {
+				existing.ongoing += 1;
+			} else {
+				byLeader.set(r.key, { key: r.key, label: r.label, ongoing: 1 });
+			}
+		}
+		const rows = [...byLeader.values()].sort((a, b) => {
+			if (b.ongoing !== a.ongoing) return b.ongoing - a.ongoing;
+			return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+		});
+		const totalOngoing = rows.reduce((sum, row) => sum + row.ongoing, 0);
+		return {
+			periodLabel: timeRangeLabel,
+			totalOngoing,
+			rows: rows.map((row) => ({
+				key: row.key,
+				label: row.label,
+				ongoing: row.ongoing,
+				/** Share of total Ongoing in this table; 1 decimal for display. */
+				pct: totalOngoing > 0 ? (row.ongoing / totalOngoing) * 100 : 0
+			}))
+		};
+	});
+
+	const hasStatsByTeamLeader = $derived(statsByTeamLeader.rows.length > 0);
+
+	const statsByTeamLeaderAriaLabel = $derived.by(() => {
+		const { rows, totalOngoing, periodLabel } = statsByTeamLeader;
+		if (rows.length === 0) {
+			return `Stats by Team Leader (${periodLabel}): no ongoing incidents in this period`;
+		}
+		return `Stats by Team Leader for ${periodLabel}. ${rows.length} team leader${rows.length === 1 ? '' : 's'}, ${totalOngoing} ongoing incident${totalOngoing === 1 ? '' : 's'}.`;
+	});
 
 	const hasActionStatusData = $derived(incidentsByActionStatus.length > 0);
 	const actionStatusAriaLabel = $derived(
@@ -3393,7 +3506,10 @@
 
 				<!-- Charts & tables (same period as header picker) -->
 				<section class="dashboard-charts" aria-label="Incident charts">
-				<!-- Top row: over-time charts side by side -->
+				<!--
+					Top row: Over Time | Stats by Team Leader (former type-over-time slot).
+					Type-over-time markup kept behind SHOW_TYPE_OVER_TIME_CHART for future use.
+				-->
 				<div class="dashboard-chart-row grid grid-cols-1 gap-2 lg:grid-cols-2 lg:items-stretch">
 					<section
 						class="dashboard-chart-card min-w-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
@@ -3420,6 +3536,108 @@
 						<div class="dashboard-chart-footer" aria-hidden="true"></div>
 					</section>
 
+					<!-- Former type-over-time slot: Stats by Team Leader -->
+					<section
+						class="dashboard-chart-card dashboard-team-leader-stats-card min-w-0 overflow-hidden rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4 dark:bg-warm-100"
+						aria-labelledby="stats-by-team-leader-title"
+						aria-describedby="stats-by-team-leader-summary"
+					>
+						<div class="dashboard-chart-header">
+							<h2 class="text-sm font-semibold text-warm-800" id="stats-by-team-leader-title">
+								Stats by Team Leader
+							</h2>
+							<p class="dashboard-chart-meta text-xs text-warm-500">
+								{statsByTeamLeader.periodLabel} · Ongoing only
+							</p>
+						</div>
+						<p id="stats-by-team-leader-summary" class="sr-only">{statsByTeamLeaderAriaLabel}</p>
+						<div class="dashboard-chart-plot dashboard-team-leader-stats-plot relative flex min-h-0 w-full flex-col">
+							{#if !hasStatsByTeamLeader}
+								<div class="flex h-full flex-1 items-center justify-center">
+									<p class="text-sm text-warm-500">No ongoing incidents in this period.</p>
+								</div>
+							{:else}
+								<div
+									class="dashboard-team-leader-stats-scroll min-h-0 flex-1 overflow-auto rounded-md border border-warm-200"
+								>
+									<table class="w-full border-collapse text-left text-sm">
+										<thead
+											class="sticky top-0 z-10 border-b border-warm-200 bg-warm-50 dark:bg-warm-200"
+										>
+											<tr>
+												<th
+													scope="col"
+													class="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-warm-600"
+												>
+													Team Leader
+												</th>
+												<th
+													scope="col"
+													class="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600"
+												>
+													Ongoing
+												</th>
+												<th
+													scope="col"
+													class="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600"
+												>
+													%
+												</th>
+											</tr>
+										</thead>
+										<tbody class="divide-y divide-warm-100">
+											{#each statsByTeamLeader.rows as row (row.key)}
+												<tr class="hover:bg-warm-50/80 dark:hover:bg-warm-200/40">
+													<th
+														scope="row"
+														class="px-3 py-1.5 font-medium text-warm-800"
+													>
+														{row.label}
+													</th>
+													<td
+														class="px-3 py-1.5 text-center tabular-nums font-semibold text-warm-900"
+													>
+														{row.ongoing}
+													</td>
+													<td
+														class="px-3 py-1.5 text-center tabular-nums text-warm-700"
+													>
+														{row.pct.toFixed(1)}%
+													</td>
+												</tr>
+											{/each}
+										</tbody>
+										<tfoot
+											class="sticky bottom-0 border-t border-warm-200 bg-warm-50 dark:bg-warm-200"
+										>
+											<tr>
+												<th
+													scope="row"
+													class="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-warm-700"
+												>
+													All
+												</th>
+												<td
+													class="px-3 py-2 text-center text-sm font-bold tabular-nums text-warm-900"
+												>
+													{statsByTeamLeader.totalOngoing}
+												</td>
+												<td
+													class="px-3 py-2 text-center text-sm font-bold tabular-nums text-warm-900"
+												>
+													{statsByTeamLeader.totalOngoing > 0 ? '100.0%' : '—'}
+												</td>
+											</tr>
+										</tfoot>
+									</table>
+								</div>
+							{/if}
+						</div>
+						<div class="dashboard-chart-footer" aria-hidden="true"></div>
+					</section>
+
+					{#if SHOW_TYPE_OVER_TIME_CHART}
+					<!-- Kept for future: original top-right type-over-time chart (off by default) -->
 					<section
 						class="dashboard-chart-card min-w-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="type-over-time-chart-title"
@@ -3517,9 +3735,10 @@
 							{/if}
 						</div>
 					</section>
+					{/if}
 				</div>
 
-				<!-- Driver table + bar chart side by side (equal card height; table body fills like chart plot) -->
+				<!-- Driver table + bar chart side by side -->
 				<div
 					class="dashboard-driver-row mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2 lg:items-stretch"
 				>
@@ -4036,7 +4255,7 @@
 
 	/*
 	 * Driver row: equal-height cards. Table scroll body and chart plot both
-	 * flex-grow so they share the same vertical space (no max-height cap on the table).
+	 * flex-grow so they share the same vertical space.
 	 * Floor ≈ 75% of top-row plot (23.17rem × 0.75).
 	 */
 	:global(.dashboard-driver-row) {
@@ -4051,7 +4270,6 @@
 	:global(.dashboard-driver-table-card) {
 		display: flex;
 		flex-direction: column;
-		/* header + plot floor + chart footer band ≈ match chart card */
 		min-height: calc(3.25rem + 17.38rem + 2.85rem + 10px + 0.7rem);
 	}
 
@@ -4075,6 +4293,23 @@
 
 	:global(.dashboard-chart-plot.dashboard-chart-plot--fill canvas) {
 		max-height: none !important;
+	}
+
+	/* Stats by Team Leader: table fills the top-row plot slot */
+	:global(.dashboard-team-leader-stats-card) {
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+		min-height: 100%;
+	}
+
+	:global(.dashboard-team-leader-stats-plot) {
+		overflow: hidden;
+	}
+
+	:global(.dashboard-team-leader-stats-scroll) {
+		min-height: 0;
+		height: 100%;
 	}
 
 	/* +10px so multi-line type legends are not clipped */
