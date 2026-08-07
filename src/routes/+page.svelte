@@ -54,6 +54,10 @@
 	const DRIVER_FILTER_UNASSIGNED = '__unassigned__';
 	const TYPE_FILTER_UNSPECIFIED = '__unspecified__';
 	const RESPONDED_BY_FILTER_UNASSIGNED = '__unassigned__';
+	/** Resolution status groups (dashboard KPI drill-down) */
+	const ACTION_FILTER_UNRESOLVED = '__unresolved__';
+	const ACTION_FILTER_RESOLVED = '__resolved__';
+	const ACTION_FILTER_UNSPECIFIED = '__unspecified__';
 
 	const incidents = $derived(incidentsFromPageData(incidentStore.list, data.incidents));
 
@@ -157,6 +161,7 @@
 		const hasDrillParams =
 			params.has('driver') ||
 			params.has('type') ||
+			params.has('action') ||
 			params.has('period') ||
 			params.has('drill');
 
@@ -174,6 +179,11 @@
 		const type = params.get('type');
 		if (type !== null) {
 			filterType = type === '' ? TYPE_FILTER_UNSPECIFIED : type;
+		}
+
+		const action = params.get('action');
+		if (action !== null) {
+			filterAction = action === '' ? ACTION_FILTER_UNSPECIFIED : action;
 		}
 
 		const period = params.get('period');
@@ -200,6 +210,30 @@
 		return filterType;
 	}
 
+	function drillActionLabel(): string {
+		if (filterAction === ACTION_FILTER_UNRESOLVED) return 'Ongoing or New';
+		if (filterAction === ACTION_FILTER_RESOLVED) return 'Not Ongoing / New';
+		if (filterAction === ACTION_FILTER_UNSPECIFIED || !filterAction) return 'Unspecified';
+		return filterAction;
+	}
+
+	function drillSourceLabel(): string {
+		switch (drillSource) {
+			case 'driver-chart':
+				return 'Incidents by Driver';
+			case 'status-chart':
+				return 'By Resolution Status';
+			case 'kpi-total':
+				return 'Total';
+			case 'kpi-unresolved':
+				return 'Unresolved';
+			case 'kpi-resolved':
+				return 'Resolved';
+			default:
+				return drillSource ?? 'Dashboard';
+		}
+	}
+
 	function drillPeriodLabel(): string {
 		const relative = TIME_RANGE_OPTIONS.find((o) => o.value === filterDateRange);
 		if (relative) return relative.label;
@@ -216,6 +250,7 @@
 		drillSource = null;
 		filterDriver = '';
 		filterType = '';
+		filterAction = '';
 		filterDateRange = 'all';
 		// Open every month group so records are not hidden under collapsed accordions
 		expandedMonths = new Set(allMonthKeys);
@@ -359,7 +394,17 @@
 				return false;
 			}
 			if (filterTeamLeader && i.teamLeader !== filterTeamLeader) return false;
-			if (filterAction && i.action !== filterAction) return false;
+			if (filterAction === ACTION_FILTER_UNRESOLVED) {
+				const a = (i.action ?? '').trim().toUpperCase();
+				if (a !== 'ONGOING' && a !== 'NEW') return false;
+			} else if (filterAction === ACTION_FILTER_RESOLVED) {
+				const a = (i.action ?? '').trim().toUpperCase();
+				if (a === 'ONGOING' || a === 'NEW') return false;
+			} else if (filterAction === ACTION_FILTER_UNSPECIFIED) {
+				if ((i.action ?? '').trim()) return false;
+			} else if (filterAction && i.action !== filterAction) {
+				return false;
+			}
 			if (filterRespondedBy === RESPONDED_BY_FILTER_UNASSIGNED) {
 				if ((i.response ?? '').trim()) return false;
 			} else if (filterRespondedBy && (i.response ?? '') !== filterRespondedBy) {
@@ -826,21 +871,30 @@
 							Drill-down from dashboard
 						</p>
 						<p class="mt-1 text-sm text-warm-800">
-							{#if drillSource === 'driver-chart'}
-								<span class="font-medium">Incidents by Driver</span>
-								<span class="text-warm-500"> · </span>
-							{/if}
+							<span class="font-medium">{drillSourceLabel()}</span>
+							<span class="text-warm-500"> · </span>
 							<span class="inline-flex flex-wrap items-center gap-1.5">
-								<span
-									class="inline-flex items-center rounded-md border border-accent-200 bg-white px-2 py-0.5 text-xs font-medium text-warm-800 dark:bg-warm-100"
-								>
-									Driver: {drillDriverLabel()}
-								</span>
-								<span
-									class="inline-flex items-center rounded-md border border-accent-200 bg-white px-2 py-0.5 text-xs font-medium text-warm-800 dark:bg-warm-100"
-								>
-									Type: {drillTypeLabel()}
-								</span>
+								{#if filterDriver}
+									<span
+										class="inline-flex items-center rounded-md border border-accent-200 bg-white px-2 py-0.5 text-xs font-medium text-warm-800 dark:bg-warm-100"
+									>
+										Driver: {drillDriverLabel()}
+									</span>
+								{/if}
+								{#if filterType}
+									<span
+										class="inline-flex items-center rounded-md border border-accent-200 bg-white px-2 py-0.5 text-xs font-medium text-warm-800 dark:bg-warm-100"
+									>
+										Type: {drillTypeLabel()}
+									</span>
+								{/if}
+								{#if filterAction}
+									<span
+										class="inline-flex items-center rounded-md border border-accent-200 bg-white px-2 py-0.5 text-xs font-medium text-warm-800 dark:bg-warm-100"
+									>
+										Status: {drillActionLabel()}
+									</span>
+								{/if}
 								<span
 									class="inline-flex items-center rounded-md border border-accent-200 bg-white px-2 py-0.5 text-xs font-medium text-warm-800 dark:bg-warm-100"
 								>
@@ -918,6 +972,12 @@
 					class="incidents-filter-ctrl touch-target-inline min-w-[8rem] flex-1 rounded-lg border border-warm-200 bg-warm-50 px-2.5 py-2 text-sm text-warm-700 input-focus uppercase sm:flex-none"
 				>
 					<option value="" class="normal-case">All Resolution Statuses</option>
+					<option value={ACTION_FILTER_UNRESOLVED} class="normal-case">Unresolved (Ongoing or New)</option>
+					<option value={ACTION_FILTER_RESOLVED} class="normal-case">Resolved (not Ongoing/New)</option>
+					<option value={ACTION_FILTER_UNSPECIFIED} class="normal-case">Unspecified</option>
+					{#if filterAction && filterAction !== ACTION_FILTER_UNRESOLVED && filterAction !== ACTION_FILTER_RESOLVED && filterAction !== ACTION_FILTER_UNSPECIFIED && !(data.incidentActions ?? []).some((a) => a.name === filterAction)}
+						<option value={filterAction} class="uppercase">{filterAction}</option>
+					{/if}
 					{#each data.incidentActions ?? [] as a}<option value={a.name} class="uppercase">{a.name}</option>{/each}
 				</select>
 				<select

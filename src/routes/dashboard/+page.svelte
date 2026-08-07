@@ -1088,7 +1088,40 @@
 		chart.update('none');
 	}
 
-	/** Vertical bar: incidents per resolution status. */
+	/**
+	 * Deep-link to the incidents list with period + optional filters.
+	 * Same pattern as driver-chart drill-down (shareable URL query params).
+	 */
+	function drillDownToIncidents(opts: {
+		drill: string;
+		driver?: string;
+		type?: string;
+		/** Exact status name, or list sentinels: __unresolved__ | __resolved__ | __unspecified__ */
+		action?: string;
+	}) {
+		const params = new URLSearchParams();
+		params.set('period', untrack(() => timeRange));
+		params.set('drill', opts.drill);
+		if (opts.driver !== undefined) {
+			const d = opts.driver.trim();
+			params.set('driver', !d || isUnassignedCategory(d) ? '__unassigned__' : d);
+		}
+		if (opts.type !== undefined) {
+			const t = opts.type.trim();
+			params.set('type', !t || t.toUpperCase() === 'UNSPECIFIED' ? '__unspecified__' : t);
+		}
+		if (opts.action !== undefined) {
+			const a = opts.action.trim();
+			if (!a || isUnassignedCategory(a) || a.toUpperCase() === 'UNSPECIFIED') {
+				params.set('action', '__unspecified__');
+			} else {
+				params.set('action', a);
+			}
+		}
+		void goto(`/?${params.toString()}`);
+	}
+
+	/** Bar chart: incidents per resolution status. Click a bar → list drill-down. */
 	function buildActionStatusBarOptions(
 		colors: ReturnType<typeof getChartTheme>
 	): ChartOptions<'bar'> {
@@ -1099,6 +1132,22 @@
 			layout: {
 				// Summary-row plot (~7.15rem)
 				padding: { top: 14, right: 4, left: 2, bottom: 2 }
+			},
+			onHover: (event, elements) => {
+				const native = event.native;
+				const target = native?.target;
+				if (target instanceof HTMLElement) {
+					target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+				}
+			},
+			onClick: (_event, elements, chart) => {
+				if (!elements.length) return;
+				const hit = elements[0];
+				const statusLabel = String(chart.data.labels?.[hit.index] ?? '');
+				const raw = chart.data.datasets[hit.datasetIndex]?.data?.[hit.index];
+				const value = typeof raw === 'number' ? raw : Number(raw);
+				if (!statusLabel || !Number.isFinite(value) || value <= 0) return;
+				drillDownToIncidents({ drill: 'status-chart', action: statusLabel });
 			},
 			plugins: {
 				legend: {
@@ -1119,7 +1168,8 @@
 					callbacks: {
 						label: (context) => {
 							const value = context.parsed.y ?? 0;
-							return `${value} ${value === 1 ? 'incident' : 'incidents'}`;
+							const base = `${value} ${value === 1 ? 'incident' : 'incidents'}`;
+							return `${base} · click to view list`;
 						}
 					}
 				},
@@ -1251,29 +1301,13 @@
 		return last;
 	}
 
-	/**
-	 * Navigate to incidents list filtered to this driver × type segment
-	 * (and the dashboard period). Uses URL query params — shareable deep link.
-	 */
+	/** Driver chart segment → list filtered by driver × type × period. */
 	function drillDownDriverSegment(driverLabel: string, typeLabel: string) {
-		const params = new URLSearchParams();
-		const d = (driverLabel ?? '').trim();
-		const t = (typeLabel ?? '').trim();
-		// Match list-page sentinels for empty fields
-		if (!d || isUnassignedCategory(d)) {
-			params.set('driver', '__unassigned__');
-		} else {
-			params.set('driver', d);
-		}
-		if (!t || t.toUpperCase() === 'UNSPECIFIED') {
-			params.set('type', '__unspecified__');
-		} else {
-			params.set('type', t);
-		}
-		// Current dashboard period (relative or m:YYYY-MM)
-		params.set('period', untrack(() => timeRange));
-		params.set('drill', 'driver-chart');
-		void goto(`/?${params.toString()}`);
+		drillDownToIncidents({
+			drill: 'driver-chart',
+			driver: driverLabel,
+			type: typeLabel
+		});
 	}
 
 	/**
@@ -3475,11 +3509,14 @@
 						role="group"
 						aria-label="Period KPIs and resolution breakdown"
 					>
-						<!-- Total KPI — same vertical stack as Unresolved / Resolved -->
-						<section
-							class="flex flex-col justify-between gap-1.5 rounded-md border border-warm-200 bg-white px-3 py-3 shadow-sm dark:bg-warm-100 lg:col-span-2"
+						<!-- Total KPI — click → list for period -->
+						<button
+							type="button"
+							class="flex cursor-pointer flex-col justify-between gap-1.5 rounded-md border border-warm-200 bg-white px-3 py-3 text-left shadow-sm transition hover:border-accent-400 hover:ring-2 hover:ring-accent-300/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:bg-warm-100 lg:col-span-2"
 							aria-labelledby="total-incidents-title"
 							aria-describedby="total-incidents-tip"
+							title="View all incidents in this period"
+							onclick={() => drillDownToIncidents({ drill: 'kpi-total' })}
 						>
 							<div class="min-w-0">
 								<p
@@ -3521,15 +3558,23 @@
 								<p class="mt-1 text-[10px] leading-snug text-warm-500">
 									Incidents in the selected period. Bar = share
 									<span class="font-semibold text-warm-600">resolved</span>.
+									<span class="text-accent-600"> Tap to open list.</span>
 								</p>
 							</div>
-						</section>
+						</button>
 
-						<!-- Unresolved -->
-						<section
-							class="flex flex-col justify-between gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-3 shadow-sm dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-2"
+						<!-- Unresolved — click → Ongoing or New -->
+						<button
+							type="button"
+							class="flex cursor-pointer flex-col justify-between gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-3 text-left shadow-sm transition hover:border-amber-500 hover:ring-2 hover:ring-amber-300/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-600/50 dark:bg-amber-950/30 lg:col-span-2"
 							aria-labelledby="unresolved-callout-title"
 							aria-describedby="unresolved-callout-tip"
+							title="View unresolved incidents (Ongoing or New)"
+							onclick={() =>
+								drillDownToIncidents({
+									drill: 'kpi-unresolved',
+									action: '__unresolved__'
+								})}
 						>
 							<div class="min-w-0">
 								<p
@@ -3555,14 +3600,22 @@
 							>
 								Resolution status is <span class="font-semibold">Ongoing</span> or
 								<span class="font-semibold">New</span>.
+								<span class="font-medium"> Tap to open list.</span>
 							</p>
-						</section>
+						</button>
 
-						<!-- Resolved -->
-						<section
-							class="flex flex-col justify-between gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-3 shadow-sm dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-2"
+						<!-- Resolved — click → not Ongoing/New -->
+						<button
+							type="button"
+							class="flex cursor-pointer flex-col justify-between gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-3 text-left shadow-sm transition hover:border-emerald-500 hover:ring-2 hover:ring-emerald-300/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-emerald-600/50 dark:bg-emerald-950/30 lg:col-span-2"
 							aria-labelledby="resolved-callout-title"
 							aria-describedby="resolved-callout-tip"
+							title="View resolved incidents (not Ongoing or New)"
+							onclick={() =>
+								drillDownToIncidents({
+									drill: 'kpi-resolved',
+									action: '__resolved__'
+								})}
 						>
 							<div class="min-w-0">
 								<p
@@ -3590,10 +3643,11 @@
 							>
 								Any resolution status except <span class="font-semibold">Ongoing</span> and
 								<span class="font-semibold">New</span>.
+								<span class="font-medium"> Tap to open list.</span>
 							</p>
-						</section>
+						</button>
 
-						<!-- Resolution status chart (6.5rem + 10% ≈ 7.15rem) -->
+						<!-- Resolution status chart (6.5rem + 10% ≈ 7.15rem) — click bar to drill -->
 						<section
 							class="col-span-2 flex min-h-0 flex-col rounded-md border border-warm-200 bg-white px-2.5 py-2 shadow-sm dark:bg-warm-100 lg:col-span-6"
 							aria-labelledby="action-status-bar-title"
@@ -3606,9 +3660,13 @@
 								>
 									By Resolution Status
 								</h2>
-								<p class="text-[10px] text-warm-500">{timeRangeLabel}</p>
+								<p class="text-[10px] text-warm-500">
+									{timeRangeLabel} · click a bar to open list
+								</p>
 							</div>
-							<p id="action-status-bar-summary" class="sr-only">{actionStatusAriaLabel}</p>
+							<p id="action-status-bar-summary" class="sr-only">
+								{actionStatusAriaLabel} Click a bar to view those incidents in the list.
+							</p>
 							<div
 								class="w-full min-h-0 overflow-visible"
 								style="position: relative; height: 7.15rem; min-height: 7.15rem;"
