@@ -1656,7 +1656,7 @@
 
 	/**
 	 * Set true to show "Incidents by Type Over Time" again (markup + PDF path kept).
-	 * Currently hidden; top-right slot shows Stats by Team Leader instead.
+	 * Currently hidden; top row is Stats by Team Leader | Incidents Over Time.
 	 */
 	const SHOW_TYPE_OVER_TIME_CHART = false;
 
@@ -2161,7 +2161,7 @@
 				pdf.text('No resolution status data', m + 3, y + 20);
 			}
 
-			// Top-row pair: over time + Stats by Team Leader (or type-over-time if re-enabled)
+			// Top-row pair: Stats by Team Leader | over time (matches dashboard layout)
 			y += statusH + 5;
 			const footerReserve = 10;
 			const remaining = pageH - y - footerReserve;
@@ -2172,40 +2172,28 @@
 			setText(ink);
 			pdf.setFont('helvetica', 'bold');
 			pdf.setFontSize(9);
-			pdf.text('Incidents Over Time', m + 3, y + 5);
 			pdf.text(
 				SHOW_TYPE_OVER_TIME_CHART ? 'Incidents by Type Over Time' : 'Stats by Team Leader',
-				m + halfW + 7,
+				m + 3,
 				y + 5
 			);
+			pdf.text('Incidents Over Time', m + halfW + 7, y + 5);
 			setText(muted);
 			pdf.setFont('helvetica', 'normal');
 			pdf.setFontSize(7);
-			pdf.text(periodLabel, m + 3, y + 9);
 			pdf.text(
 				SHOW_TYPE_OVER_TIME_CHART ? periodLabel : `${periodLabel} · Ongoing & Resolved`,
-				m + halfW + 7,
+				m + 3,
 				y + 9
 			);
+			pdf.text(periodLabel, m + halfW + 7, y + 9);
 			const plotH = midChartH - 12;
-			if (overTimePng && plotH > 20) {
-				pdf.addImage(overTimePng, 'PNG', m + 2, y + 11, halfW - 4, plotH, undefined, 'NONE');
-			}
 			if (SHOW_TYPE_OVER_TIME_CHART && typePng && plotH > 20) {
-				pdf.addImage(
-					typePng,
-					'PNG',
-					m + halfW + 6,
-					y + 11,
-					halfW - 4,
-					plotH,
-					undefined,
-					'NONE'
-				);
+				pdf.addImage(typePng, 'PNG', m + 2, y + 11, halfW - 4, plotH, undefined, 'NONE');
 			} else if (!SHOW_TYPE_OVER_TIME_CHART) {
-				// Vector table: Team Leader | Ongoing | % | Resolved | % | Total
-				const tableX = m + halfW + 6;
-				const tableW = halfW - 8;
+				// Vector table (left): Team Leader | Ongoing | % | Resolved | % | Total
+				const tableX = m + 3;
+				const tableW = halfW - 6;
 				const colTeam = tableW * 0.3;
 				const colNum = tableW * 0.14;
 				const xOngoing = tableX + colTeam + colNum;
@@ -2284,6 +2272,19 @@
 						});
 					}
 				}
+			}
+			// Right half: over-time line chart
+			if (overTimePng && plotH > 20) {
+				pdf.addImage(
+					overTimePng,
+					'PNG',
+					m + halfW + 6,
+					y + 11,
+					halfW - 4,
+					plotH,
+					undefined,
+					'NONE'
+				);
 			}
 
 			pageFooter('Page 1 of 3 · Overview · JCH Incident Tracker');
@@ -3711,38 +3712,13 @@
 				<!-- Charts & tables (same period as header picker) -->
 				<section class="dashboard-charts" aria-label="Incident charts">
 				<!--
-					Top row: Over Time | Stats by Team Leader (former type-over-time slot).
+					Top row: Stats by Team Leader | Over Time.
 					Type-over-time markup kept behind SHOW_TYPE_OVER_TIME_CHART for future use.
 				-->
 				<div
 					class="dashboard-chart-row grid grid-cols-1 gap-2 md:grid-cols-2 md:items-stretch"
 				>
-					<section
-						class="dashboard-chart-card min-w-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
-						aria-labelledby="over-time-chart-title"
-					>
-						<div class="dashboard-chart-header">
-							<h2 class="text-sm font-semibold text-warm-800" id="over-time-chart-title">
-								Incidents Over Time
-							</h2>
-							<p class="dashboard-chart-meta text-xs text-warm-500">{timeRangeLabel}</p>
-						</div>
-						<div class="dashboard-chart-plot relative w-full">
-							{#if incidentsByDate.length === 0}
-								<div class="flex h-full items-center justify-center">
-									<p class="text-sm text-warm-500">No incidents in this period.</p>
-								</div>
-							{/if}
-							<canvas
-								id="over-time-chart-canvas"
-								bind:this={canvasElement}
-								class={incidentsByDate.length === 0 ? 'hidden' : 'block h-full w-full'}
-							></canvas>
-						</div>
-						<div class="dashboard-chart-footer" aria-hidden="true"></div>
-					</section>
-
-					<!-- Former type-over-time slot: Stats by Team Leader -->
+					<!-- Left: Stats by Team Leader -->
 					<section
 						class="dashboard-chart-card dashboard-team-leader-stats-card min-w-0 overflow-hidden rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4 dark:bg-warm-100"
 						aria-labelledby="stats-by-team-leader-title"
@@ -3976,8 +3952,34 @@
 						<div class="dashboard-chart-footer" aria-hidden="true"></div>
 					</section>
 
+					<!-- Right: Incidents Over Time -->
+					<section
+						class="dashboard-chart-card min-w-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
+						aria-labelledby="over-time-chart-title"
+					>
+						<div class="dashboard-chart-header">
+							<h2 class="text-sm font-semibold text-warm-800" id="over-time-chart-title">
+								Incidents Over Time
+							</h2>
+							<p class="dashboard-chart-meta text-xs text-warm-500">{timeRangeLabel}</p>
+						</div>
+						<div class="dashboard-chart-plot relative w-full">
+							{#if incidentsByDate.length === 0}
+								<div class="flex h-full items-center justify-center">
+									<p class="text-sm text-warm-500">No incidents in this period.</p>
+								</div>
+							{/if}
+							<canvas
+								id="over-time-chart-canvas"
+								bind:this={canvasElement}
+								class={incidentsByDate.length === 0 ? 'hidden' : 'block h-full w-full'}
+							></canvas>
+						</div>
+						<div class="dashboard-chart-footer" aria-hidden="true"></div>
+					</section>
+
 					{#if SHOW_TYPE_OVER_TIME_CHART}
-					<!-- Kept for future: original top-right type-over-time chart (off by default) -->
+					<!-- Kept for future: type-over-time chart (off by default) -->
 					<section
 						class="dashboard-chart-card min-w-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="type-over-time-chart-title"
