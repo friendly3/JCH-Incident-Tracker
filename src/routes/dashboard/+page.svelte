@@ -79,16 +79,23 @@
 	 * with driver count so categories do not overlap.
 	 */
 	const DRIVER_BAR_THICKNESS_PX = 20;
-	/** Vertical slot per driver (bar + gap). Gap is 4px (half of the previous 8px). */
-	const DRIVER_BAR_SLOT_PX = 24;
-	/** Floor plot height when few drivers. */
+	/**
+	 * Gap between bars (half of the original 8px). Chart.js spreads categories
+	 * across the plot height, so slot = thickness + gap and plot height must
+	 * be exactly n×slot + pad — do not flex-grow the plot or gaps balloon.
+	 */
+	const DRIVER_BAR_GAP_PX = 4;
+	const DRIVER_BAR_SLOT_PX = DRIVER_BAR_THICKNESS_PX + DRIVER_BAR_GAP_PX;
+	/** Empty-state plot height only (no drivers). */
 	const DRIVER_CHART_MIN_HEIGHT_PX = 200;
 	/** Axes / layout chrome outside category slots. */
 	const DRIVER_CHART_PAD_PX = 48;
 
 	function driverChartHeightForCount(driverCount: number): number {
 		const n = Math.max(0, driverCount);
-		return Math.max(DRIVER_CHART_MIN_HEIGHT_PX, n * DRIVER_BAR_SLOT_PX + DRIVER_CHART_PAD_PX);
+		if (n === 0) return DRIVER_CHART_MIN_HEIGHT_PX;
+		// Exact height so each category band is ~SLOT px (20px bar + 4px gap)
+		return n * DRIVER_BAR_SLOT_PX + DRIVER_CHART_PAD_PX;
 	}
 
 	/**
@@ -4424,6 +4431,8 @@
 							class="dashboard-chart-plot dashboard-chart-plot--fill relative w-full min-h-0"
 							style:height="{driverChartPlotHeightPx}px"
 							style:min-height="{driverChartPlotHeightPx}px"
+							style:max-height="{driverChartPlotHeightPx}px"
+							style:flex="0 0 {driverChartPlotHeightPx}px"
 						>
 							{#if !hasDriverData}
 								<div class="flex h-full items-center justify-center">
@@ -4715,12 +4724,17 @@
 	 * Floor ≈ 75% of top-row plot (23.17rem × 0.75).
 	 */
 	:global(.dashboard-driver-row) {
-		align-items: stretch;
+		/* Table can be tall; chart card sizes to bar stack (align-self on card). */
+		align-items: start;
 	}
 
 	:global(.dashboard-driver-row > *) {
 		min-height: 0;
-		height: 100%;
+	}
+
+	:global(.dashboard-driver-row > .dashboard-driver-table-card) {
+		/* Keep table using available width; allow natural height with min from CSS */
+		min-height: calc(3.25rem + 17.38rem + 2.85rem + 10px + 0.7rem);
 	}
 
 	:global(.dashboard-driver-table-card) {
@@ -4734,20 +4748,22 @@
 		min-height: 17.38rem;
 	}
 
+	/* Chart card sizes to its content (tight bar stack); table may be taller. */
 	:global(.dashboard-driver-row .dashboard-chart-card) {
-		height: 100%;
-		min-height: 100%;
+		height: auto;
+		min-height: 0;
+		align-self: start;
 	}
 
 	/*
-	 * Driver plot: height is set inline from driver count so each bar stays
-	 * a fixed 20px thick. Grow with data; no max so categories never crush.
+	 * Driver plot: height is set inline from driver count (n × slot + pad) so
+	 * each bar stays 20px with a fixed 4px gap. Must NOT flex-grow — stretching
+	 * the canvas re-spaces categories and makes gaps ignore the slot constant.
 	 */
 	:global(.dashboard-chart-plot.dashboard-chart-plot--fill) {
-		flex: 1 1 auto;
-		height: auto;
-		min-height: 17.38rem;
-		max-height: none;
+		flex: 0 0 auto;
+		flex-grow: 0;
+		flex-shrink: 0;
 		overflow: hidden;
 	}
 
