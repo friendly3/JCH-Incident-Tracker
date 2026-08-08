@@ -4243,19 +4243,21 @@
 							<div
 								class="dashboard-driver-table-scroll min-h-0 flex-1 overflow-auto rounded-md border border-warm-200"
 							>
-								<table class="w-full min-w-[20rem] border-collapse text-left text-sm">
+								<table
+									class="dashboard-driver-month-table w-full min-w-[20rem] border-collapse text-left text-sm"
+								>
 									<thead class="sticky top-0 z-10 border-b border-warm-200 bg-warm-50 dark:bg-warm-200">
 										<tr>
 											<th
 												scope="col"
-												class="sticky left-0 z-20 bg-warm-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-warm-600 dark:bg-warm-200"
+												class="sticky left-0 z-20 bg-warm-50 px-3 text-xs font-semibold uppercase tracking-wide text-warm-600 dark:bg-warm-200"
 											>
 												Driver
 											</th>
 											{#each driverMonthTally.monthLabels as label, i (driverMonthTally.months[i])}
 												<th
 													scope="col"
-													class="px-2 py-2 text-center text-xs font-semibold tabular-nums text-warm-600 whitespace-nowrap"
+													class="px-2 text-center text-xs font-semibold tabular-nums text-warm-600 whitespace-nowrap"
 													title={formatMonthYearLabel(driverMonthTally.months[i] ?? '')}
 												>
 													{label}
@@ -4264,7 +4266,7 @@
 											{#if showDriverMonthTotals}
 												<th
 													scope="col"
-													class="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-700"
+													class="px-3 text-center text-xs font-semibold uppercase tracking-wide text-warm-700"
 												>
 													Total
 												</th>
@@ -4276,13 +4278,13 @@
 											<tr class="hover:bg-warm-50/80 dark:hover:bg-warm-200/40">
 												<th
 													scope="row"
-													class="sticky left-0 z-[1] bg-white px-3 py-1.5 text-xs font-medium text-warm-800 dark:bg-warm-100"
+													class="sticky left-0 z-[1] bg-white px-3 text-xs font-medium text-warm-800 dark:bg-warm-100"
 												>
 													{row.label}
 												</th>
 												{#each row.counts as count, i (`${row.key}-${driverMonthTally.months[i] ?? i}`)}
 													<td
-														class="px-1.5 py-1.5 text-center tabular-nums {count === 0
+														class="px-1.5 text-center tabular-nums {count === 0
 															? 'text-warm-400'
 															: ''}"
 													>
@@ -4293,7 +4295,7 @@
 														{:else}
 															<button
 																type="button"
-																class="inline-flex min-h-[1.6rem] min-w-[2.5rem] items-center justify-center rounded-md border border-accent-200 bg-accent-100 px-2.5 py-0.5 text-sm font-semibold tabular-nums text-accent-700 shadow-sm transition hover:border-accent-500 hover:bg-accent-200 hover:text-accent-700 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-1 active:scale-[0.97] dark:border-accent-200 dark:bg-accent-200 dark:text-accent-600 dark:hover:border-accent-500 dark:hover:bg-accent-200"
+																class="dashboard-driver-month-cell-btn inline-flex min-w-[2.5rem] items-center justify-center rounded-md border border-accent-200 bg-accent-100 px-2.5 text-sm font-semibold tabular-nums text-accent-700 shadow-sm transition hover:border-accent-500 hover:bg-accent-200 hover:text-accent-700 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-1 active:scale-[0.97] dark:border-accent-200 dark:bg-accent-200 dark:text-accent-600 dark:hover:border-accent-500 dark:hover:bg-accent-200"
 																title="View {count} incident{count === 1
 																	? ''
 																	: 's'} for {row.label} in {formatMonthYearLabel(
