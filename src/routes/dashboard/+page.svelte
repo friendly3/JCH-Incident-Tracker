@@ -4321,7 +4321,7 @@
 												{/each}
 												{#if showDriverMonthTotals}
 													<td
-														class="px-3 py-1.5 text-center font-semibold tabular-nums text-warm-900"
+														class="px-3 text-center font-semibold tabular-nums text-warm-900"
 													>
 														{row.total}
 													</td>
@@ -4335,20 +4335,20 @@
 										<tr>
 											<th
 												scope="row"
-												class="sticky left-0 z-[1] bg-warm-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-warm-700 dark:bg-warm-200"
+												class="sticky left-0 z-[1] bg-warm-50 px-3 text-xs font-semibold uppercase tracking-wide text-warm-700 dark:bg-warm-200"
 											>
 												All drivers
 											</th>
 											{#each driverMonthTally.monthTotals as total, i (driverMonthTally.months[i])}
 												<td
-													class="px-2 py-2 text-center text-xs font-semibold tabular-nums text-warm-800"
+													class="px-2 text-center text-xs font-semibold tabular-nums text-warm-800"
 												>
 													{total === 0 ? '—' : total}
 												</td>
 											{/each}
 											{#if showDriverMonthTotals}
 												<td
-													class="px-3 py-2 text-center text-sm font-bold tabular-nums text-warm-900"
+													class="px-3 text-center text-sm font-bold tabular-nums text-warm-900"
 												>
 													{driverMonthTally.grandTotal}
 												</td>
@@ -4748,6 +4748,29 @@
 	:global(.dashboard-driver-table-scroll) {
 		flex: 1 1 auto;
 		min-height: 17.38rem;
+	}
+
+	/*
+	 * Driver×month tally: row vertical padding at 75% of previous Tailwind
+	 * py-2 (header/footer) and py-1.5 (body) — 25% tighter rows.
+	 */
+	:global(.dashboard-driver-month-table thead th),
+	:global(.dashboard-driver-month-table tfoot th),
+	:global(.dashboard-driver-month-table tfoot td) {
+		padding-top: 0.375rem; /* was 0.5rem (py-2) */
+		padding-bottom: 0.375rem;
+	}
+
+	:global(.dashboard-driver-month-table tbody th),
+	:global(.dashboard-driver-month-table tbody td) {
+		padding-top: 0.28125rem; /* was 0.375rem (py-1.5) */
+		padding-bottom: 0.28125rem;
+	}
+
+	:global(.dashboard-driver-month-table .dashboard-driver-month-cell-btn) {
+		min-height: 1.2rem; /* was 1.6rem */
+		padding-top: 0.09375rem; /* was py-0.5 (0.125rem) */
+		padding-bottom: 0.09375rem;
 	}
 
 	/* Chart card sizes to its content (tight bar stack); table may be taller. */
