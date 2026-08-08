@@ -80,11 +80,11 @@
 	 */
 	const DRIVER_BAR_THICKNESS_PX = 20;
 	/**
-	 * Gap between bars (half of the original 8px). Chart.js spreads categories
-	 * across the plot height, so slot = thickness + gap and plot height must
-	 * be exactly n×slot + pad — do not flex-grow the plot or gaps balloon.
+	 * Gap between bars. Chart.js spreads categories across the plot height, so
+	 * slot = thickness + gap and plot height must be exactly n×slot + pad —
+	 * do not flex-grow the plot or gaps balloon.
 	 */
-	const DRIVER_BAR_GAP_PX = 4;
+	const DRIVER_BAR_GAP_PX = 6;
 	const DRIVER_BAR_SLOT_PX = DRIVER_BAR_THICKNESS_PX + DRIVER_BAR_GAP_PX;
 	/** Empty-state plot height only (no drivers). */
 	const DRIVER_CHART_MIN_HEIGHT_PX = 200;
