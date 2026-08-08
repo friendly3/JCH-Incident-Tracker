@@ -72,6 +72,24 @@
 	/** Same light gray as the NSW map basemap shell (`.nsw-incident-map` #e8e8e8). */
 	const MAP_GRID_GRAY = '#e8e8e8';
 
+	/**
+	 * Incidents-by-driver horizontal bars: fixed thickness so bar height stays
+	 * 20px regardless of how many drivers are in the period. Plot height scales
+	 * with driver count so categories do not overlap.
+	 */
+	const DRIVER_BAR_THICKNESS_PX = 20;
+	/** Vertical slot per driver (bar + gap between categories). */
+	const DRIVER_BAR_SLOT_PX = 28;
+	/** Floor plot height when few drivers. */
+	const DRIVER_CHART_MIN_HEIGHT_PX = 200;
+	/** Axes / layout chrome outside category slots. */
+	const DRIVER_CHART_PAD_PX = 48;
+
+	function driverChartHeightForCount(driverCount: number): number {
+		const n = Math.max(0, driverCount);
+		return Math.max(DRIVER_CHART_MIN_HEIGHT_PX, n * DRIVER_BAR_SLOT_PX + DRIVER_CHART_PAD_PX);
+	}
+
 	const CHART_FALLBACKS = {
 		light: {
 			accent: '#0072B2',
@@ -1529,8 +1547,11 @@
 			dataset.borderColor = dimmed ? dimBorder : solid;
 			dataset.borderWidth = dimmed ? 0.5 : focused ? 1.5 : 1;
 			dataset.borderRadius = 2;
-			dataset.barPercentage = 0.8;
-			dataset.categoryPercentage = 0.85;
+			// Fixed bar thickness (horizontal bar "height") — independent of driver count
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			(dataset as any).barThickness = DRIVER_BAR_THICKNESS_PX;
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			(dataset as any).maxBarThickness = DRIVER_BAR_THICKNESS_PX;
 			// Do not change `order` on hover — Chart.js order reorders stack segments.
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			(dataset as any).stack = 'types';
@@ -1939,10 +1960,15 @@
 			const teamLeaderStats = statsByTeamLeader;
 
 			// Full-page horizontal stacked bars (drivers on Y) — matches live dashboard chart
+			// Height scales with driver count; bars stay a fixed 20px thick.
+			const driverPdfHeight = Math.max(
+				360,
+				driverChartHeightForCount(byDriver.labels.length) + 80
+			);
 			const driverPng = await chartToPng(
 				'bar',
 				1600,
-				900,
+				driverPdfHeight,
 				{
 					labels: byDriver.labels,
 					datasets: byDriver.datasets
@@ -1953,7 +1979,9 @@
 							backgroundColor: ds.backgroundColor,
 							borderColor: ds.borderColor,
 							borderWidth: 1,
-							stack: 'types'
+							stack: 'types',
+							barThickness: DRIVER_BAR_THICKNESS_PX,
+							maxBarThickness: DRIVER_BAR_THICKNESS_PX
 						}))
 				},
 				{
@@ -2892,8 +2920,9 @@
 				borderWidth: 1,
 				borderRadius: 2,
 				stack: 'types',
-				barPercentage: 0.8,
-				categoryPercentage: 0.85
+				/** Fixed bar height (px) — not proportional to driver count. */
+				barThickness: DRIVER_BAR_THICKNESS_PX,
+				maxBarThickness: DRIVER_BAR_THICKNESS_PX
 			};
 		});
 
@@ -2913,6 +2942,11 @@
 	});
 
 	const hasDriverData = $derived(driverStackedBarData.labels.length > 0);
+
+	/** Plot height so each driver category has a fixed 20px bar + gap. */
+	const driverChartPlotHeightPx = $derived(
+		driverChartHeightForCount(driverStackedBarData.labels.length)
+	);
 
 	// Drop legend filters for series that no longer exist after period/data change
 	$effect(() => {
@@ -3298,12 +3332,19 @@
 		const next = driverStackedBarData;
 		const hidden = hiddenDriverTypeLabels;
 		const focus = hoveredDriverTypeLabel;
+		// Depend on plot height so Chart.js reflows when driver count changes.
+		void driverChartPlotHeightPx;
 		instance.data.labels = next.labels;
 		instance.data.datasets = next.datasets.map((ds) => ({
 			...ds,
 			hidden: hidden.includes(ds.label)
 		}));
 		applyDriverBarTheme(instance, focus);
+		// Resize after DOM height update so fixed barThickness layouts correctly.
+		queueMicrotask(() => {
+			instance.resize();
+			instance.update('none');
+		});
 	});
 
 	$effect(() => {
@@ -4314,7 +4355,11 @@
 								</ul>
 							{/if}
 						</div>
-						<div class="dashboard-chart-plot dashboard-chart-plot--fill relative w-full min-h-0">
+						<div
+							class="dashboard-chart-plot dashboard-chart-plot--fill relative w-full min-h-0"
+							style:height="{driverChartPlotHeightPx}px"
+							style:min-height="{driverChartPlotHeightPx}px"
+						>
 							{#if !hasDriverData}
 								<div class="flex h-full items-center justify-center">
 									<p class="text-sm text-warm-500">No incidents in this period.</p>
@@ -4629,12 +4674,16 @@
 		min-height: 100%;
 	}
 
-	/* Driver row plot fills remaining card height under header/footer */
+	/*
+	 * Driver plot: height is set inline from driver count so each bar stays
+	 * a fixed 20px thick. Grow with data; no max so categories never crush.
+	 */
 	:global(.dashboard-chart-plot.dashboard-chart-plot--fill) {
 		flex: 1 1 auto;
 		height: auto;
 		min-height: 17.38rem;
 		max-height: none;
+		overflow: hidden;
 	}
 
 	:global(.dashboard-chart-plot.dashboard-chart-plot--fill canvas) {
