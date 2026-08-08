@@ -2,11 +2,6 @@ const STORAGE_KEY = 'theme-preference';
 
 export type Theme = 'light' | 'dark';
 
-function getSystemTheme(): Theme {
-	if (typeof window === 'undefined') return 'light';
-	return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
 function getStoredTheme(): Theme | null {
 	if (typeof window === 'undefined') return null;
 	const stored = localStorage.getItem(STORAGE_KEY);
@@ -14,12 +9,14 @@ function getStoredTheme(): Theme | null {
 	return null;
 }
 
+/**
+ * Resolve active theme.
+ * - Explicit localStorage choice wins
+ * - Otherwise always light (do not follow OS prefers-color-scheme)
+ */
 function resolveTheme(): Theme {
 	if (typeof window === 'undefined') return 'light';
-	const stored = getStoredTheme();
-	if (stored) return stored;
-	if (document.documentElement.classList.contains('dark')) return 'dark';
-	return getSystemTheme();
+	return getStoredTheme() ?? 'light';
 }
 
 function applyTheme(theme: Theme) {
@@ -30,15 +27,7 @@ function applyTheme(theme: Theme) {
 // Always start as 'light' so SSR and client hydration markup agree.
 let _theme = $state<Theme>('light');
 let _initialized = false;
-let _mediaQuery: MediaQueryList | null = null;
 let _cleanup: (() => void) | null = null;
-
-function handleSystemChange(event: MediaQueryListEvent) {
-	if (!getStoredTheme()) {
-		_theme = event.matches ? 'dark' : 'light';
-		applyTheme(_theme);
-	}
-}
 
 export function isAuthPath(pathname: string): boolean {
 	return pathname === '/auth' || pathname.startsWith('/auth/');
@@ -62,7 +51,10 @@ export const theme = {
 		_theme = resolveTheme();
 		applyTheme(_theme);
 	},
-	/** Attach system-theme listener. Layout is the sole owner of this lifecycle. */
+	/**
+	 * Apply resolved theme (layout owns this). System preference is not followed —
+	 * light is the app default until the user toggles.
+	 */
 	init(): (() => void) | undefined {
 		if (typeof window === 'undefined') return undefined;
 
@@ -71,12 +63,7 @@ export const theme = {
 			_theme = resolveTheme();
 			applyTheme(_theme);
 
-			_mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-			_mediaQuery.addEventListener('change', handleSystemChange);
-
 			_cleanup = () => {
-				_mediaQuery?.removeEventListener('change', handleSystemChange);
-				_mediaQuery = null;
 				_initialized = false;
 				_cleanup = null;
 			};
