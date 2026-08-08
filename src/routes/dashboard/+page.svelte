@@ -79,8 +79,8 @@
 	 * with driver count so categories do not overlap.
 	 */
 	const DRIVER_BAR_THICKNESS_PX = 20;
-	/** Vertical slot per driver (bar + gap between categories). */
-	const DRIVER_BAR_SLOT_PX = 28;
+	/** Vertical slot per driver (bar + gap). Gap is 4px (half of the previous 8px). */
+	const DRIVER_BAR_SLOT_PX = 24;
 	/** Floor plot height when few drivers. */
 	const DRIVER_CHART_MIN_HEIGHT_PX = 200;
 	/** Axes / layout chrome outside category slots. */
