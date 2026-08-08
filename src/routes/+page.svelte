@@ -36,8 +36,10 @@
 	import { resolveIncidentLocation } from '$lib/parseEmailSubjectLocation';
 	import {
 		TIME_RANGE_OPTIONS,
+		dayKeyFromRange,
 		formatMonthYearLabel,
 		isDateReceivedInTimeRange,
+		isDayTimeRange,
 		isMonthTimeRange,
 		type MonthTimeRangeKey,
 		type TimeRangeKey
@@ -149,7 +151,8 @@
 			value === '7' ||
 			value === '30' ||
 			value === '90' ||
-			isMonthTimeRange(value)
+			isMonthTimeRange(value) ||
+			isDayTimeRange(value)
 		);
 	}
 
@@ -223,6 +226,8 @@
 				return 'Incidents by Driver';
 			case 'status-chart':
 				return 'By Resolution Status';
+			case 'over-time-chart':
+				return 'Incidents Over Time';
 			case 'kpi-total':
 				return 'Total';
 			case 'kpi-unresolved':
@@ -237,6 +242,9 @@
 	function drillPeriodLabel(): string {
 		const relative = TIME_RANGE_OPTIONS.find((o) => o.value === filterDateRange);
 		if (relative) return relative.label;
+		if (isDayTimeRange(filterDateRange)) {
+			return formatDate(dayKeyFromRange(filterDateRange));
+		}
 		if (isMonthTimeRange(filterDateRange)) {
 			return formatMonthYearLabel(filterDateRange.slice(2));
 		}
@@ -352,7 +360,8 @@
 			next === '7' ||
 			next === '30' ||
 			next === '90' ||
-			isMonthTimeRange(next)
+			isMonthTimeRange(next) ||
+			isDayTimeRange(next)
 		) {
 			filterDateRange = next as TimeRangeKey;
 		}
@@ -1033,8 +1042,15 @@
 						onchange={onDateRangeChange}
 						class="incidents-filter-ctrl touch-target-inline max-w-[15rem] flex-1 rounded-lg border border-warm-200 bg-white px-2.5 py-2 text-sm text-warm-700 input-focus dark:bg-warm-200"
 						aria-label="Filter by date received period"
-						title="Relative period or a calendar month with incident data"
+						title="Relative period, a calendar month with data, or a single day from the over-time chart"
 					>
+						{#if isDayTimeRange(filterDateRange)}
+							<optgroup label="Selected day">
+								<option value={filterDateRange}
+									>{formatDate(dayKeyFromRange(filterDateRange))}</option
+								>
+							</optgroup>
+						{/if}
 						<optgroup label="Relative">
 							{#each TIME_RANGE_OPTIONS as opt (opt.value)}
 								<option value={opt.value}>{opt.label}</option>

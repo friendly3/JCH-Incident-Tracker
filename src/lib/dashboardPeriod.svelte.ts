@@ -7,7 +7,9 @@ const STORAGE_KEY = 'jch-dashboard-time-range';
 
 export type RelativeTimeRangeKey = 'all' | 'today' | 'week' | '7' | '30' | '90';
 export type MonthTimeRangeKey = `m:${string}`;
-export type TimeRangeKey = RelativeTimeRangeKey | MonthTimeRangeKey;
+/** Single calendar day from over-time chart drill-down: d:YYYY-MM-DD */
+export type DayTimeRangeKey = `d:${string}`;
+export type TimeRangeKey = RelativeTimeRangeKey | MonthTimeRangeKey | DayTimeRangeKey;
 
 export const TIME_RANGE_OPTIONS: { value: RelativeTimeRangeKey; label: string }[] = [
 	{ value: 'all', label: 'All time' },
@@ -33,8 +35,22 @@ export function isMonthTimeRange(range: string): range is MonthTimeRangeKey {
 	return /^m:\d{4}-\d{2}$/.test(range);
 }
 
+export function isDayTimeRange(range: string): range is DayTimeRangeKey {
+	return /^d:\d{4}-\d{2}-\d{2}$/.test(range);
+}
+
 export function monthKeyFromRange(range: MonthTimeRangeKey): string {
 	return range.slice(2); // YYYY-MM
+}
+
+export function dayKeyFromRange(range: DayTimeRangeKey): string {
+	return range.slice(2); // YYYY-MM-DD
+}
+
+/** Build a single-day period key for drill-down / list filter. */
+export function dayTimeRange(dateKey: string): DayTimeRangeKey | null {
+	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey?.trim() ?? '');
+	return m ? (`d:${m[1]}-${m[2]}-${m[3]}` as DayTimeRangeKey) : null;
 }
 
 /** en-AU long month label, e.g. "March 2026" */
@@ -48,7 +64,8 @@ export function formatMonthYearLabel(ym: string): string {
 
 /**
  * Inclusive calendar window ending today (local) for relative ranges,
- * or a single calendar month (YYYY-MM) when range is m:YYYY-MM.
+ * a single calendar month (YYYY-MM) when range is m:YYYY-MM,
+ * or a single calendar day when range is d:YYYY-MM-DD.
  * e.g. last 7 days = today and the previous 6 calendar days.
  * `today` → current local calendar day only.
  * `week` → this calendar week Sunday–Saturday (through today; no future days).
@@ -66,6 +83,11 @@ export function isDateReceivedInTimeRange(
 	const day = parseInt(match[3], 10);
 	const received = new Date(year, month - 1, day);
 	if (Number.isNaN(received.getTime())) return false;
+
+	if (isDayTimeRange(range)) {
+		const dayKey = dayKeyFromRange(range);
+		return match[0] === dayKey || `${match[1]}-${match[2]}-${match[3]}` === dayKey;
+	}
 
 	if (isMonthTimeRange(range)) {
 		const ym = monthKeyFromRange(range);
@@ -109,7 +131,7 @@ function isValidTimeRange(value: string): value is TimeRangeKey {
 	) {
 		return true;
 	}
-	return isMonthTimeRange(value);
+	return isMonthTimeRange(value) || isDayTimeRange(value);
 }
 
 function readStored(): TimeRangeKey {

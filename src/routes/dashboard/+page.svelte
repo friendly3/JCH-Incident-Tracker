@@ -20,6 +20,7 @@
 	import {
 		dashboardPeriod,
 		TIME_RANGE_OPTIONS,
+		dayTimeRange,
 		formatMonthYearLabel,
 		isDateReceivedInTimeRange,
 		isMonthTimeRange,
@@ -89,6 +90,12 @@
 		const n = Math.max(0, driverCount);
 		return Math.max(DRIVER_CHART_MIN_HEIGHT_PX, n * DRIVER_BAR_SLOT_PX + DRIVER_CHART_PAD_PX);
 	}
+
+	/**
+	 * Parallel to Incidents Over Time categories (index → YYYY-MM-DD).
+	 * Kept outside $derived so chart onClick can resolve a day without TDZ issues.
+	 */
+	let overTimeChartDateKeys: string[] = [];
 
 	const CHART_FALLBACKS = {
 		light: {
@@ -428,9 +435,46 @@
 		return {
 			responsive: true,
 			maintainAspectRatio: false,
+			// Prefer the nearest point on the x-axis so ticks / labels are clickable too
+			interaction: {
+				mode: 'index',
+				intersect: false
+			},
 			layout: {
 				// Compact top room for point labels inside a short plot box
 				padding: { top: 14, right: 6, left: 2, bottom: 2 }
+			},
+			onHover: (event, elements, chart) => {
+				const native = event.native;
+				const target = native?.target;
+				if (!(target instanceof HTMLElement)) return;
+				// Pointer over a point, or over a day category (label / vertical band)
+				let overCategory = elements.length > 0;
+				if (!overCategory && chart.scales?.x && event.x != null) {
+					const idx = Math.round(chart.scales.x.getValueForPixel(event.x) as number);
+					const n = chart.data.labels?.length ?? 0;
+					overCategory = Number.isFinite(idx) && idx >= 0 && idx < n;
+				}
+				target.style.cursor = overCategory ? 'pointer' : 'default';
+			},
+			onClick: (event, elements, chart) => {
+				let index: number | undefined;
+				if (elements.length > 0) {
+					index = elements[0].index;
+				} else if (event.x != null && chart.scales?.x) {
+					// Click on x-axis label / empty vertical band for that day
+					const raw = chart.scales.x.getValueForPixel(event.x);
+					if (typeof raw === 'number' && Number.isFinite(raw)) {
+						index = Math.round(raw);
+					}
+				}
+				if (index == null || index < 0) return;
+				const dateKey = overTimeChartDateKeys[index];
+				if (!dateKey) return;
+				const point = chart.data.datasets[0]?.data?.[index];
+				const count = typeof point === 'number' ? point : Number(point);
+				if (!Number.isFinite(count) || count <= 0) return;
+				drillDownOverTimeDay(dateKey);
 			},
 			plugins: {
 				// Single-series chart — legend is redundant
@@ -1116,9 +1160,11 @@
 		type?: string;
 		/** Exact status name, or list sentinels: __unresolved__ | __resolved__ | __unspecified__ */
 		action?: string;
+		/** Override period (e.g. d:YYYY-MM-DD for a single over-time day). */
+		period?: TimeRangeKey;
 	}) {
 		const params = new URLSearchParams();
-		params.set('period', untrack(() => timeRange));
+		params.set('period', opts.period ?? untrack(() => timeRange));
 		params.set('drill', opts.drill);
 		if (opts.driver !== undefined) {
 			const d = opts.driver.trim();
@@ -1137,6 +1183,13 @@
 			}
 		}
 		void goto(`/?${params.toString()}`);
+	}
+
+	/** Over-time chart point/label → list filtered to that calendar day. */
+	function drillDownOverTimeDay(dateKey: string) {
+		const dayPeriod = dayTimeRange(dateKey);
+		if (!dayPeriod) return;
+		drillDownToIncidents({ drill: 'over-time-chart', period: dayPeriod });
 	}
 
 	/** Bar chart: incidents per resolution status. Click a bar → list drill-down. */
@@ -2621,6 +2674,11 @@
 		]
 	}));
 
+	// Keep drill-down keys aligned with over-time category index
+	$effect(() => {
+		overTimeChartDateKeys = incidentsByDate.map(([date]) => date);
+	});
+
 	/**
 	 * Multi-series line data: for each incident type, counts per day on the same
 	 * relative time window as "Incidents Over Time".
@@ -3997,13 +4055,20 @@
 					<section
 						class="dashboard-chart-card min-w-0 rounded-lg border border-warm-200 bg-white p-3 shadow-sm sm:p-4"
 						aria-labelledby="over-time-chart-title"
+						aria-describedby="over-time-chart-summary"
 					>
 						<div class="dashboard-chart-header">
 							<h2 class="text-sm font-semibold text-warm-800" id="over-time-chart-title">
 								Incidents Over Time
 							</h2>
-							<p class="dashboard-chart-meta text-xs text-warm-500">{timeRangeLabel}</p>
+							<p class="dashboard-chart-meta text-xs text-warm-500">
+								{timeRangeLabel} · click a day to open incidents
+							</p>
 						</div>
+						<p id="over-time-chart-summary" class="sr-only">
+							Line chart of incident counts by date received for {timeRangeLabel}. Click a data
+							point or day label to open the incidents list for that day.
+						</p>
 						<div class="dashboard-chart-plot relative w-full">
 							{#if incidentsByDate.length === 0}
 								<div class="flex h-full items-center justify-center">
