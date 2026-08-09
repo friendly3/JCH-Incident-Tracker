@@ -816,7 +816,7 @@
 		dataset.backgroundColor = colors.fill;
 		dataset.pointBackgroundColor = colors.accent;
 		dataset.pointBorderColor = colors.pointBorder;
-		dataset.borderWidth = 3;
+		dataset.borderWidth = 2.5;
 		dataset.pointRadius = 5;
 		dataset.pointHoverRadius = 7;
 		dataset.pointBorderWidth = 2;
@@ -3145,7 +3145,7 @@
 				{
 					label: 'Incidents',
 					data: series.map(([, count]) => count),
-					borderWidth: 3,
+					borderWidth: 2.5,
 					fill: true,
 					tension: 0.35,
 					pointRadius: 5,
