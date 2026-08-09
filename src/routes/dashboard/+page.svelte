@@ -3130,10 +3130,6 @@
 			totalResolved,
 			unassignedTotal,
 			grandTotal,
-			/** All-row %: Ongoing / (Ongoing+Resolved) among assigned leaders. */
-			allOngoingPct: leadersTotal > 0 ? (totalOngoing / leadersTotal) * 100 : 0,
-			/** All-row %: Resolved / (Ongoing+Resolved) among assigned leaders. */
-			allResolvedPct: leadersTotal > 0 ? (totalResolved / leadersTotal) * 100 : 0,
 			rows: rows.map((row) => {
 				const total = row.ongoing + row.resolved;
 				return {
@@ -4279,14 +4275,10 @@
 														{statsByTeamLeader.totalOngoing}
 													</td>
 													<td
-														class="tls-col-group-end px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
-														title="Ongoing share of all assigned team-leader totals"
+														class="tls-col-group-end px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-400 sm:px-2"
+														aria-hidden="true"
 													>
-														{statsByTeamLeader.totalOngoing +
-														statsByTeamLeader.totalResolved >
-														0
-															? `${statsByTeamLeader.allOngoingPct.toFixed(1)}%`
-															: '—'}
+														—
 													</td>
 													<td
 														class="tls-col-group-start px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
@@ -4294,14 +4286,10 @@
 														{statsByTeamLeader.totalResolved}
 													</td>
 													<td
-														class="tls-col-group-end px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
-														title="Resolved share of all assigned team-leader totals"
+														class="tls-col-group-end px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-400 sm:px-2"
+														aria-hidden="true"
 													>
-														{statsByTeamLeader.totalOngoing +
-														statsByTeamLeader.totalResolved >
-														0
-															? `${statsByTeamLeader.allResolvedPct.toFixed(1)}%`
-															: '—'}
+														—
 													</td>
 													<td
 														class="tls-col-group-start px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
