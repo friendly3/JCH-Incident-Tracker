@@ -9,7 +9,13 @@ export type RelativeTimeRangeKey = 'all' | 'today' | 'week' | '7' | '30' | '90';
 export type MonthTimeRangeKey = `m:${string}`;
 /** Single calendar day from over-time chart drill-down: d:YYYY-MM-DD */
 export type DayTimeRangeKey = `d:${string}`;
-export type TimeRangeKey = RelativeTimeRangeKey | MonthTimeRangeKey | DayTimeRangeKey;
+/** Full calendar year from over-time chart drill-down: y:YYYY */
+export type YearTimeRangeKey = `y:${string}`;
+export type TimeRangeKey =
+	| RelativeTimeRangeKey
+	| MonthTimeRangeKey
+	| DayTimeRangeKey
+	| YearTimeRangeKey;
 
 export const TIME_RANGE_OPTIONS: { value: RelativeTimeRangeKey; label: string }[] = [
 	{ value: 'all', label: 'All time' },
@@ -39,6 +45,10 @@ export function isDayTimeRange(range: string): range is DayTimeRangeKey {
 	return /^d:\d{4}-\d{2}-\d{2}$/.test(range);
 }
 
+export function isYearTimeRange(range: string): range is YearTimeRangeKey {
+	return /^y:\d{4}$/.test(range);
+}
+
 export function monthKeyFromRange(range: MonthTimeRangeKey): string {
 	return range.slice(2); // YYYY-MM
 }
@@ -47,10 +57,20 @@ export function dayKeyFromRange(range: DayTimeRangeKey): string {
 	return range.slice(2); // YYYY-MM-DD
 }
 
+export function yearKeyFromRange(range: YearTimeRangeKey): string {
+	return range.slice(2); // YYYY
+}
+
 /** Build a single-day period key for drill-down / list filter. */
 export function dayTimeRange(dateKey: string): DayTimeRangeKey | null {
 	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey?.trim() ?? '');
 	return m ? (`d:${m[1]}-${m[2]}-${m[3]}` as DayTimeRangeKey) : null;
+}
+
+/** Build a calendar-year period key for drill-down / list filter. */
+export function yearTimeRange(yearKey: string): YearTimeRangeKey | null {
+	const m = /^(\d{4})$/.exec(yearKey?.trim() ?? '');
+	return m ? (`y:${m[1]}` as YearTimeRangeKey) : null;
 }
 
 /** en-AU long month label, e.g. "March 2026" */
@@ -65,7 +85,8 @@ export function formatMonthYearLabel(ym: string): string {
 /**
  * Inclusive calendar window ending today (local) for relative ranges,
  * a single calendar month (YYYY-MM) when range is m:YYYY-MM,
- * or a single calendar day when range is d:YYYY-MM-DD.
+ * a single calendar day when range is d:YYYY-MM-DD,
+ * or a full calendar year when range is y:YYYY.
  * e.g. last 7 days = today and the previous 6 calendar days.
  * `today` → current local calendar day only.
  * `week` → this calendar week Sunday–Saturday (through today; no future days).
@@ -92,6 +113,10 @@ export function isDateReceivedInTimeRange(
 	if (isMonthTimeRange(range)) {
 		const ym = monthKeyFromRange(range);
 		return match[1] === ym.slice(0, 4) && match[2] === ym.slice(5, 7);
+	}
+
+	if (isYearTimeRange(range)) {
+		return match[1] === yearKeyFromRange(range);
 	}
 
 	const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
@@ -131,7 +156,7 @@ function isValidTimeRange(value: string): value is TimeRangeKey {
 	) {
 		return true;
 	}
-	return isMonthTimeRange(value) || isDayTimeRange(value);
+	return isMonthTimeRange(value) || isDayTimeRange(value) || isYearTimeRange(value);
 }
 
 function readStored(): TimeRangeKey {

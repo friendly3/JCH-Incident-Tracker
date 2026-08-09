@@ -41,6 +41,8 @@
 		isDateReceivedInTimeRange,
 		isDayTimeRange,
 		isMonthTimeRange,
+		isYearTimeRange,
+		yearKeyFromRange,
 		type MonthTimeRangeKey,
 		type TimeRangeKey
 	} from '$lib/dashboardPeriod.svelte';
@@ -152,7 +154,8 @@
 			value === '30' ||
 			value === '90' ||
 			isMonthTimeRange(value) ||
-			isDayTimeRange(value)
+			isDayTimeRange(value) ||
+			isYearTimeRange(value)
 		);
 	}
 
@@ -247,6 +250,9 @@
 		}
 		if (isMonthTimeRange(filterDateRange)) {
 			return formatMonthYearLabel(filterDateRange.slice(2));
+		}
+		if (isYearTimeRange(filterDateRange)) {
+			return yearKeyFromRange(filterDateRange);
 		}
 		return filterDateRange;
 	}
@@ -361,7 +367,8 @@
 			next === '30' ||
 			next === '90' ||
 			isMonthTimeRange(next) ||
-			isDayTimeRange(next)
+			isDayTimeRange(next) ||
+			isYearTimeRange(next)
 		) {
 			filterDateRange = next as TimeRangeKey;
 		}
@@ -1048,6 +1055,13 @@
 							<optgroup label="Selected day">
 								<option value={filterDateRange}
 									>{formatDate(dayKeyFromRange(filterDateRange))}</option
+								>
+							</optgroup>
+						{/if}
+						{#if isYearTimeRange(filterDateRange)}
+							<optgroup label="Selected year">
+								<option value={filterDateRange}
+									>{yearKeyFromRange(filterDateRange)}</option
 								>
 							</optgroup>
 						{/if}

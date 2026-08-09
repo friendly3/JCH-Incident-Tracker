@@ -25,6 +25,7 @@
 		isDateReceivedInTimeRange,
 		isMonthTimeRange,
 		monthKeyFromRange,
+		yearTimeRange,
 		type MonthTimeRangeKey,
 		type TimeRangeKey
 	} from '$lib/dashboardPeriod.svelte';
@@ -98,11 +99,24 @@
 		return n * DRIVER_BAR_SLOT_PX + DRIVER_CHART_PAD_PX;
 	}
 
+	/** Over-time chart x-axis aggregation. */
+	type OverTimeBucket = 'day' | 'month' | 'year';
+	const OVER_TIME_BUCKET_OPTIONS: { value: OverTimeBucket; label: string }[] = [
+		{ value: 'day', label: 'Day' },
+		{ value: 'month', label: 'Month' },
+		{ value: 'year', label: 'Year' }
+	];
+
 	/**
-	 * Parallel to Incidents Over Time categories (index → YYYY-MM-DD).
-	 * Kept outside $derived so chart onClick can resolve a day without TDZ issues.
+	 * Parallel to Incidents Over Time categories.
+	 * Keys are YYYY-MM-DD | YYYY-MM | YYYY depending on overTimeBucket.
+	 * Kept outside $derived so chart onClick/plugin can resolve without TDZ issues.
 	 */
 	let overTimeChartDateKeys: string[] = [];
+	/** Day / month / year aggregation for Incidents Over Time. */
+	let overTimeBucket = $state<OverTimeBucket>('day');
+	/** Mirror for axis chrome plugin / click handlers outside reactive contexts. */
+	let overTimeChartBucket: OverTimeBucket = 'day';
 
 	const CHART_FALLBACKS = {
 		light: {
@@ -439,106 +453,121 @@
 	}
 
 	/**
-	 * Contiguous calendar-month spans along the over-time x-axis (index range).
-	 * Month name and year are separate so the plugin can stack year under month.
+	 * Contiguous outer groups along the over-time axis for secondary labels.
+	 * - day bucket: group by YYYY-MM → month name + year under day ticks
+	 * - month bucket: group by YYYY → year under month ticks
 	 */
-	function overTimeMonthGroups(
-		keys: string[]
-	): { ym: string; monthLabel: string; yearLabel: string; start: number; end: number }[] {
+	function overTimeOuterGroups(
+		keys: string[],
+		bucket: OverTimeBucket
+	): { groupKey: string; line1: string; line2: string | null; start: number; end: number }[] {
+		if (bucket === 'year') return [];
 		const groups: {
-			ym: string;
-			monthLabel: string;
-			yearLabel: string;
+			groupKey: string;
+			line1: string;
+			line2: string | null;
 			start: number;
 			end: number;
 		}[] = [];
 		for (let i = 0; i < keys.length; i++) {
-			const key = keys[i];
-			const ym = key?.slice(0, 7) ?? '';
-			const m = /^(\d{4})-(\d{2})$/.exec(ym);
-			if (!m) continue;
+			const key = keys[i] ?? '';
+			let groupKey = '';
+			let line1 = '';
+			let line2: string | null = null;
+			if (bucket === 'day') {
+				// key YYYY-MM-DD → group by month
+				const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+				if (!m) continue;
+				groupKey = `${m[1]}-${m[2]}`;
+				const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, 1);
+				line1 = Number.isNaN(d.getTime())
+					? groupKey
+					: d.toLocaleDateString('en-AU', { month: 'long' });
+				line2 = m[1];
+			} else {
+				// month bucket: key YYYY-MM → group by year
+				const m = /^(\d{4})-(\d{2})$/.exec(key);
+				if (!m) continue;
+				groupKey = m[1];
+				line1 = m[1];
+				line2 = null;
+			}
 			const last = groups[groups.length - 1];
-			if (last && last.ym === ym) {
+			if (last && last.groupKey === groupKey) {
 				last.end = i;
 			} else {
-				const year = parseInt(m[1], 10);
-				const monthIdx = parseInt(m[2], 10) - 1;
-				const d = new Date(year, monthIdx, 1);
-				const monthLong = Number.isNaN(d.getTime())
-					? ym
-					: d.toLocaleDateString('en-AU', { month: 'long' });
-				groups.push({
-					ym,
-					monthLabel: monthLong,
-					yearLabel: String(year),
-					start: i,
-					end: i
-				});
+				groups.push({ groupKey, line1, line2, start: i, end: i });
 			}
 		}
 		return groups;
 	}
 
+	/** Boundary key for vertical dividers (month for day view, year for month view). */
+	function overTimeBoundaryKey(bucketKey: string, bucket: OverTimeBucket): string {
+		if (bucket === 'day') return bucketKey.slice(0, 7); // YYYY-MM
+		if (bucket === 'month') return bucketKey.slice(0, 4); // YYYY
+		return bucketKey;
+	}
+
 	/**
-	 * Incidents Over Time axis chrome:
-	 * - Day-of-month tick labels only (Chart.js)
-	 * - One month+year label centred under each month span (not repeated per day)
-	 * - Faint vertical grey rules at month boundaries
-	 *
-	 * Vertical order under the plot: day ticks, then the single month/year label.
+	 * Incidents Over Time axis chrome (day & month buckets):
+	 * - Chart.js draws primary ticks (day / month name / year)
+	 * - Plugin draws one outer label span + faint vertical rules in the x-axis band
 	 */
 	const overTimeAxisChromePlugin: Plugin<'line'> = {
 		id: 'overTimeAxisChrome',
 		afterDraw(chart) {
 			const keys = overTimeChartDateKeys;
-			if (keys.length === 0) return;
+			const bucket = overTimeChartBucket;
+			if (keys.length === 0 || bucket === 'year') return;
 			const xScale = chart.scales.x;
 			const area = chart.chartArea;
 			if (!xScale || !area) return;
 
 			const dark = isDarkMode();
 			const themeColors = getChartTheme(dark);
-			// Soft grey separators for month boundaries
 			const stroke = dark
 				? withAlpha(MAP_GRID_GRAY, 0.4)
 				: withAlpha('#9ca3af', 0.55);
-			const monthLabelColor = themeColors.ticks;
-
+			const labelColor = themeColors.ticks;
 			const ctx = chart.ctx;
-			const groups = overTimeMonthGroups(keys);
+			const groups = overTimeOuterGroups(keys, bucket);
+			const bandBottom = Math.min(
+				chart.height - 2,
+				area.bottom + (bucket === 'day' ? 48 : 28)
+			);
 
-			// —— Vertical month boundary lines (x-axis label band only) ——
+			// —— Vertical boundary lines (x-axis label band only) ——
 			if (keys.length >= 2) {
 				ctx.save();
 				ctx.strokeStyle = stroke;
 				ctx.lineWidth = 1;
 				ctx.beginPath();
-				// Only under the plot — day ticks + month + year rows (not the chart body)
 				const lineTop = area.bottom + 1;
-				const lineBottom = Math.min(chart.height - 2, area.bottom + 48);
 				for (let i = 1; i < keys.length; i++) {
-					const prevYm = keys[i - 1]?.slice(0, 7);
-					const curYm = keys[i]?.slice(0, 7);
-					if (!prevYm || !curYm || prevYm === curYm) continue;
+					const prev = overTimeBoundaryKey(keys[i - 1] ?? '', bucket);
+					const cur = overTimeBoundaryKey(keys[i] ?? '', bucket);
+					if (!prev || !cur || prev === cur) continue;
 					const x0 = xScale.getPixelForValue(i - 1);
 					const x1 = xScale.getPixelForValue(i);
 					if (!Number.isFinite(x0) || !Number.isFinite(x1)) continue;
 					const x = (x0 + x1) / 2;
 					if (x < area.left || x > area.right) continue;
 					ctx.moveTo(x, lineTop);
-					ctx.lineTo(x, lineBottom);
+					ctx.lineTo(x, bandBottom);
 				}
 				ctx.stroke();
 				ctx.restore();
 			}
 
-			// —— One month + year stack per group (year under month) ——
-			// Day ticks ~14–18px below chartArea; month then year under those.
-			const monthLabelY = Math.min(chart.height - 15, area.bottom + 31);
-			const yearLabelY = monthLabelY + 13;
-			const lineH = 13;
+			// —— Outer group labels (month+year under days, or year under months) ——
+			const line1Y = Math.min(
+				chart.height - (bucket === 'day' ? 15 : 8),
+				area.bottom + (bucket === 'day' ? 31 : 22)
+			);
+			const line2Y = line1Y + 13;
 			ctx.save();
-			ctx.fillStyle = monthLabelColor;
+			ctx.fillStyle = labelColor;
 			ctx.textAlign = 'center';
 			ctx.textBaseline = 'middle';
 			for (const g of groups) {
@@ -548,16 +577,16 @@
 				const x = (xStart + xEnd) / 2;
 				if (x < area.left - 4 || x > area.right + 4) continue;
 				const maxW = Math.max(24, Math.abs(xEnd - xStart) + 24);
-				// Month line (abbreviate if the span is very narrow)
 				ctx.font = '600 11px system-ui, sans-serif';
-				let monthDraw = g.monthLabel;
-				if (ctx.measureText(monthDraw).width > maxW && maxW < 64) {
-					monthDraw = monthDraw.slice(0, 3);
+				let draw1 = g.line1;
+				if (bucket === 'day' && ctx.measureText(draw1).width > maxW && maxW < 64) {
+					draw1 = draw1.slice(0, 3);
 				}
-				ctx.fillText(monthDraw, x, monthLabelY);
-				// Year line under month
-				ctx.font = '500 10px system-ui, sans-serif';
-				ctx.fillText(g.yearLabel, x, yearLabelY);
+				ctx.fillText(draw1, x, line1Y);
+				if (g.line2) {
+					ctx.font = '500 10px system-ui, sans-serif';
+					ctx.fillText(g.line2, x, line2Y);
+				}
 			}
 			ctx.restore();
 		}
@@ -573,8 +602,13 @@
 				intersect: false
 			},
 			layout: {
-				// Top for point labels; room under axis for day ticks + month + year rows
-				padding: { top: 14, right: 6, left: 2, bottom: 40 }
+				// Top for point labels; bottom room depends on bucket (set on create + data updates)
+				padding: {
+					top: 14,
+					right: 6,
+					left: 2,
+					bottom: overTimeAxisBottomPad(untrack(() => overTimeBucket))
+				}
 			},
 			onHover: (event, elements, chart) => {
 				const native = event.native;
@@ -601,12 +635,12 @@
 					}
 				}
 				if (index == null || index < 0) return;
-				const dateKey = overTimeChartDateKeys[index];
-				if (!dateKey) return;
+				const bucketKey = overTimeChartDateKeys[index];
+				if (!bucketKey) return;
 				const point = chart.data.datasets[0]?.data?.[index];
 				const count = typeof point === 'number' ? point : Number(point);
 				if (!Number.isFinite(count) || count <= 0) return;
-				drillDownOverTimeDay(dateKey);
+				drillDownOverTimeBucket(bucketKey);
 			},
 			plugins: {
 				// Single-series chart — legend is redundant
@@ -623,12 +657,11 @@
 					cornerRadius: 8,
 					displayColors: false,
 					callbacks: {
-						// Full date (axis only shows day + month group)
 						title: (items) => {
 							const idx = items[0]?.dataIndex;
 							if (idx == null) return '';
 							const key = overTimeChartDateKeys[idx];
-							return key ? formatDate(key) : '';
+							return key ? overTimeTooltipTitle(key, overTimeChartBucket) : '';
 						},
 						label: (context) => `${context.parsed.y} incidents`
 					}
@@ -652,14 +685,13 @@
 					}
 				},
 				x: {
-					// Day-of-month only; month/year drawn once per group by overTimeAxisChromePlugin
+					// Primary ticks = day / month name / year; outer groups via plugin
 					ticks: {
 						color: colors.ticks,
 						font: { size: 11, weight: 500 },
 						autoSkip: true,
 						maxRotation: 0,
 						minRotation: 0,
-						// Leave vertical space under tick text for the single month/year label row
 						padding: 4
 					},
 					grid: {
@@ -668,6 +700,18 @@
 				}
 			}
 		};
+	}
+
+	function overTimeAxisBottomPad(bucket: OverTimeBucket): number {
+		if (bucket === 'day') return 40;
+		if (bucket === 'month') return 28;
+		return 10;
+	}
+
+	function overTimeTooltipTitle(key: string, bucket: OverTimeBucket): string {
+		if (bucket === 'day') return formatDate(key);
+		if (bucket === 'month') return formatMonthYearLabel(key);
+		return key;
 	}
 
 	/** Multi-series line chart options (incident type over time). */
@@ -1330,11 +1374,26 @@
 		void goto(`/?${params.toString()}`);
 	}
 
-	/** Over-time chart point/label → list filtered to that calendar day. */
-	function drillDownOverTimeDay(dateKey: string) {
-		const dayPeriod = dayTimeRange(dateKey);
-		if (!dayPeriod) return;
-		drillDownToIncidents({ drill: 'over-time-chart', period: dayPeriod });
+	/** Over-time chart point/label → list filtered to that day / month / year. */
+	function drillDownOverTimeBucket(bucketKey: string) {
+		const bucket = untrack(() => overTimeBucket);
+		if (bucket === 'day') {
+			const dayPeriod = dayTimeRange(bucketKey);
+			if (!dayPeriod) return;
+			drillDownToIncidents({ drill: 'over-time-chart', period: dayPeriod });
+			return;
+		}
+		if (bucket === 'month') {
+			if (!/^\d{4}-\d{2}$/.test(bucketKey)) return;
+			drillDownToIncidents({
+				drill: 'over-time-chart',
+				period: `m:${bucketKey}` as MonthTimeRangeKey
+			});
+			return;
+		}
+		const yearPeriod = yearTimeRange(bucketKey);
+		if (!yearPeriod) return;
+		drillDownToIncidents({ drill: 'over-time-chart', period: yearPeriod });
 	}
 
 	/** Bar chart: incidents per resolution status. Click a bar → list drill-down. */
@@ -2787,7 +2846,7 @@
 		}
 	});
 
-	// Group incidents by date and count them (filtered by selected relative period)
+	// Day-level series (type-over-time + any day-based consumers)
 	const incidentsByDate = $derived.by(() => {
 		const grouped: Record<string, number> = {};
 		const range = timeRange;
@@ -2803,33 +2862,66 @@
 		return Object.entries(grouped).sort(([dateA], [dateB]) => dateA.localeCompare(dateB));
 	});
 
-	/** Day-of-month only for over-time x ticks (e.g. 2026-03-09 → "9"). */
-	function overTimeDayLabel(dateKey: string): string {
-		const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey.trim());
-		if (!m) return dateKey;
-		return String(parseInt(m[3], 10));
+	/**
+	 * Incidents Over Time series: aggregates by day / month / year within the
+	 * selected period. Keys are YYYY-MM-DD | YYYY-MM | YYYY.
+	 */
+	const overTimeSeries = $derived.by(() => {
+		const range = timeRange;
+		const bucket = overTimeBucket;
+		const grouped = new Map<string, number>();
+		for (const incident of dashboardIncidents) {
+			if (!isDateReceivedInTimeRange(incident.dateReceived, range)) continue;
+			const dayKey = dateReceivedKey(incident.dateReceived);
+			if (!dayKey) continue;
+			const key =
+				bucket === 'day' ? dayKey : bucket === 'month' ? dayKey.slice(0, 7) : dayKey.slice(0, 4);
+			grouped.set(key, (grouped.get(key) ?? 0) + 1);
+		}
+		return [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b));
+	});
+
+	/** Primary x-tick label for the active over-time bucket. */
+	function overTimeTickLabel(bucketKey: string, bucket: OverTimeBucket): string {
+		if (bucket === 'day') {
+			const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(bucketKey.trim());
+			if (!m) return bucketKey;
+			return String(parseInt(m[3], 10));
+		}
+		if (bucket === 'month') {
+			const m = /^(\d{4})-(\d{2})$/.exec(bucketKey.trim());
+			if (!m) return bucketKey;
+			const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, 1);
+			if (Number.isNaN(d.getTime())) return bucketKey;
+			return d.toLocaleDateString('en-AU', { month: 'short' });
+		}
+		return bucketKey; // year
 	}
 
-	const chartData = $derived.by(() => ({
-		/** Day numbers only; month/year is one spanning label per month (plugin). */
-		labels: incidentsByDate.map(([date]) => overTimeDayLabel(date)),
-		datasets: [
-			{
-				label: 'Incidents',
-				data: incidentsByDate.map(([, count]) => count),
-				borderWidth: 3,
-				fill: true,
-				tension: 0.35,
-				pointRadius: 5,
-				pointBorderWidth: 2,
-				pointHoverRadius: 7
-			}
-		]
-	}));
+	const chartData = $derived.by(() => {
+		const bucket = overTimeBucket;
+		const series = overTimeSeries;
+		return {
+			labels: series.map(([key]) => overTimeTickLabel(key, bucket)),
+			datasets: [
+				{
+					label: 'Incidents',
+					data: series.map(([, count]) => count),
+					borderWidth: 3,
+					fill: true,
+					tension: 0.35,
+					pointRadius: 5,
+					pointBorderWidth: 2,
+					pointHoverRadius: 7
+				}
+			]
+		};
+	});
 
-	// Keep drill-down keys aligned with over-time category index
+	// Keep drill-down keys + bucket mirror aligned with chart categories
 	$effect(() => {
-		overTimeChartDateKeys = incidentsByDate.map(([date]) => date);
+		overTimeChartDateKeys = overTimeSeries.map(([key]) => key);
+		overTimeChartBucket = overTimeBucket;
 	});
 
 	/**
@@ -3496,8 +3588,18 @@
 	$effect(() => {
 		const instance = chartInstance;
 		if (!instance?.data.datasets[0]) return;
+		const bucket = overTimeBucket;
 		instance.data.labels = chartData.labels;
 		instance.data.datasets[0].data = chartData.datasets[0].data;
+		// Bottom pad for day (month+year under) / month (year under) / year (ticks only)
+		if (instance.options.layout) {
+			const prev = instance.options.layout.padding;
+			const pad =
+				typeof prev === 'object' && prev !== null
+					? { ...prev, bottom: overTimeAxisBottomPad(bucket) }
+					: { top: 14, right: 6, left: 2, bottom: overTimeAxisBottomPad(bucket) };
+			instance.options.layout.padding = pad;
+		}
 		instance.update('none');
 	});
 
@@ -4224,19 +4326,44 @@
 						aria-describedby="over-time-chart-summary"
 					>
 						<div class="dashboard-chart-header">
-							<h2 class="dashboard-section-title" id="over-time-chart-title">
-								Incidents Over Time
-							</h2>
-							<p class="dashboard-chart-meta text-xs text-warm-500">
-								{timeRangeLabel} · click a day to open incidents
-							</p>
+							<div class="flex flex-wrap items-start justify-between gap-2">
+								<div class="min-w-0">
+									<h2 class="dashboard-section-title" id="over-time-chart-title">
+										Incidents Over Time
+									</h2>
+									<p class="dashboard-chart-meta text-xs text-warm-500">
+										{timeRangeLabel} · by {overTimeBucket} · click to open incidents
+									</p>
+								</div>
+								<div
+									class="over-time-bucket-toggle inline-flex shrink-0 rounded-md border border-warm-200 bg-warm-50 p-0.5 dark:bg-warm-200"
+									role="group"
+									aria-label="Aggregate incidents over time by day, month, or year"
+								>
+									{#each OVER_TIME_BUCKET_OPTIONS as opt (opt.value)}
+										<button
+											type="button"
+											class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {overTimeBucket ===
+											opt.value
+												? 'bg-white text-accent-700 shadow-sm dark:bg-warm-100 dark:text-accent-600'
+												: 'text-warm-600 hover:text-warm-800'}"
+											aria-pressed={overTimeBucket === opt.value}
+											onclick={() => {
+												overTimeBucket = opt.value;
+											}}
+										>
+											{opt.label}
+										</button>
+									{/each}
+								</div>
+							</div>
 						</div>
 						<p id="over-time-chart-summary" class="sr-only">
-							Line chart of incident counts by date received for {timeRangeLabel}. Click a data
-							point or day label to open the incidents list for that day.
+							Line chart of incident counts by {overTimeBucket} for {timeRangeLabel}. Click a data
+							point or axis label to open the incidents list for that {overTimeBucket}.
 						</p>
 						<div class="dashboard-chart-plot relative w-full">
-							{#if incidentsByDate.length === 0}
+							{#if overTimeSeries.length === 0}
 								<div class="flex h-full items-center justify-center">
 									<p class="text-sm text-warm-500">No incidents in this period.</p>
 								</div>
@@ -4244,7 +4371,7 @@
 							<canvas
 								id="over-time-chart-canvas"
 								bind:this={canvasElement}
-								class={incidentsByDate.length === 0 ? 'hidden' : 'block h-full w-full'}
+								class={overTimeSeries.length === 0 ? 'hidden' : 'block h-full w-full'}
 							></canvas>
 						</div>
 						<div class="dashboard-chart-footer" aria-hidden="true"></div>
