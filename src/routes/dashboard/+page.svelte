@@ -104,6 +104,9 @@
 	const TEAM_LEADER_BAR_THICKNESS_PX = Math.round(DRIVER_BAR_THICKNESS_PX * 1.15);
 	const TEAM_LEADER_BAR_SLOT_PX = TEAM_LEADER_BAR_THICKNESS_PX + DRIVER_BAR_GAP_PX;
 
+	/** Driver×month line chart: show this many highest-volume drivers by default. */
+	const DRIVER_MONTH_TOP_N = 10;
+
 	function driverChartHeightForCount(driverCount: number): number {
 		const n = Math.max(0, driverCount);
 		if (n === 0) return DRIVER_CHART_MIN_HEIGHT_PX;
@@ -810,6 +813,147 @@
 				}
 			}
 		};
+	}
+
+	/** Multi-series line options: driver × month (top N default; dropdown toggles series). */
+	function buildDriverMonthLineOptions(
+		colors: ReturnType<typeof getChartTheme>
+	): ChartOptions<'line'> {
+		return {
+			responsive: true,
+			maintainAspectRatio: false,
+			layout: {
+				padding: { top: 14, right: 8, left: 2, bottom: 4 }
+			},
+			interaction: {
+				mode: 'nearest',
+				intersect: false,
+				axis: 'xy'
+			},
+			onHover: (event, elements) => {
+				const target = event.native?.target;
+				if (!(target instanceof HTMLElement)) return;
+				target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+			},
+			onClick: (_event, elements, chart) => {
+				if (elements.length === 0) return;
+				const el = elements[0];
+				const monthYm = driverMonthChartMonths[el.index];
+				const driverKey = driverMonthChartDriverKeys[el.datasetIndex];
+				const driverLabel = driverMonthChartDriverLabels[el.datasetIndex];
+				if (!monthYm || !driverKey || !driverLabel) return;
+				const point = chart.data.datasets[el.datasetIndex]?.data?.[el.index];
+				const count = typeof point === 'number' ? point : Number(point);
+				if (!Number.isFinite(count) || count <= 0) return;
+				openDriverMonthDetail(driverKey, driverLabel, monthYm, count);
+			},
+			plugins: {
+				legend: {
+					display: false
+				},
+				tooltip: {
+					backgroundColor: colors.tooltipBg,
+					titleColor: colors.tooltipTitle,
+					bodyColor: colors.tooltipTitle,
+					titleFont: { size: 14, weight: 'bold' },
+					bodyFont: { size: 13 },
+					padding: 12,
+					cornerRadius: 8,
+					displayColors: true,
+					filter: (item) => {
+						// Hide tooltip rows for series the user turned off
+						return item.dataset.hidden !== true;
+					},
+					callbacks: {
+						title: (items) => {
+							const idx = items[0]?.dataIndex;
+							if (idx == null) return '';
+							const ym = driverMonthChartMonths[idx];
+							return ym ? formatMonthYearLabel(ym) : '';
+						},
+						label: (context) => {
+							const name = context.dataset.label ?? 'Driver';
+							const y = context.parsed.y ?? 0;
+							return `${name}: ${y} ${y === 1 ? 'incident' : 'incidents'}`;
+						}
+					}
+				},
+				datalabels: buildLineDataLabels(colors, { fontSize: 10, multiSeries: true })
+			},
+			scales: {
+				y: {
+					beginAtZero: true,
+					stacked: false,
+					grace: '18%',
+					ticks: {
+						color: colors.ticks,
+						stepSize: 1,
+						font: { size: 12, weight: 500 },
+						precision: 0
+					},
+					grid: {
+						color: colors.grid
+					}
+				},
+				x: {
+					ticks: {
+						color: colors.ticks,
+						maxRotation: 45,
+						minRotation: 0,
+						font: { size: 11, weight: 500 }
+					},
+					grid: {
+						display: false
+					}
+				}
+			}
+		};
+	}
+
+	function applyDriverMonthLineTheme(chart: ChartJS<'line'>) {
+		const colors = getChartTheme(theme.isDark);
+		const isDark = theme.isDark;
+		const colorMap = assignDistinctCategoryColors(
+			chart.data.datasets.map((d) => String(d.label ?? '')),
+			isDark
+		);
+		chart.data.datasets.forEach((dataset) => {
+			const label = String(dataset.label ?? '');
+			const stroke =
+				colorMap.get(label) ?? getChartCategoryColor(dataset.label, 0, isDark);
+			dataset.borderColor = stroke;
+			dataset.backgroundColor = withAlpha(stroke, 0.06);
+			dataset.pointBackgroundColor = stroke;
+			dataset.pointBorderColor = colors.pointBorder;
+			dataset.borderWidth = 2.5;
+			dataset.pointRadius = 3.5;
+			dataset.pointHoverRadius = 6;
+			dataset.pointBorderWidth = 2;
+		});
+		if (chart.options?.plugins?.legend) {
+			chart.options.plugins.legend.display = false;
+		}
+		if (chart.options?.plugins?.datalabels) {
+			Object.assign(
+				chart.options.plugins.datalabels,
+				buildLineDataLabels(colors, { fontSize: 10, multiSeries: true })
+			);
+		}
+		if (chart.options?.scales?.y?.ticks) {
+			chart.options.scales.y.ticks.color = colors.ticks;
+		}
+		if (chart.options?.scales?.y?.grid) {
+			chart.options.scales.y.grid.color = colors.grid;
+		}
+		if (chart.options?.scales?.x?.ticks) {
+			chart.options.scales.x.ticks.color = colors.ticks;
+		}
+		if (chart.options?.plugins?.tooltip) {
+			chart.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
+			chart.options.plugins.tooltip.titleColor = colors.tooltipTitle;
+			chart.options.plugins.tooltip.bodyColor = colors.tooltipTitle;
+		}
+		chart.update('none');
 	}
 
 	function applyChartTheme(chart: ChartJS<'line'>) {
@@ -2119,11 +2263,13 @@
 	let actionStatusCanvas: HTMLCanvasElement | undefined = $state();
 	let driverCanvas: HTMLCanvasElement | undefined = $state();
 	let teamLeaderCanvas: HTMLCanvasElement | undefined = $state();
+	let driverMonthCanvas: HTMLCanvasElement | undefined = $state();
 	let chartInstance = $state<ChartJS<'line'> | undefined>();
 	let typeOverTimeChart = $state<ChartJS<'line'> | undefined>();
 	let actionStatusChart = $state<ChartJS<'bar'> | undefined>();
 	let driverChart = $state<ChartJS<'bar'> | undefined>();
 	let teamLeaderChart = $state<ChartJS<'bar'> | undefined>();
+	let driverMonthChart = $state<ChartJS<'line'> | undefined>();
 	let resizeHandler: (() => void) | undefined;
 	let isRetrying = $state(false);
 	let retryError = $state<string | null>(null);
@@ -3041,6 +3187,60 @@
 		dashboardUi.hiddenDriverTypeLabels = toggleLegendLabel(dashboardUi.hiddenDriverTypeLabels, label);
 	}
 
+	/**
+	 * Driver×month line series visibility (checkbox dropdown).
+	 * Default (until user customises): hide everyone outside the top N by volume.
+	 * Reset when the period / driver set changes.
+	 */
+	let driverMonthHiddenLabels = $state<string[]>([]);
+	let driverMonthVisibilityTouched = $state(false);
+	let driverMonthVisibilitySourceKey = $state('');
+	/** Drivers multi-select dropdown open state. */
+	let driverMonthPickerOpen = $state(false);
+
+	/** Parallel to chart datasets / categories for click drill-down (non-reactive mirrors). */
+	let driverMonthChartMonths: string[] = [];
+	let driverMonthChartDriverKeys: string[] = [];
+	let driverMonthChartDriverLabels: string[] = [];
+
+	function driverMonthTopNHidden(labelsInRankOrder: string[]): string[] {
+		if (labelsInRankOrder.length <= DRIVER_MONTH_TOP_N) return [];
+		return labelsInRankOrder.slice(DRIVER_MONTH_TOP_N);
+	}
+
+	function applyDriverMonthTopNVisibility() {
+		driverMonthVisibilityTouched = false;
+		driverMonthHiddenLabels = driverMonthTopNHidden(
+			driverMonthTally.rows.map((r) => r.label)
+		);
+	}
+
+	function applyDriverMonthShowAll() {
+		driverMonthVisibilityTouched = true;
+		driverMonthHiddenLabels = [];
+	}
+
+	function applyDriverMonthHideAll() {
+		driverMonthVisibilityTouched = true;
+		driverMonthHiddenLabels = driverMonthTally.rows.map((r) => r.label);
+	}
+
+	function setDriverMonthSeriesVisible(label: string, visible: boolean) {
+		driverMonthVisibilityTouched = true;
+		const isHidden = driverMonthHiddenLabels.includes(label);
+		if (visible && isHidden) {
+			driverMonthHiddenLabels = driverMonthHiddenLabels.filter((l) => l !== label);
+		} else if (!visible && !isHidden) {
+			driverMonthHiddenLabels = [...driverMonthHiddenLabels, label];
+		}
+	}
+
+	function onDriverMonthCheckboxChange(label: string, event: Event) {
+		const el = event.currentTarget;
+		if (!(el instanceof HTMLInputElement)) return;
+		setDriverMonthSeriesVisible(label, el.checked);
+	}
+
 	/** Canonical YYYY-MM-DD from dateReceived (handles ISO datetimes). */
 	function dateReceivedKey(dateStr: string | undefined | null): string | null {
 		const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr?.trim() ?? '');
@@ -3659,6 +3859,112 @@
 		return `Driver incidents by month for ${periodLabel}. ${rows.length} drivers, ${months.length} months, ${grandTotal} total incidents.`;
 	});
 
+	/**
+	 * Line chart datasets: one series per driver (same pivot as the table).
+	 * Visibility (top 10 default) is applied via Chart.js `hidden` + the dropdown.
+	 */
+	const driverMonthLineData = $derived.by(() => {
+		const tally = driverMonthTally;
+		const dark = theme.isDark;
+		const colorMap = assignDistinctCategoryColors(
+			tally.rows.map((r) => r.label),
+			dark
+		);
+		return {
+			labels: tally.monthLabels,
+			months: tally.months,
+			periodLabel: tally.periodLabel,
+			datasets: tally.rows.map((row) => {
+				const color =
+					colorMap.get(row.label) ?? getChartCategoryColor(row.label, 0, dark);
+				return {
+					label: row.label,
+					driverKey: row.key,
+					total: row.total,
+					data: row.counts,
+					borderColor: color,
+					backgroundColor: withAlpha(color, 0.06),
+					pointBackgroundColor: color,
+					borderWidth: 2.5,
+					fill: false,
+					tension: 0.35,
+					pointRadius: 3.5,
+					pointBorderWidth: 2,
+					pointHoverRadius: 6
+				};
+			})
+		};
+	});
+
+	/** How many driver series are currently shown on the line chart. */
+	const driverMonthVisibleCount = $derived.by(() => {
+		const labels = driverMonthTally.rows.map((r) => r.label);
+		const hidden = new Set(driverMonthHiddenLabels);
+		return labels.filter((l) => !hidden.has(l)).length;
+	});
+
+	/** Colour swatch map for the driver picker (stable with chart series). */
+	const driverMonthColorByLabel = $derived.by(() => {
+		return assignDistinctCategoryColors(
+			driverMonthTally.rows.map((r) => r.label),
+			theme.isDark
+		);
+	});
+
+	// Default visibility = top N by volume; re-apply when period/driver set changes
+	// until the user customises via the dropdown.
+	$effect(() => {
+		const rows = driverMonthTally.rows;
+		const key = `${timeRange}|${rows.map((r) => `${r.key}:${r.total}`).join(',')}`;
+		if (key !== driverMonthVisibilitySourceKey) {
+			driverMonthVisibilitySourceKey = key;
+			driverMonthVisibilityTouched = false;
+		}
+		if (driverMonthVisibilityTouched) return;
+		const next = driverMonthTopNHidden(rows.map((r) => r.label));
+		if (
+			next.length !== driverMonthHiddenLabels.length ||
+			next.some((l, i) => l !== driverMonthHiddenLabels[i])
+		) {
+			driverMonthHiddenLabels = next;
+		}
+	});
+
+	// Keep drill-down mirrors aligned with chart categories
+	$effect(() => {
+		const data = driverMonthLineData;
+		driverMonthChartMonths = data.months;
+		driverMonthChartDriverKeys = data.datasets.map((d) => d.driverKey);
+		driverMonthChartDriverLabels = data.datasets.map((d) => d.label);
+	});
+
+	// Close driver picker on outside click / Escape
+	$effect(() => {
+		if (!driverMonthPickerOpen) return;
+		const onPointer = (e: PointerEvent) => {
+			const t = e.target;
+			if (!(t instanceof Element)) return;
+			if (t.closest('[data-driver-month-picker]')) return;
+			driverMonthPickerOpen = false;
+		};
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				driverMonthPickerOpen = false;
+			}
+		};
+		// Defer so the opening click does not immediately close
+		const id = window.setTimeout(() => {
+			window.addEventListener('pointerdown', onPointer, true);
+			window.addEventListener('keydown', onKey, true);
+		}, 0);
+		return () => {
+			window.clearTimeout(id);
+			window.removeEventListener('pointerdown', onPointer, true);
+			window.removeEventListener('keydown', onKey, true);
+		};
+	});
+
 	/** Drill-down: incidents for one driver × calendar month cell. */
 	type DriverMonthDetail = {
 		driverKey: string;
@@ -4048,6 +4354,105 @@
 		});
 	});
 
+	// Driver×month multi-series line chart (create only in Chart view)
+	$effect(() => {
+		if (incidentStore.isLoading || incidentStore.error || data.loadError) return;
+		if (dashboardUi.driverMonthView !== 'chart') return;
+		const canvas = driverMonthCanvas;
+		if (!canvas || !hasDriverMonthTally) return;
+
+		const colors = untrack(() => getChartTheme(theme.isDark));
+		const initialData = untrack(() => {
+			const hidden = driverMonthHiddenLabels;
+			const next = driverMonthLineData;
+			return {
+				labels: next.labels,
+				datasets: next.datasets.map((ds) => ({
+					label: ds.label,
+					data: ds.data,
+					borderColor: ds.borderColor,
+					backgroundColor: ds.backgroundColor,
+					pointBackgroundColor: ds.pointBackgroundColor,
+					borderWidth: ds.borderWidth,
+					fill: ds.fill,
+					tension: ds.tension,
+					pointRadius: ds.pointRadius,
+					pointBorderWidth: ds.pointBorderWidth,
+					pointHoverRadius: ds.pointHoverRadius,
+					hidden: hidden.includes(ds.label)
+				}))
+			};
+		});
+		let cancelled = false;
+		let instance: ChartJS<'line'> | undefined;
+
+		void ensureChartJs().then((Chart) => {
+			if (cancelled || !Chart || !canvas.isConnected) return;
+			instance = new Chart(canvas, {
+				type: 'line',
+				data: initialData,
+				options: buildDriverMonthLineOptions(colors)
+			});
+			applyDriverMonthLineTheme(instance);
+			untrack(() => {
+				driverMonthChart = instance;
+			});
+			queueMicrotask(() => {
+				if (cancelled) return;
+				instance?.resize();
+				instance?.update('none');
+			});
+		});
+
+		return () => {
+			cancelled = true;
+			instance?.destroy();
+			untrack(() => {
+				if (driverMonthChart === instance) driverMonthChart = undefined;
+			});
+		};
+	});
+
+	// Tear down driver×month chart when switching to Table view
+	$effect(() => {
+		if (dashboardUi.driverMonthView === 'chart') return;
+		driverMonthPickerOpen = false;
+		untrack(() => {
+			const chart = driverMonthChart;
+			if (!chart) return;
+			chart.destroy();
+			driverMonthChart = undefined;
+		});
+	});
+
+	// Update driver×month line data + visibility without recreating the chart
+	$effect(() => {
+		const instance = driverMonthChart;
+		if (!instance || dashboardUi.driverMonthView !== 'chart') return;
+		const next = driverMonthLineData;
+		const hidden = driverMonthHiddenLabels;
+		instance.data.labels = next.labels;
+		instance.data.datasets = next.datasets.map((ds) => ({
+			label: ds.label,
+			data: ds.data,
+			borderColor: ds.borderColor,
+			backgroundColor: ds.backgroundColor,
+			pointBackgroundColor: ds.pointBackgroundColor,
+			borderWidth: ds.borderWidth,
+			fill: ds.fill,
+			tension: ds.tension,
+			pointRadius: ds.pointRadius,
+			pointBorderWidth: ds.pointBorderWidth,
+			pointHoverRadius: ds.pointHoverRadius,
+			hidden: hidden.includes(ds.label)
+		}));
+		applyDriverMonthLineTheme(instance);
+		queueMicrotask(() => {
+			instance.resize();
+			instance.update('none');
+		});
+	});
+
 	$effect(() => {
 		theme.isDark;
 		if (chartInstance) {
@@ -4064,6 +4469,9 @@
 		}
 		if (teamLeaderChart) {
 			applyTeamLeaderBarTheme(teamLeaderChart);
+		}
+		if (driverMonthChart) {
+			applyDriverMonthLineTheme(driverMonthChart);
 		}
 		// Hover is applied by the driver data effect above; only re-theme on dark toggle
 		if (driverChart) {
@@ -4985,27 +5393,153 @@
 									Incidents by Driver per Month
 								</h2>
 								<p class="mt-0.5 text-xs text-warm-500">
-									<span class="inline-flex items-center gap-1">
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											class="h-3.5 w-3.5 shrink-0 text-accent-600"
-											fill="none"
-											viewBox="0 0 24 24"
-											stroke="currentColor"
-											stroke-width="2"
-											aria-hidden="true"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"
-											/>
-										</svg>
-										Click a count to view those incidents
-									</span>
+									{driverMonthTally.periodLabel}
+									{#if dashboardUi.driverMonthView === 'table'}
+										· click a count to view those incidents
+									{:else}
+										· top {DRIVER_MONTH_TOP_N} by default · click a point for that driver × month
+									{/if}
 								</p>
 							</div>
-							<p class="text-xs text-warm-500">{driverMonthTally.periodLabel}</p>
+							<div class="flex shrink-0 flex-wrap items-center gap-2">
+								{#if dashboardUi.driverMonthView === 'chart' && hasDriverMonthTally}
+									<div class="relative" data-driver-month-picker>
+										<button
+											type="button"
+											class="inline-flex max-w-[14rem] items-center gap-1.5 rounded-md border border-warm-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-warm-700 shadow-sm transition hover:border-warm-300 hover:bg-warm-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:bg-warm-100"
+											aria-haspopup="listbox"
+											aria-expanded={driverMonthPickerOpen}
+											aria-controls="driver-month-picker-panel"
+											onclick={() => {
+												driverMonthPickerOpen = !driverMonthPickerOpen;
+											}}
+										>
+											<span class="truncate"
+												>Drivers · {driverMonthVisibleCount} of {driverMonthTally.rows
+													.length}</span
+											>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												class="h-3.5 w-3.5 shrink-0 text-warm-500 transition {driverMonthPickerOpen
+													? 'rotate-180'
+													: ''}"
+												viewBox="0 0 20 20"
+												fill="currentColor"
+												aria-hidden="true"
+											>
+												<path
+													fill-rule="evenodd"
+													d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+													clip-rule="evenodd"
+												/>
+											</svg>
+										</button>
+										{#if driverMonthPickerOpen}
+											<div
+												id="driver-month-picker-panel"
+												class="absolute right-0 z-30 mt-1 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-warm-200 bg-white shadow-lg dark:bg-warm-100"
+												role="listbox"
+												aria-multiselectable="true"
+												aria-label="Show or hide drivers on the line chart"
+											>
+												<div
+													class="flex flex-wrap items-center gap-1 border-b border-warm-200 bg-warm-50 px-2 py-1.5 dark:bg-warm-200"
+												>
+													<button
+														type="button"
+														class="rounded px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-accent-700 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:hover:bg-warm-100"
+														onclick={() => applyDriverMonthTopNVisibility()}
+													>
+														Top {DRIVER_MONTH_TOP_N}
+													</button>
+													<button
+														type="button"
+														class="rounded px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-warm-700 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:hover:bg-warm-100"
+														onclick={() => applyDriverMonthShowAll()}
+													>
+														All
+													</button>
+													<button
+														type="button"
+														class="rounded px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-warm-700 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:hover:bg-warm-100"
+														onclick={() => applyDriverMonthHideAll()}
+													>
+														None
+													</button>
+												</div>
+												<ul class="max-h-56 overflow-y-auto py-1">
+													{#each driverMonthTally.rows as row (row.key)}
+														{@const checked = isLegendVisible(
+															driverMonthHiddenLabels,
+															row.label
+														)}
+														{@const swatch =
+															driverMonthColorByLabel.get(row.label) ??
+															getChartCategoryColor(row.label, 0, theme.isDark)}
+														<li>
+															<label
+																class="flex cursor-pointer items-center gap-2 px-2.5 py-1.5 text-sm text-warm-800 hover:bg-warm-50 dark:hover:bg-warm-200"
+															>
+																<input
+																	type="checkbox"
+																	class="h-4 w-4 shrink-0 rounded border-warm-300 text-accent-600 focus:ring-accent-500"
+																	checked={checked}
+																	onchange={(e) =>
+																		onDriverMonthCheckboxChange(row.label, e)}
+																/>
+																<span
+																	class="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+																	style="background: {swatch}"
+																	aria-hidden="true"
+																></span>
+																<span class="min-w-0 flex-1 truncate" title={row.label}
+																	>{row.label}</span
+																>
+																<span
+																	class="shrink-0 tabular-nums text-xs font-semibold text-warm-500"
+																	>({row.total})</span
+																>
+															</label>
+														</li>
+													{/each}
+												</ul>
+											</div>
+										{/if}
+									</div>
+								{/if}
+								<div
+									class="team-leader-view-toggle inline-flex shrink-0 rounded-md border border-warm-200 bg-warm-50 p-0.5 dark:bg-warm-200"
+									role="group"
+									aria-label="Show driver per month as table or chart"
+								>
+									<button
+										type="button"
+										class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {dashboardUi.driverMonthView ===
+										'chart'
+											? 'bg-white text-accent-700 shadow-sm dark:bg-warm-100 dark:text-accent-600'
+											: 'text-warm-600 hover:text-warm-800'}"
+										aria-pressed={dashboardUi.driverMonthView === 'chart'}
+										onclick={() => {
+											dashboardUi.driverMonthView = 'chart';
+										}}
+									>
+										Chart
+									</button>
+									<button
+										type="button"
+										class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {dashboardUi.driverMonthView ===
+										'table'
+											? 'bg-white text-accent-700 shadow-sm dark:bg-warm-100 dark:text-accent-600'
+											: 'text-warm-600 hover:text-warm-800'}"
+										aria-pressed={dashboardUi.driverMonthView === 'table'}
+										onclick={() => {
+											dashboardUi.driverMonthView = 'table';
+										}}
+									>
+										Table
+									</button>
+								</div>
+							</div>
 						</div>
 						<p id="driver-month-tally-summary" class="sr-only">{driverMonthTallyAriaLabel}</p>
 
@@ -5013,6 +5547,26 @@
 							<p class="flex min-h-0 flex-1 items-center justify-center py-6 text-center text-sm text-warm-500">
 								No incidents in this period.
 							</p>
+						{:else if dashboardUi.driverMonthView === 'chart'}
+							<div
+								class="dashboard-chart-plot dashboard-chart-plot--fill relative min-h-0 w-full flex-1"
+								style="min-height: 16rem;"
+							>
+								{#if driverMonthVisibleCount === 0}
+									<div class="flex h-full min-h-[16rem] items-center justify-center">
+										<p class="text-sm text-warm-500">
+											No drivers selected — open the Drivers menu to include series.
+										</p>
+									</div>
+								{/if}
+								<canvas
+									bind:this={driverMonthCanvas}
+									class="block h-full w-full {driverMonthVisibleCount === 0
+										? 'hidden'
+										: ''}"
+									aria-label="Line chart of incidents by driver per month"
+								></canvas>
+							</div>
 						{:else}
 							<div
 								class="dashboard-driver-table-scroll min-h-0 flex-1 overflow-auto rounded-md border border-warm-200"

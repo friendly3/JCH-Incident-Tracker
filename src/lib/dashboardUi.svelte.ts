@@ -8,10 +8,13 @@ const RESTORE_SCROLL_FLAG = 'jch-dashboard-restore-scroll';
 
 export type OverTimeBucket = 'day' | 'month' | 'year';
 export type TeamLeaderView = 'table' | 'chart';
+/** Incidents by Driver per Month card: table (default) or multi-series line chart. */
+export type DriverMonthView = 'table' | 'chart';
 
 type StoredUi = {
 	overTimeBucket?: OverTimeBucket;
 	teamLeaderView?: TeamLeaderView;
+	driverMonthView?: DriverMonthView;
 	hiddenDriverTypeLabels?: string[];
 	hiddenTypeOverTimeLabels?: string[];
 	scrollY?: number;
@@ -22,6 +25,10 @@ function isOverTimeBucket(v: unknown): v is OverTimeBucket {
 }
 
 function isTeamLeaderView(v: unknown): v is TeamLeaderView {
+	return v === 'table' || v === 'chart';
+}
+
+function isDriverMonthView(v: unknown): v is DriverMonthView {
 	return v === 'table' || v === 'chart';
 }
 
@@ -58,6 +65,7 @@ function writeStored(patch: StoredUi) {
 
 let _overTimeBucket = $state<OverTimeBucket>('day');
 let _teamLeaderView = $state<TeamLeaderView>('chart');
+let _driverMonthView = $state<DriverMonthView>('table');
 let _hiddenDriverTypeLabels = $state<string[]>([]);
 let _hiddenTypeOverTimeLabels = $state<string[]>([]);
 /** Last scroll position on /dashboard (session only). */
@@ -73,6 +81,9 @@ function ensureHydrated() {
 	}
 	if (isTeamLeaderView(stored.teamLeaderView)) {
 		_teamLeaderView = stored.teamLeaderView;
+	}
+	if (isDriverMonthView(stored.driverMonthView)) {
+		_driverMonthView = stored.driverMonthView;
 	}
 	if (Array.isArray(stored.hiddenDriverTypeLabels)) {
 		_hiddenDriverTypeLabels = stored.hiddenDriverTypeLabels.filter(
@@ -115,6 +126,17 @@ export const dashboardUi = {
 		if (!isTeamLeaderView(next) || _teamLeaderView === next) return;
 		_teamLeaderView = next;
 		writeStored({ teamLeaderView: next });
+	},
+
+	get driverMonthView(): DriverMonthView {
+		ensureHydrated();
+		return _driverMonthView;
+	},
+	set driverMonthView(next: DriverMonthView) {
+		ensureHydrated();
+		if (!isDriverMonthView(next) || _driverMonthView === next) return;
+		_driverMonthView = next;
+		writeStored({ driverMonthView: next });
 	},
 
 	get hiddenDriverTypeLabels(): string[] {
