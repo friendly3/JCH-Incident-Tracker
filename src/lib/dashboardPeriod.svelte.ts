@@ -110,6 +110,7 @@ export function currentMonthTimeRange(now = new Date()): MonthTimeRangeKey {
  * e.g. last 7 days = today and the previous 6 calendar days.
  * `today` → current local calendar day only.
  * `week` → this calendar week Sunday–Saturday (through today; no future days).
+ * `year` → this local calendar year 1 January through today (no future days).
  * `all` → no lower bound.
  */
 export function isDateReceivedInTimeRange(
@@ -156,6 +157,12 @@ export function isDateReceivedInTimeRange(
 		return received >= start && received <= end;
 	}
 
+	// This year = local calendar year 1 Jan through today (no future days)
+	if (range === 'year') {
+		const start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+		return received >= start && received <= end;
+	}
+
 	const days = parseInt(range, 10);
 	if (!Number.isFinite(days) || days < 1) return true;
 
@@ -170,6 +177,7 @@ function isValidTimeRange(value: string): value is TimeRangeKey {
 		value === 'all' ||
 		value === 'today' ||
 		value === 'week' ||
+		value === 'year' ||
 		value === '7' ||
 		value === '30' ||
 		value === '90'
