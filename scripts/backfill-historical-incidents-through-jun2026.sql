@@ -12,6 +12,8 @@
 --
 -- SAFE TO RE-RUN: skips incidents whose non-blank reference_no already exists.
 -- Does not touch July/August 2026+ data.
+-- Lookup names (types/actions/team leaders/drivers) are stored UPPERCASE
+-- to satisfy chk_*_name_upper constraints.
 -- =============================================================================
 
 BEGIN;
@@ -3907,24 +3909,24 @@ INSERT INTO _hist_import (
 INSERT INTO incident_types (id, name)
 SELECT gen_random_uuid(), x.name
 FROM (
-  SELECT DISTINCT btrim(type_name) AS name
+  SELECT DISTINCT upper(btrim(type_name)) AS name
   FROM _hist_import
   WHERE btrim(coalesce(type_name, '')) <> ''
 ) x
 WHERE NOT EXISTS (
-  SELECT 1 FROM incident_types t WHERE lower(t.name) = lower(x.name)
+  SELECT 1 FROM incident_types t WHERE upper(t.name) = x.name
 );
 
 -- Actions (preserve useful casing from sheet; skip empty / noise-only if already exists)
 INSERT INTO incident_actions (id, name)
 SELECT gen_random_uuid(), x.name
 FROM (
-  SELECT DISTINCT btrim(action_name) AS name
+  SELECT DISTINCT upper(btrim(action_name)) AS name
   FROM _hist_import
   WHERE btrim(coalesce(action_name, '')) <> ''
 ) x
 WHERE NOT EXISTS (
-  SELECT 1 FROM incident_actions a WHERE lower(a.name) = lower(x.name)
+  SELECT 1 FROM incident_actions a WHERE upper(a.name) = x.name
 );
 
 -- Team leaders
@@ -3999,7 +4001,7 @@ SELECT
   nullif(h.time_received, ''),
   (
     SELECT t.id FROM incident_types t
-    WHERE lower(t.name) = lower(btrim(h.type_name))
+    WHERE upper(t.name) = upper(btrim(h.type_name))
     LIMIT 1
   ),
   (
@@ -4016,7 +4018,7 @@ SELECT
   coalesce(h.reference_text, ''),
   (
     SELECT a.id FROM incident_actions a
-    WHERE lower(a.name) = lower(btrim(h.action_name))
+    WHERE upper(a.name) = upper(btrim(h.action_name))
     LIMIT 1
   ),
   h.date_response,
