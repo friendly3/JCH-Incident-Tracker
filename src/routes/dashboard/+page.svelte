@@ -1521,8 +1521,8 @@
 						return `${value} (${pct}%)`;
 					},
 					color: '#ffffff',
-					// 12px = previous 10px + 2
-					font: { size: 12, weight: 'bold' as const },
+					// 13px (was 12)
+					font: { size: 13, weight: 'bold' as const },
 					textStrokeColor: 'rgba(0,0,0,0.45)',
 					textStrokeWidth: 2
 				}
@@ -1569,9 +1569,9 @@
 			dataset.borderWidth = 1;
 			dataset.borderRadius = 2;
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			(dataset as any).barThickness = DRIVER_BAR_THICKNESS_PX;
+			(dataset as any).barThickness = TEAM_LEADER_BAR_THICKNESS_PX;
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			(dataset as any).maxBarThickness = DRIVER_BAR_THICKNESS_PX;
+			(dataset as any).maxBarThickness = TEAM_LEADER_BAR_THICKNESS_PX;
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			(dataset as any).stack = 'tls';
 		});
@@ -3408,8 +3408,8 @@
 					borderWidth: 1,
 					borderRadius: 2,
 					stack: 'tls',
-					barThickness: DRIVER_BAR_THICKNESS_PX,
-					maxBarThickness: DRIVER_BAR_THICKNESS_PX
+					barThickness: TEAM_LEADER_BAR_THICKNESS_PX,
+					maxBarThickness: TEAM_LEADER_BAR_THICKNESS_PX
 				},
 				{
 					label: 'Resolved',
@@ -3419,15 +3419,15 @@
 					borderWidth: 1,
 					borderRadius: 2,
 					stack: 'tls',
-					barThickness: DRIVER_BAR_THICKNESS_PX,
-					maxBarThickness: DRIVER_BAR_THICKNESS_PX
+					barThickness: TEAM_LEADER_BAR_THICKNESS_PX,
+					maxBarThickness: TEAM_LEADER_BAR_THICKNESS_PX
 				}
 			]
 		};
 	});
 
 	const teamLeaderChartHeightPx = $derived(
-		driverChartHeightForCount(statsByTeamLeader.rows.length)
+		teamLeaderChartHeightForCount(statsByTeamLeader.rows.length)
 	);
 
 	const statsByTeamLeaderAriaLabel = $derived.by(() => {
