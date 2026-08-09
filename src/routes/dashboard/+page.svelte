@@ -448,8 +448,8 @@
 				intersect: false
 			},
 			layout: {
-				// Compact top room for point labels inside a short plot box
-				padding: { top: 14, right: 6, left: 2, bottom: 2 }
+				// Top for point labels; extra bottom for day + month/year group rows
+				padding: { top: 14, right: 6, left: 2, bottom: 10 }
 			},
 			onHover: (event, elements, chart) => {
 				const native = event.native;
@@ -498,6 +498,13 @@
 					cornerRadius: 8,
 					displayColors: false,
 					callbacks: {
+						// Full date (axis only shows day + month group)
+						title: (items) => {
+							const idx = items[0]?.dataIndex;
+							if (idx == null) return '';
+							const key = overTimeChartDateKeys[idx];
+							return key ? formatDate(key) : '';
+						},
 						label: (context) => `${context.parsed.y} incidents`
 					}
 				},
@@ -520,9 +527,14 @@
 					}
 				},
 				x: {
+					// Hierarchical labels: [month year, day] → day ticks + month groups under
 					ticks: {
 						color: colors.ticks,
-						font: { size: 11, weight: 500 }
+						font: { size: 11, weight: 500 },
+						// Keep all days when few; auto-skip when dense
+						autoSkip: true,
+						maxRotation: 0,
+						minRotation: 0
 					},
 					grid: {
 						display: false
@@ -2665,8 +2677,21 @@
 		return Object.entries(grouped).sort(([dateA], [dateB]) => dateA.localeCompare(dateB));
 	});
 
+	/**
+	 * Chart.js hierarchical category label: outer = month+year group (under axis),
+	 * inner = day-of-month only. e.g. ['March 2026', '9'] for 2026-03-09.
+	 */
+	function overTimeAxisLabel(dateKey: string): [string, string] {
+		const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey.trim());
+		if (!m) return [dateKey, dateKey];
+		const monthYear = formatMonthYearLabel(`${m[1]}-${m[2]}`);
+		const day = String(parseInt(m[3], 10)); // day value only (no leading zero)
+		return [monthYear, day];
+	}
+
 	const chartData = $derived.by(() => ({
-		labels: incidentsByDate.map(([date]) => formatDate(date)),
+		/** Nested labels → day ticks with month/year groups underneath (Chart.js hierarchy). */
+		labels: incidentsByDate.map(([date]) => overTimeAxisLabel(date)),
 		datasets: [
 			{
 				label: 'Incidents',
