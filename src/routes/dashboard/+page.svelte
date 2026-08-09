@@ -139,11 +139,12 @@
 	let overTimeChartBucket: OverTimeBucket = 'day';
 
 	/**
-	 * Driver line chart mirrors (same key shapes as over-time). Declared early so the
-	 * axis-chrome plugin can close over them without TDZ issues.
+	 * Driver line chart mirrors (month keys YYYY-MM; axis chrome uses month style).
+	 * Declared early so the axis-chrome plugin can close over them without TDZ issues.
 	 */
 	let driverMonthChartBucketKeys: string[] = [];
-	let driverMonthChartBucket: OverTimeBucket = 'day';
+	/** Always month — same under-label chrome as over-time month bucket. */
+	let driverMonthChartBucket: OverTimeBucket = 'month';
 	let driverMonthChartDriverKeys: string[] = [];
 	let driverMonthChartDriverLabels: string[] = [];
 
@@ -839,16 +840,17 @@
 		};
 	}
 
-	/** Multi-series line options: driver × day/month/year (same axis chrome as over-time). */
+	/** Multi-series line options: driver × month (x-axis chrome matches over-time month view). */
 	function buildDriverMonthLineOptions(
 		colors: ReturnType<typeof getChartTheme>
 	): ChartOptions<'line'> {
-		const bucket = untrack(() => dashboardUi.overTimeBucket);
+		// Fixed month bucket — Day/Month/Year toggle is only on Incidents Over Time
+		const bucket: OverTimeBucket = 'month';
 		return {
 			responsive: true,
 			maintainAspectRatio: false,
 			layout: {
-				// Bottom room for month/year under-labels (same as Incidents Over Time)
+				// Bottom room for year under-labels (same as Incidents Over Time month view)
 				padding: {
 					top: 14,
 					right: 8,
@@ -963,7 +965,7 @@
 	function applyDriverMonthLineTheme(chart: ChartJS<'line'>) {
 		const colors = getChartTheme(theme.isDark);
 		const isDark = theme.isDark;
-		const bucket = untrack(() => dashboardUi.overTimeBucket);
+		const bucket: OverTimeBucket = 'month';
 		const colorMap = assignDistinctCategoryColors(
 			chart.data.datasets.map((d) => String(d.label ?? '')),
 			isDark
@@ -3915,65 +3917,32 @@
 	});
 
 	/**
-	 * Line chart datasets: one series per driver, x-axis by day / month / year
-	 * (same bucket + tick/grouping style as Incidents Over Time).
+	 * Line chart datasets: one series per driver × calendar month
+	 * (same pivot as the table). X-axis uses over-time month tick + year under-label style.
 	 * Visibility (top 10 default) is applied via Chart.js `hidden` + the dropdown.
-	 * Driver ranking uses full-period totals (same as the month table).
 	 */
 	const driverMonthLineData = $derived.by(() => {
-		const range = timeRange;
-		const bucket = dashboardUi.overTimeBucket;
+		const tally = driverMonthTally;
 		const dark = theme.isDark;
-		type DriverRow = {
-			key: string;
-			label: string;
-			byBucket: Map<string, number>;
-			total: number;
-		};
-		const byDriver = new Map<string, DriverRow>();
-		const bucketSet = new Set<string>();
-
-		for (const incident of dashboardIncidents) {
-			if (!isDateReceivedInTimeRange(incident.dateReceived, range)) continue;
-			const dayKey = dateReceivedKey(incident.dateReceived);
-			if (!dayKey) continue;
-			const bKey =
-				bucket === 'day' ? dayKey : bucket === 'month' ? dayKey.slice(0, 7) : dayKey.slice(0, 4);
-			bucketSet.add(bKey);
-
-			const d = normalizeAggregationKey(incident.driver, 'Unassigned');
-			let row = byDriver.get(d.key);
-			if (!row) {
-				row = { key: d.key, label: d.label, byBucket: new Map(), total: 0 };
-				byDriver.set(d.key, row);
-			}
-			row.byBucket.set(bKey, (row.byBucket.get(bKey) ?? 0) + 1);
-			row.total += 1;
-		}
-
-		const bucketKeys = [...bucketSet].sort((a, b) => a.localeCompare(b));
-		const drivers = [...byDriver.values()].sort((a, b) => {
-			if (b.total !== a.total) return b.total - a.total;
-			return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
-		});
+		const bucket: OverTimeBucket = 'month';
 		const colorMap = assignDistinctCategoryColors(
-			drivers.map((r) => r.label),
+			tally.rows.map((r) => r.label),
 			dark
 		);
-
 		return {
-			labels: bucketKeys.map((k) => overTimeTickLabel(k, bucket)),
-			bucketKeys,
+			// Primary ticks = short month (en-AU), same as Incidents Over Time month view
+			labels: tally.months.map((ym) => overTimeTickLabel(ym, bucket)),
+			bucketKeys: tally.months,
 			bucket,
-			periodLabel: timeRangeLabel,
-			datasets: drivers.map((row) => {
+			periodLabel: tally.periodLabel,
+			datasets: tally.rows.map((row) => {
 				const color =
 					colorMap.get(row.label) ?? getChartCategoryColor(row.label, 0, dark);
 				return {
 					label: row.label,
 					driverKey: row.key,
 					total: row.total,
-					data: bucketKeys.map((k) => row.byBucket.get(k) ?? 0),
+					data: row.counts,
 					borderColor: color,
 					backgroundColor: withAlpha(color, 0.06),
 					pointBackgroundColor: color,
@@ -5512,34 +5481,12 @@
 									{#if dashboardUi.driverMonthView === 'table'}
 										· click a count to view those incidents
 									{:else}
-										· by {dashboardUi.overTimeBucket} · top {DRIVER_MONTH_TOP_N} by default ·
-										click a point for that driver
+										· top {DRIVER_MONTH_TOP_N} by default · click a point for that driver × month
 									{/if}
 								</p>
 							</div>
 							<div class="flex shrink-0 flex-wrap items-center gap-2">
 								{#if dashboardUi.driverMonthView === 'chart' && hasDriverMonthTally}
-									<div
-										class="over-time-bucket-toggle inline-flex shrink-0 rounded-md border border-warm-200 bg-warm-50 p-0.5 dark:bg-warm-200"
-										role="group"
-										aria-label="Aggregate driver series by day, month, or year"
-									>
-										{#each OVER_TIME_BUCKET_OPTIONS as opt (opt.value)}
-											<button
-												type="button"
-												class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {dashboardUi.overTimeBucket ===
-												opt.value
-													? 'bg-white text-accent-700 shadow-sm dark:bg-warm-100 dark:text-accent-600'
-													: 'text-warm-600 hover:text-warm-800'}"
-												aria-pressed={dashboardUi.overTimeBucket === opt.value}
-												onclick={() => {
-													dashboardUi.overTimeBucket = opt.value;
-												}}
-											>
-												{opt.label}
-											</button>
-										{/each}
-									</div>
 									<div class="relative" data-driver-month-picker>
 										<button
 											type="button"
