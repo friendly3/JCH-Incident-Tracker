@@ -492,14 +492,14 @@
 			const ctx = chart.ctx;
 			const groups = overTimeMonthGroups(keys);
 
-			// —— Vertical month boundary lines ————————————————
+			// —— Vertical month boundary lines (x-axis label band only) ——
 			if (keys.length >= 2) {
 				ctx.save();
 				ctx.strokeStyle = stroke;
 				ctx.lineWidth = 1;
 				ctx.beginPath();
-				// Through plot + into day/month label band
-				const lineTop = area.top;
+				// Only under the plot — day ticks + month/year row (not the chart body)
+				const lineTop = area.bottom + 1;
 				const lineBottom = Math.min(chart.height - 2, area.bottom + 40);
 				for (let i = 1; i < keys.length; i++) {
 					const prevYm = keys[i - 1]?.slice(0, 7);
