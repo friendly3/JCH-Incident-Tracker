@@ -4425,21 +4425,8 @@
 								<div
 									class="team-leader-view-toggle inline-flex shrink-0 rounded-md border border-warm-200 bg-warm-50 p-0.5 dark:bg-warm-200"
 									role="group"
-									aria-label="Show team leader stats as table or chart"
+									aria-label="Show team leader stats as chart or table"
 								>
-									<button
-										type="button"
-										class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {teamLeaderView ===
-										'table'
-											? 'bg-white text-accent-700 shadow-sm dark:bg-warm-100 dark:text-accent-600'
-											: 'text-warm-600 hover:text-warm-800'}"
-										aria-pressed={teamLeaderView === 'table'}
-										onclick={() => {
-											teamLeaderView = 'table';
-										}}
-									>
-										Table
-									</button>
 									<button
 										type="button"
 										class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {teamLeaderView ===
@@ -4452,6 +4439,19 @@
 										}}
 									>
 										Chart
+									</button>
+									<button
+										type="button"
+										class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {teamLeaderView ===
+										'table'
+											? 'bg-white text-accent-700 shadow-sm dark:bg-warm-100 dark:text-accent-600'
+											: 'text-warm-600 hover:text-warm-800'}"
+										aria-pressed={teamLeaderView === 'table'}
+										onclick={() => {
+											teamLeaderView = 'table';
+										}}
+									>
+										Table
 									</button>
 								</div>
 							</div>
