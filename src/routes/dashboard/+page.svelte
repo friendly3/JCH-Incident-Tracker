@@ -3719,9 +3719,11 @@
 		}
 	});
 
+	// Restore scroll only after data is ready — restoring too early jumps into empty space
+	// and the page looks blank for a long time while charts/map still mounting.
+	let scrollRestorePending = $state(false);
 	onMount(() => {
-		// Restore period toggles + scroll after returning from list drill-down
-		dashboardUi.restoreScroll();
+		scrollRestorePending = dashboardUi.consumeScrollRestore();
 		resizeHandler = () => {
 			chartInstance?.resize();
 			typeOverTimeChart?.resize();
@@ -3732,13 +3734,18 @@
 		window.addEventListener('resize', resizeHandler);
 
 		return () => {
-			// Capture again if the component unmounts without beforeNavigate (edge cases)
-			dashboardUi.captureScroll();
 			if (resizeHandler) {
 				window.removeEventListener('resize', resizeHandler);
 				resizeHandler = undefined;
 			}
 		};
+	});
+
+	$effect(() => {
+		if (!scrollRestorePending) return;
+		if (incidentStore.isLoading || data.loadError || incidentStore.error) return;
+		scrollRestorePending = false;
+		dashboardUi.restoreScroll();
 	});
 
 	$effect(() => {
@@ -3957,14 +3964,11 @@
 		});
 	});
 
-	// Team-leader stacked bar: only while Chart view is active
+	// Team-leader stacked bar — same lifecycle as driver chart (no read/write of
+	// teamLeaderChart inside create path that would re-trigger the effect).
 	$effect(() => {
 		if (incidentStore.isLoading || incidentStore.error || data.loadError) return;
-		if (dashboardUi.teamLeaderView !== 'chart') {
-			teamLeaderChart?.destroy();
-			teamLeaderChart = undefined;
-			return;
-		}
+		if (dashboardUi.teamLeaderView !== 'chart') return;
 		const canvas = teamLeaderCanvas;
 		if (!canvas || !hasTeamLeaderChartData) return;
 
@@ -3984,8 +3988,12 @@
 				options: buildTeamLeaderBarOptions(colors)
 			});
 			applyTeamLeaderBarTheme(instance);
-			teamLeaderChart = instance;
+			// untrack: assigning $state must not re-subscribe this create effect
+			untrack(() => {
+				teamLeaderChart = instance;
+			});
 			queueMicrotask(() => {
+				if (cancelled) return;
 				instance?.resize();
 				instance?.update('none');
 			});
@@ -3994,8 +4002,21 @@
 		return () => {
 			cancelled = true;
 			instance?.destroy();
-			if (teamLeaderChart === instance) teamLeaderChart = undefined;
+			untrack(() => {
+				if (teamLeaderChart === instance) teamLeaderChart = undefined;
+			});
 		};
+	});
+
+	// Tear down chart when switching to Table view
+	$effect(() => {
+		if (dashboardUi.teamLeaderView === 'chart') return;
+		untrack(() => {
+			const chart = teamLeaderChart;
+			if (!chart) return;
+			chart.destroy();
+			teamLeaderChart = undefined;
+		});
 	});
 
 	$effect(() => {

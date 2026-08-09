@@ -4,6 +4,7 @@
  */
 
 const STORAGE_KEY = 'jch-dashboard-ui-v1';
+const RESTORE_SCROLL_FLAG = 'jch-dashboard-restore-scroll';
 
 export type OverTimeBucket = 'day' | 'month' | 'year';
 export type TeamLeaderView = 'table' | 'chart';
@@ -22,6 +23,15 @@ function isOverTimeBucket(v: unknown): v is OverTimeBucket {
 
 function isTeamLeaderView(v: unknown): v is TeamLeaderView {
 	return v === 'table' || v === 'chart';
+}
+
+function sameStringArray(a: string[], b: string[]): boolean {
+	if (a === b) return true;
+	if (a.length !== b.length) return false;
+	for (let i = 0; i < a.length; i++) {
+		if (a[i] !== b[i]) return false;
+	}
+	return true;
 }
 
 function readStored(): StoredUi {
@@ -79,6 +89,11 @@ function ensureHydrated() {
 	}
 }
 
+// Eager hydrate on the client so getters never mutate during reactive reads
+if (typeof window !== 'undefined') {
+	ensureHydrated();
+}
+
 export const dashboardUi = {
 	get overTimeBucket(): OverTimeBucket {
 		ensureHydrated();
@@ -108,6 +123,7 @@ export const dashboardUi = {
 	},
 	set hiddenDriverTypeLabels(next: string[]) {
 		ensureHydrated();
+		if (sameStringArray(_hiddenDriverTypeLabels, next)) return;
 		_hiddenDriverTypeLabels = next;
 		writeStored({ hiddenDriverTypeLabels: next });
 	},
@@ -118,33 +134,64 @@ export const dashboardUi = {
 	},
 	set hiddenTypeOverTimeLabels(next: string[]) {
 		ensureHydrated();
+		if (sameStringArray(_hiddenTypeOverTimeLabels, next)) return;
 		_hiddenTypeOverTimeLabels = next;
 		writeStored({ hiddenTypeOverTimeLabels: next });
 	},
 
-	/** Call when leaving the dashboard so Back restores scroll. */
+	/**
+	 * Save scroll and mark that the next dashboard mount should restore it
+	 * (used when leaving for a drill-down / other route).
+	 */
 	captureScroll() {
 		if (typeof window === 'undefined') return;
 		ensureHydrated();
 		_scrollY = window.scrollY || window.pageYOffset || 0;
 		writeStored({ scrollY: _scrollY });
+		try {
+			sessionStorage.setItem(RESTORE_SCROLL_FLAG, '1');
+		} catch {
+			/* ignore */
+		}
+	},
+
+	/** True once after captureScroll; clears the flag. */
+	consumeScrollRestore(): boolean {
+		if (typeof window === 'undefined') return false;
+		try {
+			const flag = sessionStorage.getItem(RESTORE_SCROLL_FLAG);
+			if (flag !== '1') return false;
+			sessionStorage.removeItem(RESTORE_SCROLL_FLAG);
+			return true;
+		} catch {
+			return false;
+		}
 	},
 
 	/**
-	 * Restore scroll after dashboard mounts. Uses rAF so layout/charts have a
-	 * chance to size before jumping.
+	 * Restore scroll after dashboard content is ready. Clamps to document height
+	 * so a stale large Y does not leave the viewport in empty space.
 	 */
 	restoreScroll() {
 		if (typeof window === 'undefined') return;
 		ensureHydrated();
 		const y = _scrollY;
 		if (!y || y <= 0) return;
+
+		const apply = () => {
+			const maxY = Math.max(
+				0,
+				(document.documentElement?.scrollHeight ?? 0) - window.innerHeight
+			);
+			window.scrollTo(0, Math.min(y, maxY));
+		};
+
+		// Multi-pass: layout grows as charts/map mount
 		requestAnimationFrame(() => {
-			window.scrollTo(0, y);
-			// Second pass after charts/async layout settle
-			requestAnimationFrame(() => {
-				window.scrollTo(0, y);
-			});
+			apply();
+			requestAnimationFrame(apply);
+			setTimeout(apply, 100);
+			setTimeout(apply, 400);
 		});
 	}
 };
