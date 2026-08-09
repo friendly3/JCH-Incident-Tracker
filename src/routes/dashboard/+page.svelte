@@ -439,49 +439,113 @@
 	}
 
 	/**
-	 * Faint vertical rules on Incidents Over Time at calendar-month boundaries
-	 * (between hierarchical month/year groups on the x-axis).
+	 * Contiguous calendar-month spans along the over-time x-axis (index range).
 	 */
-	const overTimeMonthBoundaryPlugin: Plugin<'line'> = {
-		id: 'overTimeMonthBoundaries',
-		afterDatasetsDraw(chart) {
+	function overTimeMonthGroups(
+		keys: string[]
+	): { ym: string; label: string; start: number; end: number }[] {
+		const groups: { ym: string; label: string; start: number; end: number }[] = [];
+		for (let i = 0; i < keys.length; i++) {
+			const key = keys[i];
+			const ym = key?.slice(0, 7) ?? '';
+			if (!/^\d{4}-\d{2}$/.test(ym)) continue;
+			const last = groups[groups.length - 1];
+			if (last && last.ym === ym) {
+				last.end = i;
+			} else {
+				groups.push({
+					ym,
+					label: formatMonthYearLabel(ym),
+					start: i,
+					end: i
+				});
+			}
+		}
+		return groups;
+	}
+
+	/**
+	 * Incidents Over Time axis chrome:
+	 * - Day-of-month tick labels only (Chart.js)
+	 * - One month+year label centred under each month span (not repeated per day)
+	 * - Faint vertical grey rules at month boundaries
+	 *
+	 * Vertical order under the plot: day ticks, then the single month/year label.
+	 */
+	const overTimeAxisChromePlugin: Plugin<'line'> = {
+		id: 'overTimeAxisChrome',
+		afterDraw(chart) {
 			const keys = overTimeChartDateKeys;
-			if (keys.length < 2) return;
+			if (keys.length === 0) return;
 			const xScale = chart.scales.x;
 			const area = chart.chartArea;
 			if (!xScale || !area) return;
 
 			const dark = isDarkMode();
-			// Soft grey separators — a touch stronger than the y-grid so they read as dividers
+			const themeColors = getChartTheme(dark);
+			// Soft grey separators for month boundaries
 			const stroke = dark
 				? withAlpha(MAP_GRID_GRAY, 0.4)
 				: withAlpha('#9ca3af', 0.55);
+			const monthLabelColor = themeColors.ticks;
 
 			const ctx = chart.ctx;
-			ctx.save();
-			ctx.strokeStyle = stroke;
-			ctx.lineWidth = 1;
-			ctx.beginPath();
+			const groups = overTimeMonthGroups(keys);
 
-			// Extend slightly below the plot into the day/month label band
-			const top = area.top;
-			const bottom = Math.min(chart.height - 2, area.bottom + 36);
-
-			for (let i = 1; i < keys.length; i++) {
-				const prevYm = keys[i - 1]?.slice(0, 7);
-				const curYm = keys[i]?.slice(0, 7);
-				if (!prevYm || !curYm || prevYm === curYm) continue;
-				const x0 = xScale.getPixelForValue(i - 1);
-				const x1 = xScale.getPixelForValue(i);
-				if (!Number.isFinite(x0) || !Number.isFinite(x1)) continue;
-				const x = (x0 + x1) / 2;
-				// Keep inside chart left/right bounds
-				if (x < area.left || x > area.right) continue;
-				ctx.moveTo(x, top);
-				ctx.lineTo(x, bottom);
+			// —— Vertical month boundary lines ————————————————
+			if (keys.length >= 2) {
+				ctx.save();
+				ctx.strokeStyle = stroke;
+				ctx.lineWidth = 1;
+				ctx.beginPath();
+				// Through plot + into day/month label band
+				const lineTop = area.top;
+				const lineBottom = Math.min(chart.height - 2, area.bottom + 40);
+				for (let i = 1; i < keys.length; i++) {
+					const prevYm = keys[i - 1]?.slice(0, 7);
+					const curYm = keys[i]?.slice(0, 7);
+					if (!prevYm || !curYm || prevYm === curYm) continue;
+					const x0 = xScale.getPixelForValue(i - 1);
+					const x1 = xScale.getPixelForValue(i);
+					if (!Number.isFinite(x0) || !Number.isFinite(x1)) continue;
+					const x = (x0 + x1) / 2;
+					if (x < area.left || x > area.right) continue;
+					ctx.moveTo(x, lineTop);
+					ctx.lineTo(x, lineBottom);
+				}
+				ctx.stroke();
+				ctx.restore();
 			}
 
-			ctx.stroke();
+			// —— One month/year label per group (centred under day ticks) ——
+			// Day ticks sit ~14–18px below chartArea; month row sits under that.
+			const monthLabelY = Math.min(chart.height - 6, area.bottom + 32);
+			ctx.save();
+			ctx.fillStyle = monthLabelColor;
+			ctx.font = '600 11px system-ui, sans-serif';
+			ctx.textAlign = 'center';
+			ctx.textBaseline = 'middle';
+			for (const g of groups) {
+				const xStart = xScale.getPixelForValue(g.start);
+				const xEnd = xScale.getPixelForValue(g.end);
+				if (!Number.isFinite(xStart) || !Number.isFinite(xEnd)) continue;
+				const x = (xStart + xEnd) / 2;
+				if (x < area.left - 4 || x > area.right + 4) continue;
+				// Clip wide labels roughly to chart width
+				const maxW = Math.max(24, Math.abs(xEnd - xStart) + 24);
+				const text = g.label;
+				// Prefer full label; if group is very narrow, truncate mid
+				let draw = text;
+				if (ctx.measureText(draw).width > maxW && maxW < 72) {
+					// Short form e.g. "Mar 2026" when only a few days in span
+					const short = text.replace(
+						/^(January|February|March|April|May|June|July|August|September|October|November|December)/,
+						(m) => m.slice(0, 3)
+					);
+					draw = short;
+				}
+				ctx.fillText(draw, x, monthLabelY);
+			}
 			ctx.restore();
 		}
 	};
@@ -496,8 +560,8 @@
 				intersect: false
 			},
 			layout: {
-				// Top for point labels; extra bottom for day + month/year group rows
-				padding: { top: 14, right: 6, left: 2, bottom: 10 }
+				// Top for point labels; room under axis for day ticks + one month/year row
+				padding: { top: 14, right: 6, left: 2, bottom: 28 }
 			},
 			onHover: (event, elements, chart) => {
 				const native = event.native;
@@ -575,14 +639,15 @@
 					}
 				},
 				x: {
-					// Hierarchical labels: [month year, day] → day ticks + month groups under
+					// Day-of-month only; month/year drawn once per group by overTimeAxisChromePlugin
 					ticks: {
 						color: colors.ticks,
 						font: { size: 11, weight: 500 },
-						// Keep all days when few; auto-skip when dense
 						autoSkip: true,
 						maxRotation: 0,
-						minRotation: 0
+						minRotation: 0,
+						// Leave vertical space under tick text for the single month/year label row
+						padding: 4
 					},
 					grid: {
 						display: false
@@ -2725,21 +2790,16 @@
 		return Object.entries(grouped).sort(([dateA], [dateB]) => dateA.localeCompare(dateB));
 	});
 
-	/**
-	 * Chart.js hierarchical category label: outer = month+year group (under axis),
-	 * inner = day-of-month only. e.g. ['March 2026', '9'] for 2026-03-09.
-	 */
-	function overTimeAxisLabel(dateKey: string): [string, string] {
+	/** Day-of-month only for over-time x ticks (e.g. 2026-03-09 → "9"). */
+	function overTimeDayLabel(dateKey: string): string {
 		const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey.trim());
-		if (!m) return [dateKey, dateKey];
-		const monthYear = formatMonthYearLabel(`${m[1]}-${m[2]}`);
-		const day = String(parseInt(m[3], 10)); // day value only (no leading zero)
-		return [monthYear, day];
+		if (!m) return dateKey;
+		return String(parseInt(m[3], 10));
 	}
 
 	const chartData = $derived.by(() => ({
-		/** Nested labels → day ticks with month/year groups underneath (Chart.js hierarchy). */
-		labels: incidentsByDate.map(([date]) => overTimeAxisLabel(date)),
+		/** Day numbers only; month/year is one spanning label per month (plugin). */
+		labels: incidentsByDate.map(([date]) => overTimeDayLabel(date)),
 		datasets: [
 			{
 				label: 'Incidents',
@@ -3300,8 +3360,8 @@
 				type: 'line',
 				data: initialData,
 				options: buildChartOptions(colors),
-				// Local only — month dividers for this chart (not global register)
-				plugins: [overTimeMonthBoundaryPlugin]
+				// Local only — month labels + dividers (not global register)
+				plugins: [overTimeAxisChromePlugin]
 			});
 			applyChartTheme(instance);
 			chartInstance = instance;
