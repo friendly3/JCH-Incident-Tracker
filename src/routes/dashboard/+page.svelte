@@ -4464,11 +4464,34 @@
 										</p>
 									</div>
 								{:else}
+									{@const tlsColors = teamLeaderStatusColors(theme.isDark)}
+									<ul
+										class="mb-1.5 flex flex-wrap gap-x-3 gap-y-1"
+										aria-label="Ongoing and Resolved series for team leader chart"
+									>
+										<li class="inline-flex items-center gap-1.5 text-[11px] font-semibold text-warm-700">
+											<span
+												class="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+												style="background: {tlsColors.ongoing}"
+												aria-hidden="true"
+											></span>
+											Ongoing
+										</li>
+										<li class="inline-flex items-center gap-1.5 text-[11px] font-semibold text-warm-700">
+											<span
+												class="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+												style="background: {tlsColors.resolved}"
+												aria-hidden="true"
+											></span>
+											Resolved
+										</li>
+									</ul>
 									<div
 										class="team-leader-chart-plot relative w-full min-h-0 overflow-hidden"
 										style:height="{teamLeaderChartHeightPx}px"
 										style:min-height="{teamLeaderChartHeightPx}px"
 										style:max-height="{teamLeaderChartHeightPx}px"
+										style:flex="0 0 {teamLeaderChartHeightPx}px"
 									>
 										<canvas
 											bind:this={teamLeaderCanvas}
