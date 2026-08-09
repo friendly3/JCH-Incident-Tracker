@@ -4790,6 +4790,24 @@
 		font-size: 0.75rem; /* 12px — fits inside 20px pill */
 	}
 
+	/* Full-row hover: faint teal from accent palette (covers sticky driver col) */
+	:global(.dashboard-driver-month-table tbody tr.dashboard-driver-month-row:hover),
+	:global(.dashboard-driver-month-table tbody tr.dashboard-driver-month-row:hover > th),
+	:global(.dashboard-driver-month-table tbody tr.dashboard-driver-month-row:hover > td) {
+		background-color: var(--color-accent-50);
+	}
+
+	:global(.dark .dashboard-driver-month-table tbody tr.dashboard-driver-month-row:hover),
+	:global(
+			.dark .dashboard-driver-month-table tbody tr.dashboard-driver-month-row:hover > th
+		),
+	:global(
+			.dark .dashboard-driver-month-table tbody tr.dashboard-driver-month-row:hover > td
+		) {
+		/* Slightly stronger than accent-50 so the row reads on dark cards */
+		background-color: var(--color-accent-100);
+	}
+
 	/* Chart card sizes to its content (tight bar stack); table may be taller. */
 	:global(.dashboard-driver-row .dashboard-chart-card) {
 		height: auto;
