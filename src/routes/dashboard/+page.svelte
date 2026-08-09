@@ -1495,12 +1495,23 @@
 						const raw = context.dataset.data[context.dataIndex];
 						return typeof raw === 'number' && raw >= 1;
 					},
-					formatter: (value: unknown) =>
-						typeof value === 'number' && Number.isFinite(value) && value > 0
-							? String(value)
-							: '',
+					formatter: (
+						value: unknown,
+						context: {
+							dataIndex: number;
+							chart: { data: { datasets: { data?: unknown[] }[] } };
+						}
+					) => {
+						if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+							return '';
+						}
+						const rowTotal = teamLeaderRowTotalFromChart(context.chart, context.dataIndex);
+						const pct = rowTotal > 0 ? ((value / rowTotal) * 100).toFixed(1) : '0.0';
+						return `${value} (${pct}%)`;
+					},
 					color: '#ffffff',
-					font: { size: 10, weight: 'bold' as const },
+					// 12px = previous 10px + 2
+					font: { size: 12, weight: 'bold' as const },
 					textStrokeColor: 'rgba(0,0,0,0.45)',
 					textStrokeWidth: 2
 				}
