@@ -4156,7 +4156,7 @@
 							{/if}
 						</select>
 					</label>
-					<span class="text-[0.825rem] text-warm-500">{timeRangeLabel}</span>
+					<span class="text-[18px] font-bold text-accent-600">{timeRangeLabel}</span>
 					<span
 						class="h-7 w-px shrink-0 self-center bg-warm-300/60 dark:bg-warm-400/40"
 						aria-hidden="true"
