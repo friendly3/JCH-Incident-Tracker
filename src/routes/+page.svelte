@@ -299,7 +299,8 @@
 
 	function clearDrillDownAndGoDashboard() {
 		resetListAfterDrillDown();
-		void goto('/dashboard');
+		// noScroll: dashboard restores its own saved scroll position
+		void goto('/dashboard', { noScroll: true });
 	}
 
 	function toggleDateReceivedSort() {

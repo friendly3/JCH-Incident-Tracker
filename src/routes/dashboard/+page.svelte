@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto, invalidateAll } from '$app/navigation';
+	import { beforeNavigate, goto, invalidateAll } from '$app/navigation';
 	import { incidentStore } from '$lib/data/store.svelte';
 	import { formatDate, formatDateTimeFields } from '$lib/formatDate';
 	import type { Incident } from '$lib/data/incidents';
@@ -29,6 +29,10 @@
 		type MonthTimeRangeKey,
 		type TimeRangeKey
 	} from '$lib/dashboardPeriod.svelte';
+	import {
+		dashboardUi,
+		type OverTimeBucket
+	} from '$lib/dashboardUi.svelte';
 	import { theme } from '$lib/theme.svelte';
 	import type { Chart as ChartJS, ChartOptions, Plugin } from 'chart.js';
 	import { onMount, untrack } from 'svelte';
@@ -99,8 +103,7 @@
 		return n * DRIVER_BAR_SLOT_PX + DRIVER_CHART_PAD_PX;
 	}
 
-	/** Over-time chart x-axis aggregation. */
-	type OverTimeBucket = 'day' | 'month' | 'year';
+	/** Over-time chart x-axis aggregation options (value persisted in dashboardUi). */
 	const OVER_TIME_BUCKET_OPTIONS: { value: OverTimeBucket; label: string }[] = [
 		{ value: 'day', label: 'Day' },
 		{ value: 'month', label: 'Month' },
@@ -109,12 +112,10 @@
 
 	/**
 	 * Parallel to Incidents Over Time categories.
-	 * Keys are YYYY-MM-DD | YYYY-MM | YYYY depending on overTimeBucket.
+	 * Keys are YYYY-MM-DD | YYYY-MM | YYYY depending on dashboardUi.overTimeBucket.
 	 * Kept outside $derived so chart onClick/plugin can resolve without TDZ issues.
 	 */
 	let overTimeChartDateKeys: string[] = [];
-	/** Day / month / year aggregation for Incidents Over Time. */
-	let overTimeBucket = $state<OverTimeBucket>('day');
 	/** Mirror for axis chrome plugin / click handlers outside reactive contexts. */
 	let overTimeChartBucket: OverTimeBucket = 'day';
 
@@ -612,7 +613,7 @@
 					top: 14,
 					right: 6,
 					left: 2,
-					bottom: overTimeAxisBottomPad(untrack(() => overTimeBucket))
+					bottom: overTimeAxisBottomPad(untrack(() => dashboardUi.overTimeBucket))
 				}
 			},
 			onHover: (event, elements, chart) => {
@@ -697,7 +698,7 @@
 						autoSkip: true,
 						maxRotation: 0,
 						minRotation: 0,
-						padding: overTimeTickPadding(untrack(() => overTimeBucket))
+						padding: overTimeTickPadding(untrack(() => dashboardUi.overTimeBucket))
 					},
 					grid: {
 						display: false
@@ -1602,7 +1603,7 @@
 
 	/** Over-time chart point/label → list filtered to that day / month / year. */
 	function drillDownOverTimeBucket(bucketKey: string) {
-		const bucket = untrack(() => overTimeBucket);
+		const bucket = untrack(() => dashboardUi.overTimeBucket);
 		if (bucket === 'day') {
 			const dayPeriod = dayTimeRange(bucketKey);
 			if (!dayPeriod) return;
@@ -2109,8 +2110,6 @@
 	let actionStatusChart = $state<ChartJS<'bar'> | undefined>();
 	let driverChart = $state<ChartJS<'bar'> | undefined>();
 	let teamLeaderChart = $state<ChartJS<'bar'> | undefined>();
-	/** Table vs stacked bar for Stats by Team Leader (chart first by default). */
-	let teamLeaderView = $state<'table' | 'chart'>('chart');
 	let resizeHandler: (() => void) | undefined;
 	let isRetrying = $state(false);
 	let retryError = $state<string | null>(null);
@@ -2172,8 +2171,7 @@
 	 * Legend filters for multi-series charts (row 3): labels listed here are hidden.
 	 * Click legend items to toggle. Reassigned as new arrays for Svelte reactivity.
 	 */
-	let hiddenTypeOverTimeLabels = $state<string[]>([]);
-	let hiddenDriverTypeLabels = $state<string[]>([]);
+
 	/** Legend hover focus — other series dim on the matching chart. */
 	let hoveredTypeOverTimeLabel = $state<string | null>(null);
 	let hoveredDriverTypeLabel = $state<string | null>(null);
@@ -2427,7 +2425,7 @@
 						{
 							labels: byType.labels,
 							datasets: byType.datasets
-								.filter((ds) => !hiddenTypeOverTimeLabels.includes(ds.label))
+								.filter((ds) => !dashboardUi.hiddenTypeOverTimeLabels.includes(ds.label))
 								.map((ds) => ({
 									label: ds.label,
 									data: ds.data,
@@ -2459,7 +2457,7 @@
 				{
 					labels: byDriver.labels,
 					datasets: byDriver.datasets
-						.filter((ds) => !hiddenDriverTypeLabels.includes(ds.label))
+						.filter((ds) => !dashboardUi.hiddenDriverTypeLabels.includes(ds.label))
 						.map((ds) => ({
 							label: ds.label,
 							data: ds.data,
@@ -3021,11 +3019,11 @@
 	}
 
 	function toggleTypeOverTimeLegend(label: string) {
-		hiddenTypeOverTimeLabels = toggleLegendLabel(hiddenTypeOverTimeLabels, label);
+		dashboardUi.hiddenTypeOverTimeLabels = toggleLegendLabel(dashboardUi.hiddenTypeOverTimeLabels, label);
 	}
 
 	function toggleDriverTypeLegend(label: string) {
-		hiddenDriverTypeLabels = toggleLegendLabel(hiddenDriverTypeLabels, label);
+		dashboardUi.hiddenDriverTypeLabels = toggleLegendLabel(dashboardUi.hiddenDriverTypeLabels, label);
 	}
 
 	/** Canonical YYYY-MM-DD from dateReceived (handles ISO datetimes). */
@@ -3098,7 +3096,7 @@
 	 */
 	const overTimeSeries = $derived.by(() => {
 		const range = timeRange;
-		const bucket = overTimeBucket;
+		const bucket = dashboardUi.overTimeBucket;
 		const grouped = new Map<string, number>();
 		for (const incident of dashboardIncidents) {
 			if (!isDateReceivedInTimeRange(incident.dateReceived, range)) continue;
@@ -3129,7 +3127,7 @@
 	}
 
 	const chartData = $derived.by(() => {
-		const bucket = overTimeBucket;
+		const bucket = dashboardUi.overTimeBucket;
 		const series = overTimeSeries;
 		return {
 			labels: series.map(([key]) => overTimeTickLabel(key, bucket)),
@@ -3151,7 +3149,7 @@
 	// Keep drill-down keys + bucket mirror aligned with chart categories
 	$effect(() => {
 		overTimeChartDateKeys = overTimeSeries.map(([key]) => key);
-		overTimeChartBucket = overTimeBucket;
+		overTimeChartBucket = dashboardUi.overTimeBucket;
 	});
 
 	/**
@@ -3524,23 +3522,23 @@
 	// Drop legend filters for series that no longer exist after period/data change
 	$effect(() => {
 		const typeLabels = new Set(typeOverTimeChartData.datasets.map((d) => d.label));
-		const next = hiddenTypeOverTimeLabels.filter((l) => typeLabels.has(l));
+		const next = dashboardUi.hiddenTypeOverTimeLabels.filter((l) => typeLabels.has(l));
 		if (
-			next.length !== hiddenTypeOverTimeLabels.length ||
-			next.some((l, i) => l !== hiddenTypeOverTimeLabels[i])
+			next.length !== dashboardUi.hiddenTypeOverTimeLabels.length ||
+			next.some((l, i) => l !== dashboardUi.hiddenTypeOverTimeLabels[i])
 		) {
-			hiddenTypeOverTimeLabels = next;
+			dashboardUi.hiddenTypeOverTimeLabels = next;
 		}
 	});
 
 	$effect(() => {
 		const typeLabels = new Set(driverStackedBarData.datasets.map((d) => d.label));
-		const next = hiddenDriverTypeLabels.filter((l) => typeLabels.has(l));
+		const next = dashboardUi.hiddenDriverTypeLabels.filter((l) => typeLabels.has(l));
 		if (
-			next.length !== hiddenDriverTypeLabels.length ||
-			next.some((l, i) => l !== hiddenDriverTypeLabels[i])
+			next.length !== dashboardUi.hiddenDriverTypeLabels.length ||
+			next.some((l, i) => l !== dashboardUi.hiddenDriverTypeLabels[i])
 		) {
-			hiddenDriverTypeLabels = next;
+			dashboardUi.hiddenDriverTypeLabels = next;
 		}
 	});
 
@@ -3702,7 +3700,18 @@
 		return `${sel.driverLabel} · ${formatMonthYearLabel(sel.monthYm)}`;
 	});
 
+	// Persist scroll when leaving dashboard (drill-down, nav links, etc.)
+	beforeNavigate(({ from, to }) => {
+		const fromDash = from?.url.pathname === '/dashboard' || from?.url.pathname === '/dashboard/';
+		const toDash = to?.url.pathname === '/dashboard' || to?.url.pathname === '/dashboard/';
+		if (fromDash && !toDash) {
+			dashboardUi.captureScroll();
+		}
+	});
+
 	onMount(() => {
+		// Restore period toggles + scroll after returning from list drill-down
+		dashboardUi.restoreScroll();
 		resizeHandler = () => {
 			chartInstance?.resize();
 			typeOverTimeChart?.resize();
@@ -3713,6 +3722,8 @@
 		window.addEventListener('resize', resizeHandler);
 
 		return () => {
+			// Capture again if the component unmounts without beforeNavigate (edge cases)
+			dashboardUi.captureScroll();
 			if (resizeHandler) {
 				window.removeEventListener('resize', resizeHandler);
 				resizeHandler = undefined;
@@ -3757,7 +3768,7 @@
 
 		const colors = untrack(() => getChartTheme(theme.isDark));
 		const initialData = untrack(() => {
-			const hidden = hiddenTypeOverTimeLabels;
+			const hidden = dashboardUi.hiddenTypeOverTimeLabels;
 			return {
 				labels: typeOverTimeChartData.labels,
 				datasets: typeOverTimeChartData.datasets.map((ds) => ({
@@ -3822,7 +3833,7 @@
 
 		const colors = untrack(() => getChartTheme(theme.isDark));
 		const initialData = untrack(() => {
-			const hidden = hiddenDriverTypeLabels;
+			const hidden = dashboardUi.hiddenDriverTypeLabels;
 			return {
 				labels: driverStackedBarData.labels,
 				datasets: driverStackedBarData.datasets.map((ds) => ({
@@ -3855,7 +3866,7 @@
 	$effect(() => {
 		const instance = chartInstance;
 		if (!instance?.data.datasets[0]) return;
-		const bucket = overTimeBucket;
+		const bucket = dashboardUi.overTimeBucket;
 		instance.data.labels = chartData.labels;
 		instance.data.datasets[0].data = chartData.datasets[0].data;
 		// Bottom pad + tick padding so month ticks and year under-labels do not clip
@@ -3878,7 +3889,7 @@
 		const instance = typeOverTimeChart;
 		if (!instance) return;
 		const next = typeOverTimeChartData;
-		const hidden = hiddenTypeOverTimeLabels;
+		const hidden = dashboardUi.hiddenTypeOverTimeLabels;
 		instance.data.labels = next.labels;
 		// Rebuild datasets so type set can grow/shrink; honour legend filter
 		instance.data.datasets = next.datasets.map((ds) => ({
@@ -3919,7 +3930,7 @@
 		const instance = driverChart;
 		if (!instance) return;
 		const next = driverStackedBarData;
-		const hidden = hiddenDriverTypeLabels;
+		const hidden = dashboardUi.hiddenDriverTypeLabels;
 		const focus = hoveredDriverTypeLabel;
 		// Depend on plot height so Chart.js reflows when driver count changes.
 		void driverChartPlotHeightPx;
@@ -3939,7 +3950,7 @@
 	// Team-leader stacked bar: only while Chart view is active
 	$effect(() => {
 		if (incidentStore.isLoading || incidentStore.error || data.loadError) return;
-		if (teamLeaderView !== 'chart') {
+		if (dashboardUi.teamLeaderView !== 'chart') {
 			teamLeaderChart?.destroy();
 			teamLeaderChart = undefined;
 			return;
@@ -3979,7 +3990,7 @@
 
 	$effect(() => {
 		const instance = teamLeaderChart;
-		if (!instance || teamLeaderView !== 'chart') return;
+		if (!instance || dashboardUi.teamLeaderView !== 'chart') return;
 		const next = teamLeaderBarData;
 		void teamLeaderChartHeightPx;
 		instance.data.labels = next.labels;
@@ -4417,7 +4428,7 @@
 									</h2>
 									<p class="dashboard-chart-meta text-xs text-warm-500">
 										{statsByTeamLeader.periodLabel} · Ongoing &amp; Resolved
-										{#if teamLeaderView === 'chart'}
+										{#if dashboardUi.teamLeaderView === 'chart'}
 											· click a segment to open list
 										{/if}
 									</p>
@@ -4429,26 +4440,26 @@
 								>
 									<button
 										type="button"
-										class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {teamLeaderView ===
+										class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {dashboardUi.teamLeaderView ===
 										'chart'
 											? 'bg-white text-accent-700 shadow-sm dark:bg-warm-100 dark:text-accent-600'
 											: 'text-warm-600 hover:text-warm-800'}"
-										aria-pressed={teamLeaderView === 'chart'}
+										aria-pressed={dashboardUi.teamLeaderView === 'chart'}
 										onclick={() => {
-											teamLeaderView = 'chart';
+											dashboardUi.teamLeaderView = 'chart';
 										}}
 									>
 										Chart
 									</button>
 									<button
 										type="button"
-										class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {teamLeaderView ===
+										class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {dashboardUi.teamLeaderView ===
 										'table'
 											? 'bg-white text-accent-700 shadow-sm dark:bg-warm-100 dark:text-accent-600'
 											: 'text-warm-600 hover:text-warm-800'}"
-										aria-pressed={teamLeaderView === 'table'}
+										aria-pressed={dashboardUi.teamLeaderView === 'table'}
 										onclick={() => {
-											teamLeaderView = 'table';
+											dashboardUi.teamLeaderView = 'table';
 										}}
 									>
 										Table
@@ -4464,7 +4475,7 @@
 										No ongoing or resolved incidents in this period.
 									</p>
 								</div>
-							{:else if teamLeaderView === 'chart'}
+							{:else if dashboardUi.teamLeaderView === 'chart'}
 								{#if !hasTeamLeaderChartData}
 									<div class="flex h-full flex-1 items-center justify-center">
 										<p class="text-sm text-warm-500">
@@ -4763,7 +4774,7 @@
 										Incidents Over Time
 									</h2>
 									<p class="dashboard-chart-meta text-xs text-warm-500">
-										{timeRangeLabel} · by {overTimeBucket} · click to open incidents
+										{timeRangeLabel} · by {dashboardUi.overTimeBucket} · click to open incidents
 									</p>
 								</div>
 								<div
@@ -4774,13 +4785,13 @@
 									{#each OVER_TIME_BUCKET_OPTIONS as opt (opt.value)}
 										<button
 											type="button"
-											class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {overTimeBucket ===
+											class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {dashboardUi.overTimeBucket ===
 											opt.value
 												? 'bg-white text-accent-700 shadow-sm dark:bg-warm-100 dark:text-accent-600'
 												: 'text-warm-600 hover:text-warm-800'}"
-											aria-pressed={overTimeBucket === opt.value}
+											aria-pressed={dashboardUi.overTimeBucket === opt.value}
 											onclick={() => {
-												overTimeBucket = opt.value;
+												dashboardUi.overTimeBucket = opt.value;
 											}}
 										>
 											{opt.label}
@@ -4790,8 +4801,8 @@
 							</div>
 						</div>
 						<p id="over-time-chart-summary" class="sr-only">
-							Line chart of incident counts by {overTimeBucket} for {timeRangeLabel}. Click a data
-							point or axis label to open the incidents list for that {overTimeBucket}.
+							Line chart of incident counts by {dashboardUi.overTimeBucket} for {timeRangeLabel}. Click a data
+							point or axis label to open the incidents list for that {dashboardUi.overTimeBucket}.
 						</p>
 						<div class="dashboard-chart-plot relative w-full">
 							{#if overTimeSeries.length === 0}
@@ -4866,7 +4877,7 @@
 									}}
 								>
 									{#each typeOverTimeChartData.datasets as ds (`${ds.label}-${ds.total}-${timeRange}`)}
-										{@const visible = isLegendVisible(hiddenTypeOverTimeLabels, ds.label)}
+										{@const visible = isLegendVisible(dashboardUi.hiddenTypeOverTimeLabels, ds.label)}
 										{@const focus = hoveredTypeOverTimeLabel}
 										{@const dimLegend =
 											visible && focus != null && focus !== ds.label}
@@ -5104,7 +5115,7 @@
 									}}
 								>
 									{#each driverStackedBarData.datasets as ds (`${ds.label}-${ds.total}-${timeRange}`)}
-										{@const visible = isLegendVisible(hiddenDriverTypeLabels, ds.label)}
+										{@const visible = isLegendVisible(dashboardUi.hiddenDriverTypeLabels, ds.label)}
 										{@const focus = hoveredDriverTypeLabel}
 										{@const dimLegend =
 											visible && focus != null && focus !== ds.label}
