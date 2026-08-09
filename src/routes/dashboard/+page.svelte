@@ -1349,6 +1349,8 @@
 		type?: string;
 		/** Exact status name, or list sentinels: __unresolved__ | __resolved__ | __unspecified__ */
 		action?: string;
+		/** Responded By (team leader); empty / unassigned → __unassigned__ */
+		respondedBy?: string;
 		/** Override period (e.g. d:YYYY-MM-DD for a single over-time day). */
 		period?: TimeRangeKey;
 	}) {
@@ -1371,7 +1373,215 @@
 				params.set('action', a);
 			}
 		}
+		if (opts.respondedBy !== undefined) {
+			const r = opts.respondedBy.trim();
+			params.set(
+				'respondedBy',
+				!r || isUnassignedCategory(r) ? '__unassigned__' : r
+			);
+		}
 		void goto(`/?${params.toString()}`);
+	}
+
+	/**
+	 * Team-leader stacked bar: Ongoing / Resolved colours aligned with KPI tiles.
+	 */
+	function teamLeaderStatusColors(isDark: boolean): { ongoing: string; resolved: string } {
+		return {
+			// Amber family (Unresolved KPI)
+			ongoing: isDark ? '#fbbf24' : '#d97706',
+			// Emerald family (Resolved KPI)
+			resolved: isDark ? '#4ade80' : '#16a34a'
+		};
+	}
+
+	function buildTeamLeaderBarOptions(
+		colors: ReturnType<typeof getChartTheme>
+	): ChartOptions<'bar'> {
+		return {
+			responsive: true,
+			maintainAspectRatio: false,
+			indexAxis: 'y',
+			layout: {
+				padding: { top: 4, right: 28, left: 2, bottom: 4 }
+			},
+			onHover: (event, elements) => {
+				const native = event.native;
+				const target = native?.target;
+				if (target instanceof HTMLElement) {
+					target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+				}
+			},
+			onClick: (_event, elements, chart) => {
+				if (!elements.length) return;
+				const hit = elements[0];
+				const leaderLabel = String(chart.data.labels?.[hit.index] ?? '');
+				const ds = chart.data.datasets[hit.datasetIndex];
+				const series = String(ds?.label ?? '');
+				const raw = ds?.data?.[hit.index];
+				const value = typeof raw === 'number' ? raw : Number(raw);
+				if (!leaderLabel || !Number.isFinite(value) || value <= 0) return;
+				if (ds?.hidden) return;
+				if (
+					typeof chart.isDatasetVisible === 'function' &&
+					!chart.isDatasetVisible(hit.datasetIndex)
+				) {
+					return;
+				}
+				const action =
+					series === 'Ongoing'
+						? 'Ongoing'
+						: series === 'Resolved'
+							? '__resolved__'
+							: undefined;
+				if (!action) return;
+				drillDownToIncidents({
+					drill: 'team-leader-chart',
+					respondedBy: leaderLabel,
+					action
+				});
+			},
+			plugins: {
+				legend: {
+					display: true,
+					position: 'top',
+					align: 'end',
+					labels: {
+						boxWidth: 10,
+						boxHeight: 10,
+						padding: 10,
+						font: { size: 11, weight: 600 },
+						color: colors.legend,
+						usePointStyle: true,
+						pointStyle: 'rectRounded'
+					}
+				},
+				title: { display: false },
+				tooltip: {
+					backgroundColor: colors.tooltipBg,
+					titleColor: colors.tooltipTitle,
+					bodyColor: colors.tooltipTitle,
+					titleFont: { size: 12, weight: 'bold' },
+					bodyFont: { size: 11 },
+					padding: 8,
+					cornerRadius: 8,
+					displayColors: true,
+					callbacks: {
+						label: (context) => {
+							const value = context.parsed.x ?? 0;
+							const name = context.dataset.label ?? '';
+							if (value <= 0) return '';
+							const rowTotal = teamLeaderRowTotalFromChart(
+								context.chart,
+								context.dataIndex
+							);
+							const pct =
+								rowTotal > 0 ? ((value / rowTotal) * 100).toFixed(1) : '0.0';
+							return `${name}: ${value} (${pct}% of row) · click to open list`;
+						}
+					}
+				},
+				datalabels: {
+					anchor: 'center',
+					align: 'center',
+					clamp: true,
+					clip: true,
+					display: (context) => {
+						const raw = context.dataset.data[context.dataIndex];
+						return typeof raw === 'number' && raw >= 1;
+					},
+					formatter: (value: unknown) =>
+						typeof value === 'number' && Number.isFinite(value) && value > 0
+							? String(value)
+							: '',
+					color: '#ffffff',
+					font: { size: 10, weight: 'bold' as const },
+					textStrokeColor: 'rgba(0,0,0,0.45)',
+					textStrokeWidth: 2
+				}
+			},
+			scales: {
+				x: {
+					stacked: true,
+					beginAtZero: true,
+					grace: '12%',
+					ticks: {
+						color: colors.ticks,
+						stepSize: 1,
+						precision: 0,
+						font: { size: 10, weight: 500 }
+					},
+					grid: { color: colors.grid }
+				},
+				y: {
+					stacked: true,
+					ticks: {
+						color: colors.ticks,
+						font: { size: 10, weight: 600 },
+						autoSkip: false
+					},
+					grid: { display: false }
+				}
+			}
+		};
+	}
+
+	function applyTeamLeaderBarTheme(chart: ChartJS<'bar'>) {
+		const colors = getChartTheme(theme.isDark);
+		const status = teamLeaderStatusColors(theme.isDark);
+		chart.data.datasets.forEach((dataset) => {
+			const label = String(dataset.label ?? '');
+			const solid =
+				label === 'Ongoing'
+					? status.ongoing
+					: label === 'Resolved'
+						? status.resolved
+						: colors.accent;
+			dataset.backgroundColor = withAlpha(solid, 0.85);
+			dataset.borderColor = solid;
+			dataset.borderWidth = 1;
+			dataset.borderRadius = 2;
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			(dataset as any).barThickness = DRIVER_BAR_THICKNESS_PX;
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			(dataset as any).maxBarThickness = DRIVER_BAR_THICKNESS_PX;
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			(dataset as any).stack = 'tls';
+		});
+		if (chart.options?.plugins?.legend?.labels) {
+			chart.options.plugins.legend.labels.color = colors.legend;
+		}
+		if (chart.options?.plugins?.tooltip) {
+			chart.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
+			chart.options.plugins.tooltip.titleColor = colors.tooltipTitle;
+			chart.options.plugins.tooltip.bodyColor = colors.tooltipTitle;
+		}
+		if (chart.options?.scales?.x?.ticks) {
+			chart.options.scales.x.ticks.color = colors.ticks;
+		}
+		if (chart.options?.scales?.x?.grid) {
+			chart.options.scales.x.grid.color = colors.grid;
+		}
+		if (chart.options?.scales?.y?.ticks) {
+			chart.options.scales.y.ticks.color = colors.ticks;
+		}
+		if (chart.options?.scales?.x) chart.options.scales.x.stacked = true;
+		if (chart.options?.scales?.y) chart.options.scales.y.stacked = true;
+		chart.update('none');
+	}
+
+	/** Row total from chart stacks (Ongoing + Resolved) for tooltip %. */
+	function teamLeaderRowTotalFromChart(
+		chart: { data: { datasets: { data?: unknown[] }[] } },
+		index: number
+	): number {
+		let sum = 0;
+		for (const ds of chart.data.datasets) {
+			const raw = ds.data?.[index];
+			const n = typeof raw === 'number' ? raw : Number(raw);
+			if (Number.isFinite(n)) sum += n;
+		}
+		return sum;
 	}
 
 	/** Over-time chart point/label → list filtered to that day / month / year. */
@@ -1877,10 +2087,14 @@
 	let typeOverTimeCanvas: HTMLCanvasElement | undefined = $state();
 	let actionStatusCanvas: HTMLCanvasElement | undefined = $state();
 	let driverCanvas: HTMLCanvasElement | undefined = $state();
+	let teamLeaderCanvas: HTMLCanvasElement | undefined = $state();
 	let chartInstance = $state<ChartJS<'line'> | undefined>();
 	let typeOverTimeChart = $state<ChartJS<'line'> | undefined>();
 	let actionStatusChart = $state<ChartJS<'bar'> | undefined>();
 	let driverChart = $state<ChartJS<'bar'> | undefined>();
+	let teamLeaderChart = $state<ChartJS<'bar'> | undefined>();
+	/** Table vs stacked bar for Stats by Team Leader. */
+	let teamLeaderView = $state<'table' | 'chart'>('table');
 	let resizeHandler: (() => void) | undefined;
 	let isRetrying = $state(false);
 	let retryError = $state<string | null>(null);
@@ -3152,6 +3366,46 @@
 		statsByTeamLeader.rows.length > 0 || statsByTeamLeader.unassignedTotal > 0
 	);
 
+	/** Chart only needs assigned leaders (Ongoing + Resolved stacks). */
+	const hasTeamLeaderChartData = $derived(statsByTeamLeader.rows.length > 0);
+
+	const teamLeaderBarData = $derived.by(() => {
+		const dark = theme.isDark;
+		const status = teamLeaderStatusColors(dark);
+		const rows = statsByTeamLeader.rows;
+		return {
+			labels: rows.map((r) => r.label),
+			datasets: [
+				{
+					label: 'Ongoing',
+					data: rows.map((r) => r.ongoing),
+					backgroundColor: withAlpha(status.ongoing, 0.85),
+					borderColor: status.ongoing,
+					borderWidth: 1,
+					borderRadius: 2,
+					stack: 'tls',
+					barThickness: DRIVER_BAR_THICKNESS_PX,
+					maxBarThickness: DRIVER_BAR_THICKNESS_PX
+				},
+				{
+					label: 'Resolved',
+					data: rows.map((r) => r.resolved),
+					backgroundColor: withAlpha(status.resolved, 0.85),
+					borderColor: status.resolved,
+					borderWidth: 1,
+					borderRadius: 2,
+					stack: 'tls',
+					barThickness: DRIVER_BAR_THICKNESS_PX,
+					maxBarThickness: DRIVER_BAR_THICKNESS_PX
+				}
+			]
+		};
+	});
+
+	const teamLeaderChartHeightPx = $derived(
+		driverChartHeightForCount(statsByTeamLeader.rows.length)
+	);
+
 	const statsByTeamLeaderAriaLabel = $derived.by(() => {
 		const { rows, totalOngoing, totalResolved, unassignedTotal, grandTotal, periodLabel } =
 			statsByTeamLeader;
@@ -3438,6 +3692,7 @@
 			typeOverTimeChart?.resize();
 			actionStatusChart?.resize();
 			driverChart?.resize();
+			teamLeaderChart?.resize();
 		};
 		window.addEventListener('resize', resizeHandler);
 
@@ -3662,6 +3917,61 @@
 		});
 	});
 
+	// Team-leader stacked bar: only while Chart view is active
+	$effect(() => {
+		if (incidentStore.isLoading || incidentStore.error || data.loadError) return;
+		if (teamLeaderView !== 'chart') {
+			teamLeaderChart?.destroy();
+			teamLeaderChart = undefined;
+			return;
+		}
+		const canvas = teamLeaderCanvas;
+		if (!canvas || !hasTeamLeaderChartData) return;
+
+		const colors = untrack(() => getChartTheme(theme.isDark));
+		const initialData = untrack(() => teamLeaderBarData);
+		let cancelled = false;
+		let instance: ChartJS<'bar'> | undefined;
+
+		void ensureChartJs().then((Chart) => {
+			if (cancelled || !Chart || !canvas.isConnected) return;
+			instance = new Chart(canvas, {
+				type: 'bar',
+				data: {
+					labels: initialData.labels,
+					datasets: initialData.datasets.map((ds) => ({ ...ds }))
+				},
+				options: buildTeamLeaderBarOptions(colors)
+			});
+			applyTeamLeaderBarTheme(instance);
+			teamLeaderChart = instance;
+			queueMicrotask(() => {
+				instance?.resize();
+				instance?.update('none');
+			});
+		});
+
+		return () => {
+			cancelled = true;
+			instance?.destroy();
+			if (teamLeaderChart === instance) teamLeaderChart = undefined;
+		};
+	});
+
+	$effect(() => {
+		const instance = teamLeaderChart;
+		if (!instance || teamLeaderView !== 'chart') return;
+		const next = teamLeaderBarData;
+		void teamLeaderChartHeightPx;
+		instance.data.labels = next.labels;
+		instance.data.datasets = next.datasets.map((ds) => ({ ...ds }));
+		applyTeamLeaderBarTheme(instance);
+		queueMicrotask(() => {
+			instance.resize();
+			instance.update('none');
+		});
+	});
+
 	$effect(() => {
 		theme.isDark;
 		if (chartInstance) {
@@ -3675,6 +3985,9 @@
 		}
 		if (actionStatusChart) {
 			applyActionStatusBarTheme(actionStatusChart);
+		}
+		if (teamLeaderChart) {
+			applyTeamLeaderBarTheme(teamLeaderChart);
 		}
 		// Hover is applied by the driver data effect above; only re-theme on dark toggle
 		if (driverChart) {
@@ -4078,12 +4391,51 @@
 						aria-describedby="stats-by-team-leader-summary"
 					>
 						<div class="dashboard-chart-header">
-							<h2 class="dashboard-section-title" id="stats-by-team-leader-title">
-								Stats by Team Leader
-							</h2>
-							<p class="dashboard-chart-meta text-xs text-warm-500">
-								{statsByTeamLeader.periodLabel} · Ongoing &amp; Resolved
-							</p>
+							<div class="flex flex-wrap items-start justify-between gap-2">
+								<div class="min-w-0">
+									<h2 class="dashboard-section-title" id="stats-by-team-leader-title">
+										Stats by Team Leader
+									</h2>
+									<p class="dashboard-chart-meta text-xs text-warm-500">
+										{statsByTeamLeader.periodLabel} · Ongoing &amp; Resolved
+										{#if teamLeaderView === 'chart'}
+											· click a segment to open list
+										{/if}
+									</p>
+								</div>
+								<div
+									class="team-leader-view-toggle inline-flex shrink-0 rounded-md border border-warm-200 bg-warm-50 p-0.5 dark:bg-warm-200"
+									role="group"
+									aria-label="Show team leader stats as table or chart"
+								>
+									<button
+										type="button"
+										class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {teamLeaderView ===
+										'table'
+											? 'bg-white text-accent-700 shadow-sm dark:bg-warm-100 dark:text-accent-600'
+											: 'text-warm-600 hover:text-warm-800'}"
+										aria-pressed={teamLeaderView === 'table'}
+										onclick={() => {
+											teamLeaderView = 'table';
+										}}
+									>
+										Table
+									</button>
+									<button
+										type="button"
+										class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {teamLeaderView ===
+										'chart'
+											? 'bg-white text-accent-700 shadow-sm dark:bg-warm-100 dark:text-accent-600'
+											: 'text-warm-600 hover:text-warm-800'}"
+										aria-pressed={teamLeaderView === 'chart'}
+										onclick={() => {
+											teamLeaderView = 'chart';
+										}}
+									>
+										Chart
+									</button>
+								</div>
+							</div>
 						</div>
 						<p id="stats-by-team-leader-summary" class="sr-only">{statsByTeamLeaderAriaLabel}</p>
 						<div class="dashboard-chart-plot dashboard-team-leader-stats-plot relative flex min-h-0 w-full flex-col">
@@ -4093,6 +4445,36 @@
 										No ongoing or resolved incidents in this period.
 									</p>
 								</div>
+							{:else if teamLeaderView === 'chart'}
+								{#if !hasTeamLeaderChartData}
+									<div class="flex h-full flex-1 items-center justify-center">
+										<p class="text-sm text-warm-500">
+											No assigned team leaders in this period.
+											{#if statsByTeamLeader.unassignedTotal > 0}
+												({statsByTeamLeader.unassignedTotal} unassigned — see table)
+											{/if}
+										</p>
+									</div>
+								{:else}
+									<div
+										class="team-leader-chart-plot relative w-full min-h-0 overflow-hidden"
+										style:height="{teamLeaderChartHeightPx}px"
+										style:min-height="{teamLeaderChartHeightPx}px"
+										style:max-height="{teamLeaderChartHeightPx}px"
+									>
+										<canvas
+											bind:this={teamLeaderCanvas}
+											class="block h-full w-full"
+											aria-hidden="true"
+										></canvas>
+									</div>
+									{#if statsByTeamLeader.unassignedTotal > 0}
+										<p class="mt-1.5 text-[11px] text-warm-500">
+											Unassigned (empty Responded By): {statsByTeamLeader.unassignedTotal} —
+											switch to Table for the full breakdown.
+										</p>
+									{/if}
+								{/if}
 							{:else}
 								<!--
 									All totals live *outside* the scroll box. Sticky <tfoot> on iOS/iPad

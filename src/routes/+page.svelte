@@ -168,6 +168,7 @@
 			params.has('driver') ||
 			params.has('type') ||
 			params.has('action') ||
+			params.has('respondedBy') ||
 			params.has('period') ||
 			params.has('drill');
 
@@ -190,6 +191,14 @@
 		const action = params.get('action');
 		if (action !== null) {
 			filterAction = action === '' ? ACTION_FILTER_UNSPECIFIED : action;
+		}
+
+		const respondedBy = params.get('respondedBy');
+		if (respondedBy !== null) {
+			filterRespondedBy =
+				respondedBy === '' || respondedBy === RESPONDED_BY_FILTER_UNASSIGNED
+					? RESPONDED_BY_FILTER_UNASSIGNED
+					: respondedBy;
 		}
 
 		const period = params.get('period');
