@@ -3235,6 +3235,11 @@
 		}
 	}
 
+	function toggleDriverMonthLegend(label: string) {
+		driverMonthVisibilityTouched = true;
+		driverMonthHiddenLabels = toggleLegendLabel(driverMonthHiddenLabels, label);
+	}
+
 	function onDriverMonthCheckboxChange(label: string, event: Event) {
 		const el = event.currentTarget;
 		if (!(el instanceof HTMLInputElement)) return;
@@ -5548,6 +5553,47 @@
 								No incidents in this period.
 							</p>
 						{:else if dashboardUi.driverMonthView === 'chart'}
+							<!-- Legend above plot: visible series (colour · name · total); click to hide -->
+							<div class="dashboard-chart-legend dashboard-chart-legend--top mb-1.5 shrink-0">
+								{#if driverMonthVisibleCount > 0}
+									<ul
+										class="flex flex-wrap gap-x-1.5 gap-y-1"
+										aria-label="Driver series legend for {driverMonthTally.periodLabel}. Click to hide a series from the chart."
+									>
+										{#each driverMonthTally.rows as row (row.key)}
+											{@const visible = isLegendVisible(
+												driverMonthHiddenLabels,
+												row.label
+											)}
+											{#if visible}
+												{@const swatch =
+													driverMonthColorByLabel.get(row.label) ??
+													getChartCategoryColor(row.label, 0, theme.isDark)}
+												<li>
+													<button
+														type="button"
+														class="dashboard-legend-btn flex max-w-full items-center gap-1 text-[12px] leading-tight text-warm-600"
+														aria-pressed={true}
+														title="Hide {row.label} on chart"
+														onclick={() => toggleDriverMonthLegend(row.label)}
+													>
+														<span
+															class="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+															style="background: {swatch}"
+															aria-hidden="true"
+														></span>
+														<span class="truncate">{row.label} ({row.total})</span>
+													</button>
+												</li>
+											{/if}
+										{/each}
+									</ul>
+								{:else}
+									<p class="text-xs text-warm-500">
+										No drivers selected — use the Drivers menu to include series.
+									</p>
+								{/if}
+							</div>
 							<div
 								class="dashboard-chart-plot dashboard-chart-plot--fill relative min-h-0 w-full flex-1"
 								style="min-height: 16rem;"
