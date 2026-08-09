@@ -2109,8 +2109,8 @@
 	let actionStatusChart = $state<ChartJS<'bar'> | undefined>();
 	let driverChart = $state<ChartJS<'bar'> | undefined>();
 	let teamLeaderChart = $state<ChartJS<'bar'> | undefined>();
-	/** Table vs stacked bar for Stats by Team Leader. */
-	let teamLeaderView = $state<'table' | 'chart'>('table');
+	/** Table vs stacked bar for Stats by Team Leader (chart first by default). */
+	let teamLeaderView = $state<'table' | 'chart'>('chart');
 	let resizeHandler: (() => void) | undefined;
 	let isRetrying = $state(false);
 	let retryError = $state<string | null>(null);
