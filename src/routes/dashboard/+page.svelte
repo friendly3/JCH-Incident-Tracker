@@ -4245,6 +4245,7 @@
 							>
 								<table
 									class="dashboard-driver-month-table w-full min-w-[20rem] border-collapse text-left text-sm"
+									style="--driver-row-slot: {DRIVER_BAR_SLOT_PX}px; --driver-bar-thickness: {DRIVER_BAR_THICKNESS_PX}px; --driver-bar-gap: {DRIVER_BAR_GAP_PX}px;"
 								>
 									<thead class="sticky top-0 z-10 border-b border-warm-200 bg-warm-50 dark:bg-warm-200">
 										<tr>
@@ -4751,26 +4752,42 @@
 	}
 
 	/*
-	 * Driver×month tally: row vertical padding at 75% of previous Tailwind
-	 * py-2 (header/footer) and py-1.5 (body) — 25% tighter rows.
+	 * Driver×month tally rows match the bar chart category slot
+	 * (--driver-row-slot = bar thickness + gap, same constants as Chart.js).
+	 * Header/footer stay a touch taller for labels; body rows are fixed height.
 	 */
 	:global(.dashboard-driver-month-table thead th),
 	:global(.dashboard-driver-month-table tfoot th),
 	:global(.dashboard-driver-month-table tfoot td) {
-		padding-top: 0.375rem; /* was 0.5rem (py-2) */
-		padding-bottom: 0.375rem;
+		/* ~slot height so chrome feels related to the data rows */
+		height: var(--driver-row-slot, 26px);
+		padding-top: 0;
+		padding-bottom: 0;
+		vertical-align: middle;
+		line-height: 1.15;
+		box-sizing: border-box;
 	}
 
 	:global(.dashboard-driver-month-table tbody th),
 	:global(.dashboard-driver-month-table tbody td) {
-		padding-top: 0.28125rem; /* was 0.375rem (py-1.5) */
-		padding-bottom: 0.28125rem;
+		height: var(--driver-row-slot, 26px);
+		max-height: var(--driver-row-slot, 26px);
+		padding-top: 0;
+		padding-bottom: 0;
+		vertical-align: middle;
+		line-height: 1.15;
+		box-sizing: border-box;
 	}
 
+	/* Count pills ≈ bar thickness so rows read like chart categories */
 	:global(.dashboard-driver-month-table .dashboard-driver-month-cell-btn) {
-		min-height: 1.2rem; /* was 1.6rem */
-		padding-top: 0.09375rem; /* was py-0.5 (0.125rem) */
-		padding-bottom: 0.09375rem;
+		height: var(--driver-bar-thickness, 20px);
+		min-height: var(--driver-bar-thickness, 20px);
+		max-height: var(--driver-bar-thickness, 20px);
+		padding-top: 0;
+		padding-bottom: 0;
+		line-height: 1;
+		font-size: 0.75rem; /* 12px — fits inside 20px pill */
 	}
 
 	/* Chart card sizes to its content (tight bar stack); table may be taller. */
