@@ -534,7 +534,7 @@
 
 			// —— One month + year stack per group (year under month) ——
 			// Day ticks ~14–18px below chartArea; month then year under those.
-			const monthLabelY = Math.min(chart.height - 18, area.bottom + 28);
+			const monthLabelY = Math.min(chart.height - 15, area.bottom + 31);
 			const yearLabelY = monthLabelY + 13;
 			const lineH = 13;
 			ctx.save();
