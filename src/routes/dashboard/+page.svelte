@@ -4534,6 +4534,14 @@
 											<table
 												class="tls-stats-table w-full min-w-[20rem] border-collapse text-left text-sm"
 											>
+												<colgroup>
+													<col class="tls-col-leader" />
+													<col class="tls-col-num" />
+													<col class="tls-col-pct" />
+													<col class="tls-col-num" />
+													<col class="tls-col-pct" />
+													<col class="tls-col-num" />
+												</colgroup>
 												<thead
 													class="sticky top-0 z-10 border-b border-warm-200 bg-warm-50 dark:bg-warm-200"
 												>
