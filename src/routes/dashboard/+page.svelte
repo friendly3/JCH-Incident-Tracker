@@ -4043,7 +4043,7 @@
 														<th
 															scope="col"
 															class="tls-col-group-end px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
-															title="Share of total Ongoing among assigned team leaders"
+															title="Ongoing as a share of this team leader’s total (Ongoing + Resolved)"
 														>
 															%
 														</th>
@@ -4064,7 +4064,7 @@
 														<th
 															scope="col"
 															class="tls-col-group-end px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
-															title="Share of total Resolved among assigned team leaders"
+															title="Resolved as a share of this team leader’s total (Ongoing + Resolved)"
 														>
 															%
 														</th>
@@ -4178,8 +4178,13 @@
 													</td>
 													<td
 														class="tls-col-group-end px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
+														title="Ongoing share of all assigned team-leader totals"
 													>
-														{statsByTeamLeader.totalOngoing > 0 ? '100.0%' : '—'}
+														{statsByTeamLeader.totalOngoing +
+														statsByTeamLeader.totalResolved >
+														0
+															? `${statsByTeamLeader.allOngoingPct.toFixed(1)}%`
+															: '—'}
 													</td>
 													<td
 														class="tls-col-group-start px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
@@ -4188,8 +4193,13 @@
 													</td>
 													<td
 														class="tls-col-group-end px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
+														title="Resolved share of all assigned team-leader totals"
 													>
-														{statsByTeamLeader.totalResolved > 0 ? '100.0%' : '—'}
+														{statsByTeamLeader.totalOngoing +
+														statsByTeamLeader.totalResolved >
+														0
+															? `${statsByTeamLeader.allResolvedPct.toFixed(1)}%`
+															: '—'}
 													</td>
 													<td
 														class="tls-col-group-start px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
