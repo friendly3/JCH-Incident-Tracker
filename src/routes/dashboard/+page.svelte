@@ -2984,7 +2984,7 @@
 	 * Stats by Team Leader: grouped by Responded By (labelled Team Leader).
 	 * Ongoing = resolution status Ongoing.
 	 * Resolved = any resolution status except Ongoing and New (same rule as KPI tiles).
-	 * Each % is that column’s share of its own total among assigned leaders (1 decimal).
+	 * Each % is that status’s share of the team leader’s own row total (Ongoing + Resolved).
 	 *
 	 * Unassigned = Responded By is null/blank only (any resolution status, including New).
 	 * Shown as a bottom row with Total only — new/unanswered items often have no Responded By yet.
@@ -3038,17 +3038,21 @@
 			totalResolved,
 			unassignedTotal,
 			grandTotal,
+			/** All-row %: Ongoing / (Ongoing+Resolved) among assigned leaders. */
+			allOngoingPct: leadersTotal > 0 ? (totalOngoing / leadersTotal) * 100 : 0,
+			/** All-row %: Resolved / (Ongoing+Resolved) among assigned leaders. */
+			allResolvedPct: leadersTotal > 0 ? (totalResolved / leadersTotal) * 100 : 0,
 			rows: rows.map((row) => {
 				const total = row.ongoing + row.resolved;
 				return {
 					key: row.key,
 					label: row.label,
 					ongoing: row.ongoing,
-					/** Share of assigned-leaders Ongoing; 1 decimal for display. */
-					ongoingPct: totalOngoing > 0 ? (row.ongoing / totalOngoing) * 100 : 0,
+					/** Share of this team leader’s total that is Ongoing. */
+					ongoingPct: total > 0 ? (row.ongoing / total) * 100 : 0,
 					resolved: row.resolved,
-					/** Share of assigned-leaders Resolved; 1 decimal for display. */
-					resolvedPct: totalResolved > 0 ? (row.resolved / totalResolved) * 100 : 0,
+					/** Share of this team leader’s total that is Resolved. */
+					resolvedPct: total > 0 ? (row.resolved / total) * 100 : 0,
 					/** Ongoing + Resolved for this team leader. */
 					total
 				};
