@@ -96,11 +96,21 @@
 	/** Axes / layout chrome outside category slots. */
 	const DRIVER_CHART_PAD_PX = 48;
 
+	/** Team-leader bars: +15% thickness vs driver chart (20 → 23px). */
+	const TEAM_LEADER_BAR_THICKNESS_PX = Math.round(DRIVER_BAR_THICKNESS_PX * 1.15);
+	const TEAM_LEADER_BAR_SLOT_PX = TEAM_LEADER_BAR_THICKNESS_PX + DRIVER_BAR_GAP_PX;
+
 	function driverChartHeightForCount(driverCount: number): number {
 		const n = Math.max(0, driverCount);
 		if (n === 0) return DRIVER_CHART_MIN_HEIGHT_PX;
 		// Exact height so each category band is SLOT px (bar thickness + gap)
 		return n * DRIVER_BAR_SLOT_PX + DRIVER_CHART_PAD_PX;
+	}
+
+	function teamLeaderChartHeightForCount(leaderCount: number): number {
+		const n = Math.max(0, leaderCount);
+		if (n === 0) return DRIVER_CHART_MIN_HEIGHT_PX;
+		return n * TEAM_LEADER_BAR_SLOT_PX + DRIVER_CHART_PAD_PX;
 	}
 
 	/** Over-time chart x-axis aggregation options (value persisted in dashboardUi). */
