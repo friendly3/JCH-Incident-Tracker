@@ -5515,19 +5515,6 @@
 									<button
 										type="button"
 										class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {dashboardUi.driverMonthView ===
-										'chart'
-											? 'bg-white text-accent-700 shadow-sm dark:bg-warm-100 dark:text-accent-600'
-											: 'text-warm-600 hover:text-warm-800'}"
-										aria-pressed={dashboardUi.driverMonthView === 'chart'}
-										onclick={() => {
-											dashboardUi.driverMonthView = 'chart';
-										}}
-									>
-										Chart
-									</button>
-									<button
-										type="button"
-										class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {dashboardUi.driverMonthView ===
 										'table'
 											? 'bg-white text-accent-700 shadow-sm dark:bg-warm-100 dark:text-accent-600'
 											: 'text-warm-600 hover:text-warm-800'}"
@@ -5537,6 +5524,19 @@
 										}}
 									>
 										Table
+									</button>
+									<button
+										type="button"
+										class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {dashboardUi.driverMonthView ===
+										'chart'
+											? 'bg-white text-accent-700 shadow-sm dark:bg-warm-100 dark:text-accent-600'
+											: 'text-warm-600 hover:text-warm-800'}"
+										aria-pressed={dashboardUi.driverMonthView === 'chart'}
+										onclick={() => {
+											dashboardUi.driverMonthView = 'chart';
+										}}
+									>
+										Chart
 									</button>
 								</div>
 							</div>
