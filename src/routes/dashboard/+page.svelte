@@ -440,22 +440,37 @@
 
 	/**
 	 * Contiguous calendar-month spans along the over-time x-axis (index range).
+	 * Month name and year are separate so the plugin can stack year under month.
 	 */
 	function overTimeMonthGroups(
 		keys: string[]
-	): { ym: string; label: string; start: number; end: number }[] {
-		const groups: { ym: string; label: string; start: number; end: number }[] = [];
+	): { ym: string; monthLabel: string; yearLabel: string; start: number; end: number }[] {
+		const groups: {
+			ym: string;
+			monthLabel: string;
+			yearLabel: string;
+			start: number;
+			end: number;
+		}[] = [];
 		for (let i = 0; i < keys.length; i++) {
 			const key = keys[i];
 			const ym = key?.slice(0, 7) ?? '';
-			if (!/^\d{4}-\d{2}$/.test(ym)) continue;
+			const m = /^(\d{4})-(\d{2})$/.exec(ym);
+			if (!m) continue;
 			const last = groups[groups.length - 1];
 			if (last && last.ym === ym) {
 				last.end = i;
 			} else {
+				const year = parseInt(m[1], 10);
+				const monthIdx = parseInt(m[2], 10) - 1;
+				const d = new Date(year, monthIdx, 1);
+				const monthLong = Number.isNaN(d.getTime())
+					? ym
+					: d.toLocaleDateString('en-AU', { month: 'long' });
 				groups.push({
 					ym,
-					label: formatMonthYearLabel(ym),
+					monthLabel: monthLong,
+					yearLabel: String(year),
 					start: i,
 					end: i
 				});
@@ -498,9 +513,9 @@
 				ctx.strokeStyle = stroke;
 				ctx.lineWidth = 1;
 				ctx.beginPath();
-				// Only under the plot — day ticks + month/year row (not the chart body)
+				// Only under the plot — day ticks + month + year rows (not the chart body)
 				const lineTop = area.bottom + 1;
-				const lineBottom = Math.min(chart.height - 2, area.bottom + 40);
+				const lineBottom = Math.min(chart.height - 2, area.bottom + 48);
 				for (let i = 1; i < keys.length; i++) {
 					const prevYm = keys[i - 1]?.slice(0, 7);
 					const curYm = keys[i]?.slice(0, 7);
@@ -517,12 +532,13 @@
 				ctx.restore();
 			}
 
-			// —— One month/year label per group (centred under day ticks) ——
-			// Day ticks sit ~14–18px below chartArea; month row sits under that.
-			const monthLabelY = Math.min(chart.height - 6, area.bottom + 32);
+			// —— One month + year stack per group (year under month) ——
+			// Day ticks ~14–18px below chartArea; month then year under those.
+			const monthLabelY = Math.min(chart.height - 18, area.bottom + 28);
+			const yearLabelY = monthLabelY + 13;
+			const lineH = 13;
 			ctx.save();
 			ctx.fillStyle = monthLabelColor;
-			ctx.font = '600 11px system-ui, sans-serif';
 			ctx.textAlign = 'center';
 			ctx.textBaseline = 'middle';
 			for (const g of groups) {
@@ -531,22 +547,20 @@
 				if (!Number.isFinite(xStart) || !Number.isFinite(xEnd)) continue;
 				const x = (xStart + xEnd) / 2;
 				if (x < area.left - 4 || x > area.right + 4) continue;
-				// Clip wide labels roughly to chart width
 				const maxW = Math.max(24, Math.abs(xEnd - xStart) + 24);
-				const text = g.label;
-				// Prefer full label; if group is very narrow, truncate mid
-				let draw = text;
-				if (ctx.measureText(draw).width > maxW && maxW < 72) {
-					// Short form e.g. "Mar 2026" when only a few days in span
-					const short = text.replace(
-						/^(January|February|March|April|May|June|July|August|September|October|November|December)/,
-						(m) => m.slice(0, 3)
-					);
-					draw = short;
+				// Month line (abbreviate if the span is very narrow)
+				ctx.font = '600 11px system-ui, sans-serif';
+				let monthDraw = g.monthLabel;
+				if (ctx.measureText(monthDraw).width > maxW && maxW < 64) {
+					monthDraw = monthDraw.slice(0, 3);
 				}
-				ctx.fillText(draw, x, monthLabelY);
+				ctx.fillText(monthDraw, x, monthLabelY);
+				// Year line under month
+				ctx.font = '500 10px system-ui, sans-serif';
+				ctx.fillText(g.yearLabel, x, yearLabelY);
 			}
 			ctx.restore();
+			void lineH;
 		}
 	};
 
@@ -560,8 +574,8 @@
 				intersect: false
 			},
 			layout: {
-				// Top for point labels; room under axis for day ticks + one month/year row
-				padding: { top: 14, right: 6, left: 2, bottom: 28 }
+				// Top for point labels; room under axis for day ticks + month + year rows
+				padding: { top: 14, right: 6, left: 2, bottom: 40 }
 			},
 			onHover: (event, elements, chart) => {
 				const native = event.native;
