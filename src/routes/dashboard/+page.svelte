@@ -2156,6 +2156,7 @@
 			next !== 'all' &&
 			next !== 'today' &&
 			next !== 'week' &&
+			next !== 'year' &&
 			next !== '7' &&
 			next !== '30' &&
 			next !== '90' &&

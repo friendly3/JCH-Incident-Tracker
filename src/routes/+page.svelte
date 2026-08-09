@@ -150,6 +150,7 @@
 			value === 'all' ||
 			value === 'today' ||
 			value === 'week' ||
+			value === 'year' ||
 			value === '7' ||
 			value === '30' ||
 			value === '90' ||

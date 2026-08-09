@@ -5,7 +5,14 @@
 
 const STORAGE_KEY = 'jch-dashboard-time-range';
 
-export type RelativeTimeRangeKey = 'all' | 'today' | 'week' | '7' | '30' | '90';
+export type RelativeTimeRangeKey =
+	| 'all'
+	| 'today'
+	| 'week'
+	| 'year'
+	| '7'
+	| '30'
+	| '90';
 export type MonthTimeRangeKey = `m:${string}`;
 /** Single calendar day from over-time chart drill-down: d:YYYY-MM-DD */
 export type DayTimeRangeKey = `d:${string}`;
@@ -21,6 +28,7 @@ export const TIME_RANGE_OPTIONS: { value: RelativeTimeRangeKey; label: string }[
 	{ value: 'all', label: 'All time' },
 	{ value: 'today', label: 'Today' },
 	{ value: 'week', label: 'This Week' },
+	{ value: 'year', label: 'This Year' },
 	{ value: '90', label: 'Last 90 days' },
 	{ value: '30', label: 'Last 30 days' },
 	{ value: '7', label: 'Last 7 days' }
