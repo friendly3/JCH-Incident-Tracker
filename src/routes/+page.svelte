@@ -240,6 +240,8 @@
 				return 'By Resolution Status';
 			case 'over-time-chart':
 				return 'Incidents Over Time';
+			case 'team-leader-chart':
+				return 'Stats by Team Leader';
 			case 'kpi-total':
 				return 'Total';
 			case 'kpi-unresolved':
@@ -249,6 +251,16 @@
 			default:
 				return drillSource ?? 'Dashboard';
 		}
+	}
+
+	function drillRespondedByLabel(): string {
+		if (
+			filterRespondedBy === RESPONDED_BY_FILTER_UNASSIGNED ||
+			!filterRespondedBy
+		) {
+			return 'Unassigned';
+		}
+		return filterRespondedBy;
 	}
 
 	function drillPeriodLabel(): string {
@@ -274,6 +286,7 @@
 		filterDriver = '';
 		filterType = '';
 		filterAction = '';
+		filterRespondedBy = '';
 		filterDateRange = 'all';
 		// Open every month group so records are not hidden under collapsed accordions
 		expandedMonths = new Set(allMonthKeys);
@@ -920,6 +933,13 @@
 										class="inline-flex items-center rounded-md border border-accent-200 bg-white px-2 py-0.5 text-xs font-medium text-warm-800 dark:bg-warm-100"
 									>
 										Status: {drillActionLabel()}
+									</span>
+								{/if}
+								{#if filterRespondedBy}
+									<span
+										class="inline-flex items-center rounded-md border border-accent-200 bg-white px-2 py-0.5 text-xs font-medium text-warm-800 dark:bg-warm-100"
+									>
+										Responded By: {drillRespondedByLabel()}
 									</span>
 								{/if}
 								<span
