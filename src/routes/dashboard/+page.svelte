@@ -560,7 +560,6 @@
 				ctx.fillText(g.yearLabel, x, yearLabelY);
 			}
 			ctx.restore();
-			void lineH;
 		}
 	};
 
