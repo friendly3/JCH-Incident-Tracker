@@ -532,10 +532,13 @@
 			const labelColor = themeColors.ticks;
 			const ctx = chart.ctx;
 			const groups = overTimeOuterGroups(keys, bucket);
-			const bandBottom = Math.min(
-				chart.height - 2,
-				area.bottom + (bucket === 'day' ? 48 : 28)
-			);
+			/*
+			 * Label band geometry (below chartArea.bottom):
+			 * - Day:  Chart.js day ticks (~0–16px) → month name → year
+			 * - Month: Chart.js month ticks (~0–18px) → year only (must clear the tick row)
+			 */
+			const bandDepth = bucket === 'day' ? 50 : 42;
+			const bandBottom = Math.min(chart.height - 2, area.bottom + bandDepth);
 
 			// —— Vertical boundary lines (x-axis label band only) ——
 			if (keys.length >= 2) {
@@ -560,10 +563,12 @@
 				ctx.restore();
 			}
 
-			// —— Outer group labels (month+year under days, or year under months) ——
+			// —— Outer group labels ——
+			// Day: month @ +32, year @ +45 (under day ticks)
+			// Month: year only @ +34 (well clear of Chart.js short-month ticks)
 			const line1Y = Math.min(
-				chart.height - (bucket === 'day' ? 15 : 8),
-				area.bottom + (bucket === 'day' ? 31 : 22)
+				chart.height - (bucket === 'day' ? 16 : 10),
+				area.bottom + (bucket === 'day' ? 32 : 34)
 			);
 			const line2Y = line1Y + 13;
 			ctx.save();
