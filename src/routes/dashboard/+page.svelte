@@ -4688,43 +4688,54 @@
 												</tbody>
 											</table>
 										</div>
-										<!-- All row: fixed under scroll area (not sticky tfoot) so iPad repaints totals -->
+										<!--
+											All row: separate table (avoids sticky tfoot iPad repaint bugs).
+											Same colgroup + table-layout as body so values line up with leader rows.
+										-->
 										<table
-											class="tls-stats-table w-full min-w-[20rem] shrink-0 border-collapse border-t border-warm-200 bg-warm-50 text-left text-sm dark:bg-warm-200"
+											class="tls-stats-table tls-stats-table--footer w-full min-w-[20rem] shrink-0 border-collapse border-t border-warm-200 bg-warm-50 text-left text-sm dark:bg-warm-200"
 											aria-label="Stats by Team Leader totals for {statsByTeamLeader.periodLabel}"
 										>
+											<colgroup>
+												<col class="tls-col-leader" />
+												<col class="tls-col-num" />
+												<col class="tls-col-pct" />
+												<col class="tls-col-num" />
+												<col class="tls-col-pct" />
+												<col class="tls-col-num" />
+											</colgroup>
 											<tbody>
 												<tr>
 													<th
 														scope="row"
-														class="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-warm-700 sm:px-3"
+														class="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-warm-700 sm:px-3"
 													>
 														All
 													</th>
 													<td
-														class="tls-col-group-start px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
+														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
 													>
 														{statsByTeamLeader.totalOngoing}
 													</td>
 													<td
-														class="tls-col-group-end px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-400 sm:px-2"
+														class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
 														aria-hidden="true"
 													>
 														—
 													</td>
 													<td
-														class="tls-col-group-start px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
+														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
 													>
 														{statsByTeamLeader.totalResolved}
 													</td>
 													<td
-														class="tls-col-group-end px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-400 sm:px-2"
+														class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
 														aria-hidden="true"
 													>
 														—
 													</td>
 													<td
-														class="tls-col-group-start px-1.5 py-2 text-center text-sm font-bold tabular-nums text-warm-900 sm:px-2"
+														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
 														title="Team leaders + Unassigned"
 													>
 														{statsByTeamLeader.grandTotal}
@@ -5558,6 +5569,28 @@
 	:global(.dashboard-team-leader-stats-scroll) {
 		min-height: 0;
 		height: 100%;
+		/* Keep body/footer column widths aligned when a vertical scrollbar appears */
+		scrollbar-gutter: stable;
+	}
+
+	/*
+	 * Shared column template for body + All footer tables (two tables, one grid).
+	 * Fixed layout so Ongoing / % / Resolved / % / Total line up with leader rows.
+	 */
+	:global(.tls-stats-table) {
+		table-layout: fixed;
+	}
+
+	:global(.tls-stats-table .tls-col-leader) {
+		width: 34%;
+	}
+
+	:global(.tls-stats-table .tls-col-num) {
+		width: 14%;
+	}
+
+	:global(.tls-stats-table .tls-col-pct) {
+		width: 12%;
 	}
 
 	/*
