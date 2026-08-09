@@ -697,7 +697,7 @@
 						autoSkip: true,
 						maxRotation: 0,
 						minRotation: 0,
-						padding: 4
+						padding: overTimeTickPadding(untrack(() => overTimeBucket))
 					},
 					grid: {
 						display: false
@@ -707,10 +707,19 @@
 		};
 	}
 
+	/** Layout bottom padding so Chart.js ticks + plugin under-labels do not clip. */
 	function overTimeAxisBottomPad(bucket: OverTimeBucket): number {
-		if (bucket === 'day') return 40;
-		if (bucket === 'month') return 28;
+		if (bucket === 'day') return 48;
+		// Month ticks + year group row under them
+		if (bucket === 'month') return 40;
 		return 10;
+	}
+
+	/** Extra gap under primary tick text before plugin under-labels. */
+	function overTimeTickPadding(bucket: OverTimeBucket): number {
+		if (bucket === 'day') return 4;
+		if (bucket === 'month') return 8;
+		return 4;
 	}
 
 	function overTimeTooltipTitle(key: string, bucket: OverTimeBucket): string {
@@ -3847,7 +3856,7 @@
 		const bucket = overTimeBucket;
 		instance.data.labels = chartData.labels;
 		instance.data.datasets[0].data = chartData.datasets[0].data;
-		// Bottom pad for day (month+year under) / month (year under) / year (ticks only)
+		// Bottom pad + tick padding so month ticks and year under-labels do not clip
 		if (instance.options.layout) {
 			const prev = instance.options.layout.padding;
 			const pad =
@@ -3855,6 +3864,9 @@
 					? { ...prev, bottom: overTimeAxisBottomPad(bucket) }
 					: { top: 14, right: 6, left: 2, bottom: overTimeAxisBottomPad(bucket) };
 			instance.options.layout.padding = pad;
+		}
+		if (instance.options.scales?.x?.ticks) {
+			instance.options.scales.x.ticks.padding = overTimeTickPadding(bucket);
 		}
 		instance.update('none');
 	});
