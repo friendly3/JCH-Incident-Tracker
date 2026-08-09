@@ -106,6 +106,8 @@
 
 	/** Driver×month line chart: show this many highest-volume drivers by default. */
 	const DRIVER_MONTH_TOP_N = 10;
+	/** Shortcut in the Drivers dropdown (in addition to default top N). */
+	const DRIVER_MONTH_TOP_5 = 5;
 
 	function driverChartHeightForCount(driverCount: number): number {
 		const n = Math.max(0, driverCount);
@@ -3247,15 +3249,6 @@
 	let driverMonthVisibilitySourceKey = $state('');
 	/** Drivers multi-select dropdown open state. */
 	let driverMonthPickerOpen = $state(false);
-
-	/**
-	 * Parallel to chart categories for axis chrome + click drill-down (non-reactive mirrors).
-	 * Keys are YYYY-MM-DD | YYYY-MM | YYYY matching dashboardUi.overTimeBucket.
-	 */
-	let driverMonthChartBucketKeys: string[] = [];
-	let driverMonthChartBucket: OverTimeBucket = 'day';
-	let driverMonthChartDriverKeys: string[] = [];
-	let driverMonthChartDriverLabels: string[] = [];
 
 	function driverMonthTopNHidden(labelsInRankOrder: string[]): string[] {
 		if (labelsInRankOrder.length <= DRIVER_MONTH_TOP_N) return [];
