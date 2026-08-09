@@ -94,7 +94,7 @@
 	function driverChartHeightForCount(driverCount: number): number {
 		const n = Math.max(0, driverCount);
 		if (n === 0) return DRIVER_CHART_MIN_HEIGHT_PX;
-		// Exact height so each category band is ~SLOT px (20px bar + 4px gap)
+		// Exact height so each category band is SLOT px (bar thickness + gap)
 		return n * DRIVER_BAR_SLOT_PX + DRIVER_CHART_PAD_PX;
 	}
 
