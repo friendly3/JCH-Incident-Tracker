@@ -3242,6 +3242,41 @@
 	}
 
 	/**
+	 * Resolution status bar: which statuses are hidden from the chart.
+	 * Default: Unspecified excluded (blank action values).
+	 */
+	const ACTION_STATUS_DEFAULT_HIDDEN = ['Unspecified'] as const;
+	let actionStatusHiddenLabels = $state<string[]>([...ACTION_STATUS_DEFAULT_HIDDEN]);
+	let actionStatusPickerOpen = $state(false);
+
+	function setActionStatusVisible(label: string, visible: boolean) {
+		const isHidden = actionStatusHiddenLabels.includes(label);
+		if (visible && isHidden) {
+			actionStatusHiddenLabels = actionStatusHiddenLabels.filter((l) => l !== label);
+		} else if (!visible && !isHidden) {
+			actionStatusHiddenLabels = [...actionStatusHiddenLabels, label];
+		}
+	}
+
+	function onActionStatusCheckboxChange(label: string, event: Event) {
+		const el = event.currentTarget;
+		if (!(el instanceof HTMLInputElement)) return;
+		setActionStatusVisible(label, el.checked);
+	}
+
+	function applyActionStatusShowAll() {
+		actionStatusHiddenLabels = [];
+	}
+
+	function applyActionStatusHideAll() {
+		actionStatusHiddenLabels = incidentsByActionStatus.map(([label]) => label);
+	}
+
+	function applyActionStatusDefaultVisibility() {
+		actionStatusHiddenLabels = [...ACTION_STATUS_DEFAULT_HIDDEN];
+	}
+
+	/**
 	 * Driver×month line series visibility (checkbox dropdown).
 	 * Default (until user customises): hide everyone outside the top N by volume.
 	 * Reset when the period / driver set changes.
@@ -3571,12 +3606,21 @@
 			});
 	});
 
+	/** Statuses shown on the bar chart after include/exclude dropdown. */
+	const visibleIncidentsByActionStatus = $derived.by(() => {
+		const hidden = new Set(actionStatusHiddenLabels);
+		return incidentsByActionStatus.filter(([label]) => !hidden.has(label));
+	});
+
+	const actionStatusVisibleCount = $derived(visibleIncidentsByActionStatus.length);
+	const actionStatusTotalCount = $derived(incidentsByActionStatus.length);
+
 	const actionStatusBarData = $derived.by(() => ({
-		labels: incidentsByActionStatus.map(([label]) => label),
+		labels: visibleIncidentsByActionStatus.map(([label]) => label),
 		datasets: [
 			{
 				label: 'Incidents',
-				data: incidentsByActionStatus.map(([, count]) => count),
+				data: visibleIncidentsByActionStatus.map(([, count]) => count),
 				borderWidth: 1
 			}
 		]
@@ -3711,11 +3755,14 @@
 		return `Stats by Team Leader for ${periodLabel}. ${rows.length} team leader${rows.length === 1 ? '' : 's'}, ${totalOngoing} ongoing, ${totalResolved} resolved, ${unassignedTotal} unassigned, ${grandTotal} total.`;
 	});
 
-	const hasActionStatusData = $derived(incidentsByActionStatus.length > 0);
+	/** Any statuses exist in the period (for the picker / empty copy). */
+	const hasActionStatusSourceData = $derived(incidentsByActionStatus.length > 0);
+	/** Visible bars after include/exclude (drives chart empty state). */
+	const hasActionStatusData = $derived(visibleIncidentsByActionStatus.length > 0);
 	const actionStatusAriaLabel = $derived(
 		buildChartAriaLabel(
 			`Incidents by Resolution Status (${timeRangeLabel})`,
-			incidentsByActionStatus
+			visibleIncidentsByActionStatus
 		)
 	);
 
@@ -4019,6 +4066,32 @@
 			}
 		};
 		// Defer so the opening click does not immediately close
+		const id = window.setTimeout(() => {
+			window.addEventListener('pointerdown', onPointer, true);
+			window.addEventListener('keydown', onKey, true);
+		}, 0);
+		return () => {
+			window.clearTimeout(id);
+			window.removeEventListener('pointerdown', onPointer, true);
+			window.removeEventListener('keydown', onKey, true);
+		};
+	});
+
+	// Close resolution-status picker on outside click / Escape
+	$effect(() => {
+		if (!actionStatusPickerOpen) return;
+		const onPointer = (e: PointerEvent) => {
+			const t = e.target;
+			if (!(t instanceof Element)) return;
+			if (t.closest('[data-action-status-picker]')) return;
+			actionStatusPickerOpen = false;
+		};
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				actionStatusPickerOpen = false;
+			}
+		};
 		const id = window.setTimeout(() => {
 			window.addEventListener('pointerdown', onPointer, true);
 			window.addEventListener('keydown', onKey, true);
@@ -4894,13 +4967,120 @@
 							aria-labelledby="action-status-bar-title"
 							aria-describedby="action-status-bar-summary"
 						>
-							<div class="mb-0.5 flex flex-wrap items-baseline justify-between gap-1">
-								<h2 id="action-status-bar-title" class="dashboard-section-title">
-									By Resolution Status
-								</h2>
-								<p class="text-[10px] text-warm-500">
-									{timeRangeLabel} · click a bar to open list
-								</p>
+							<div class="mb-0.5 flex flex-wrap items-center justify-between gap-1">
+								<div class="min-w-0">
+									<h2 id="action-status-bar-title" class="dashboard-section-title">
+										By Resolution Status
+									</h2>
+									<p class="text-[10px] text-warm-500">
+										{timeRangeLabel} · click a bar to open list
+									</p>
+								</div>
+								{#if hasActionStatusSourceData}
+									<div class="relative shrink-0" data-action-status-picker>
+										<button
+											type="button"
+											class="inline-flex max-w-[12rem] items-center gap-1 rounded-md border border-warm-200 bg-white px-2 py-1 text-[10px] font-semibold text-warm-700 shadow-sm transition hover:border-warm-300 hover:bg-warm-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:bg-warm-100"
+											aria-haspopup="listbox"
+											aria-expanded={actionStatusPickerOpen}
+											aria-controls="action-status-picker-panel"
+											onclick={() => {
+												actionStatusPickerOpen = !actionStatusPickerOpen;
+											}}
+										>
+											<span class="truncate"
+												>Statuses · {actionStatusVisibleCount} of {actionStatusTotalCount}</span
+											>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												class="h-3 w-3 shrink-0 text-warm-500 transition {actionStatusPickerOpen
+													? 'rotate-180'
+													: ''}"
+												viewBox="0 0 20 20"
+												fill="currentColor"
+												aria-hidden="true"
+											>
+												<path
+													fill-rule="evenodd"
+													d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+													clip-rule="evenodd"
+												/>
+											</svg>
+										</button>
+										{#if actionStatusPickerOpen}
+											<div
+												id="action-status-picker-panel"
+												class="absolute right-0 z-30 mt-1 w-[min(16rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-warm-200 bg-white shadow-lg dark:bg-warm-100"
+												role="listbox"
+												aria-multiselectable="true"
+												aria-label="Show or hide resolution statuses on the chart"
+											>
+												<div
+													class="flex flex-wrap items-center gap-1 border-b border-warm-200 bg-warm-50 px-2 py-1.5 dark:bg-warm-200"
+												>
+													<button
+														type="button"
+														class="rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-accent-700 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:hover:bg-warm-100"
+														onclick={() => applyActionStatusDefaultVisibility()}
+														title="Hide Unspecified; show all other statuses"
+													>
+														Default
+													</button>
+													<button
+														type="button"
+														class="rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-warm-700 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:hover:bg-warm-100"
+														onclick={() => applyActionStatusShowAll()}
+													>
+														All
+													</button>
+													<button
+														type="button"
+														class="rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-warm-700 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:hover:bg-warm-100"
+														onclick={() => applyActionStatusHideAll()}
+													>
+														None
+													</button>
+												</div>
+												<ul class="max-h-48 overflow-y-auto py-1">
+													{#each incidentsByActionStatus as [label, count] (label)}
+														{@const checked = isLegendVisible(
+															actionStatusHiddenLabels,
+															label
+														)}
+														{@const swatch = isUnassignedCategory(label)
+															? getUnassignedChartColor(theme.isDark)
+															: getActionStatusChartColor(label, theme.isDark)}
+														<li>
+															<label
+																class="flex cursor-pointer items-center gap-2 px-2.5 py-1.5 text-xs text-warm-800 hover:bg-warm-50 dark:hover:bg-warm-200"
+															>
+																<input
+																	type="checkbox"
+																	class="h-3.5 w-3.5 shrink-0 rounded border-warm-300 text-accent-600 focus:ring-accent-500"
+																	checked={checked}
+																	onchange={(e) =>
+																		onActionStatusCheckboxChange(label, e)}
+																/>
+																<span
+																	class="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+																	style="background: {swatch}"
+																	aria-hidden="true"
+																></span>
+																<span class="min-w-0 flex-1 truncate" title={label}
+																	>{label}</span
+																>
+																<span
+																	class="shrink-0 tabular-nums text-[10px] font-semibold text-warm-500"
+																	>({count})</span
+																>
+															</label>
+														</li>
+													{/each}
+												</ul>
+											</div>
+										{/if}
+									</div>
+								{/if}
 							</div>
 							<p id="action-status-bar-summary" class="sr-only">
 								{actionStatusAriaLabel} Click a bar to view those incidents in the list.
@@ -4909,9 +5089,15 @@
 								class="w-full min-h-0 overflow-visible"
 								style="position: relative; height: 7.15rem; min-height: 7.15rem;"
 							>
-								{#if !hasActionStatusData}
+								{#if !hasActionStatusSourceData}
 									<div class="flex h-full items-center justify-center">
 										<p class="text-[10px] text-warm-500">No resolution status data.</p>
+									</div>
+								{:else if !hasActionStatusData}
+									<div class="flex h-full items-center justify-center">
+										<p class="text-[10px] text-warm-500">
+											No statuses selected — open Statuses to include series.
+										</p>
 									</div>
 								{/if}
 								<canvas
@@ -4928,7 +5114,7 @@
 										</tr>
 									</thead>
 									<tbody>
-										{#each incidentsByActionStatus as [label, count] (label)}
+										{#each visibleIncidentsByActionStatus as [label, count] (label)}
 											<tr>
 												<td>{label}</td>
 												<td>{count}</td>
