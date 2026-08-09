@@ -3250,15 +3250,18 @@
 	/** Drivers multi-select dropdown open state. */
 	let driverMonthPickerOpen = $state(false);
 
-	function driverMonthTopNHidden(labelsInRankOrder: string[]): string[] {
-		if (labelsInRankOrder.length <= DRIVER_MONTH_TOP_N) return [];
-		return labelsInRankOrder.slice(DRIVER_MONTH_TOP_N);
+	function driverMonthTopNHidden(labelsInRankOrder: string[], topN: number): string[] {
+		if (labelsInRankOrder.length <= topN) return [];
+		return labelsInRankOrder.slice(topN);
 	}
 
-	function applyDriverMonthTopNVisibility() {
-		driverMonthVisibilityTouched = false;
+	function applyDriverMonthTopNVisibility(topN: number = DRIVER_MONTH_TOP_N) {
+		// Top 10 (default) resets “untouched” so period changes re-apply top 10;
+		// other shortcuts (e.g. Top 5) count as a user choice.
+		driverMonthVisibilityTouched = topN !== DRIVER_MONTH_TOP_N;
 		driverMonthHiddenLabels = driverMonthTopNHidden(
-			driverMonthTally.rows.map((r) => r.label)
+			driverMonthTally.rows.map((r) => r.label),
+			topN
 		);
 	}
 
@@ -4010,7 +4013,10 @@
 			driverMonthVisibilityTouched = false;
 		}
 		if (driverMonthVisibilityTouched) return;
-		const next = driverMonthTopNHidden(rows.map((r) => r.label));
+		const next = driverMonthTopNHidden(
+			rows.map((r) => r.label),
+			DRIVER_MONTH_TOP_N
+		);
 		if (
 			next.length !== driverMonthHiddenLabels.length ||
 			next.some((l, i) => l !== driverMonthHiddenLabels[i])
@@ -5579,7 +5585,16 @@
 													<button
 														type="button"
 														class="rounded px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-accent-700 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:hover:bg-warm-100"
-														onclick={() => applyDriverMonthTopNVisibility()}
+														onclick={() =>
+															applyDriverMonthTopNVisibility(DRIVER_MONTH_TOP_5)}
+													>
+														Top {DRIVER_MONTH_TOP_5}
+													</button>
+													<button
+														type="button"
+														class="rounded px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-accent-700 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:hover:bg-warm-100"
+														onclick={() =>
+															applyDriverMonthTopNVisibility(DRIVER_MONTH_TOP_N)}
 													>
 														Top {DRIVER_MONTH_TOP_N}
 													</button>
