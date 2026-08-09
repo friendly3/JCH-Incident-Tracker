@@ -4276,10 +4276,10 @@
 									</thead>
 									<tbody class="divide-y divide-warm-100">
 										{#each driverMonthTally.rows as row (row.key)}
-											<tr class="hover:bg-warm-50/80 dark:hover:bg-warm-200/40">
+											<tr class="dashboard-driver-month-row">
 												<th
 													scope="row"
-													class="sticky left-0 z-[1] bg-white px-3 text-xs font-medium text-warm-800 dark:bg-warm-100"
+													class="dashboard-driver-month-sticky sticky left-0 z-[1] bg-white px-3 text-xs font-medium text-warm-800 dark:bg-warm-100"
 												>
 													{row.label}
 												</th>
