@@ -82,6 +82,18 @@ export function formatMonthYearLabel(ym: string): string {
 	return d.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
 }
 
+/** Local calendar month as YYYY-MM */
+export function currentMonthYm(now = new Date()): string {
+	const y = now.getFullYear();
+	const m = String(now.getMonth() + 1).padStart(2, '0');
+	return `${y}-${m}`;
+}
+
+/** Dashboard default period: current calendar month (`m:YYYY-MM`). */
+export function currentMonthTimeRange(now = new Date()): MonthTimeRangeKey {
+	return `m:${currentMonthYm(now)}`;
+}
+
 /**
  * Inclusive calendar window ending today (local) for relative ranges,
  * a single calendar month (YYYY-MM) when range is m:YYYY-MM,
@@ -160,14 +172,16 @@ function isValidTimeRange(value: string): value is TimeRangeKey {
 }
 
 function readStored(): TimeRangeKey {
-	if (typeof window === 'undefined') return 'all';
+	// Default: current calendar month (even with zero incidents)
+	const fallback = currentMonthTimeRange();
+	if (typeof window === 'undefined') return fallback;
 	try {
 		const raw = sessionStorage.getItem(STORAGE_KEY)?.trim() ?? '';
 		if (raw && isValidTimeRange(raw)) return raw;
 	} catch {
 		/* private mode / blocked storage */
 	}
-	return 'all';
+	return fallback;
 }
 
 function writeStored(value: TimeRangeKey) {
@@ -179,8 +193,8 @@ function writeStored(value: TimeRangeKey) {
 	}
 }
 
-// SSR-safe default; hydrate from sessionStorage on first client read via ensureHydrated
-let _timeRange = $state<TimeRangeKey>('all');
+// Default to current month; hydrate from sessionStorage on first client read
+let _timeRange = $state<TimeRangeKey>(currentMonthTimeRange());
 let _hydrated = false;
 
 function ensureHydrated() {
@@ -202,19 +216,11 @@ export const dashboardPeriod = {
 		writeStored(next);
 	},
 	/**
-	 * If the stored selection is a calendar month that no longer has data,
-	 * fall back to all time. Only call when `availableYm` is a settled list
-	 * (not empty while data is still loading).
+	 * Previously fell back to "all time" when a selected month had no data.
+	 * That is disabled: empty months (including the current month default) stay selected.
 	 */
-	resetIfMissingMonth(availableYm: string[]) {
+	resetIfMissingMonth(_availableYm: string[]) {
 		ensureHydrated();
-		if (!isMonthTimeRange(_timeRange)) return;
-		// Empty list usually means "still loading" or "no refs yet" — don't clobber selection
-		if (availableYm.length === 0) return;
-		const ym = _timeRange.slice(2);
-		if (!availableYm.includes(ym)) {
-			_timeRange = 'all';
-			writeStored('all');
-		}
+		// no-op — keep m:YYYY-MM even when the month has zero incidents
 	}
 };

@@ -20,10 +20,14 @@
 	import {
 		dashboardPeriod,
 		TIME_RANGE_OPTIONS,
+		currentMonthTimeRange,
+		currentMonthYm,
 		dayTimeRange,
 		formatMonthYearLabel,
 		isDateReceivedInTimeRange,
+		isDayTimeRange,
 		isMonthTimeRange,
+		isYearTimeRange,
 		monthKeyFromRange,
 		yearTimeRange,
 		type MonthTimeRangeKey,
@@ -3059,25 +3063,35 @@
 			.map(([ym, count]) => ({ ym, count, value: `m:${ym}` as MonthTimeRangeKey }));
 	});
 
+	/** Always include the current calendar month in the picker, even with 0 incidents. */
+	const periodMonthOptions = $derived.by(() => {
+		const curYm = currentMonthYm();
+		const curValue = currentMonthTimeRange();
+		const byYm = new Map(availableMonths.map((m) => [m.ym, m]));
+		const cur = byYm.get(curYm) ?? { ym: curYm, count: 0, value: curValue };
+		const rest = availableMonths.filter((m) => m.ym !== curYm);
+		return [cur, ...rest];
+	});
+
 	const timeRangeLabel = $derived.by(() => {
 		const relative = TIME_RANGE_OPTIONS.find((o) => o.value === timeRange);
 		if (relative) return relative.label;
 		if (isMonthTimeRange(timeRange)) {
 			const ym = monthKeyFromRange(timeRange);
-			const hit = availableMonths.find((m) => m.ym === ym);
+			const hit = periodMonthOptions.find((m) => m.ym === ym);
 			const base = formatMonthYearLabel(ym);
-			return hit ? `${base} (${hit.count})` : base;
+			if (hit) return `${base} (${hit.count})`;
+			return base;
+		}
+		if (isDayTimeRange(timeRange) || isYearTimeRange(timeRange)) {
+			return String(timeRange);
 		}
 		return 'All time';
 	});
 
-	// If selected month disappears after data reload, fall back to all time.
-	// Wait until months are known (or load finished) so we don't wipe a valid pick mid-load.
+	// Keep local timeRange in sync with the persisted store (e.g. after navigation).
+	// Do not clear month selection when the month has no data.
 	$effect(() => {
-		const loading = incidentStore.isLoading || Boolean(data.loadError);
-		const yms = availableMonths.map((m) => m.ym);
-		if (loading && yms.length === 0) return;
-		dashboardPeriod.resetIfMissingMonth(yms);
 		const stored = dashboardPeriod.value;
 		if (timeRange !== stored) {
 			timeRange = stored;
@@ -4120,21 +4134,24 @@
 							class="touch-target-inline max-w-[min(17.6rem,100%)] rounded-lg border border-warm-200 bg-white px-3 py-2.5 text-[0.9625rem] text-warm-700 shadow-sm input-focus dark:bg-warm-200"
 							aria-controls="over-time-chart-canvas"
 							aria-label="Time period for dashboard summary and charts"
-							title="Relative period or a calendar month with incident data"
+							title="Relative period or a calendar month (current month is the default)"
 						>
 							<optgroup label="Relative">
 								{#each TIME_RANGE_OPTIONS as opt (opt.value)}
 									<option value={opt.value}>{opt.label}</option>
 								{/each}
 							</optgroup>
-							{#if availableMonths.length > 0}
-								<optgroup label="Months with data">
-									{#each availableMonths as m (m.value)}
-										<option value={m.value}
-											>{formatMonthYearLabel(m.ym)} ({m.count})</option
-										>
-									{/each}
-								</optgroup>
+							<optgroup label="Months">
+								{#each periodMonthOptions as m (m.value)}
+									<option value={m.value}
+										>{formatMonthYearLabel(m.ym)} ({m.count})</option
+									>
+								{/each}
+							</optgroup>
+							{#if isMonthTimeRange(timeRange) && !periodMonthOptions.some((m) => m.value === timeRange)}
+								<option value={timeRange}
+									>{formatMonthYearLabel(monthKeyFromRange(timeRange))} (0)</option
+								>
 							{/if}
 						</select>
 					</label>
