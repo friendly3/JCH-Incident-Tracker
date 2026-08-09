@@ -1398,14 +1398,15 @@
 	}
 
 	/**
-	 * Team-leader stacked bar: Ongoing / Resolved colours aligned with KPI tiles.
+	 * Team-leader stacked bar colours:
+	 * - Ongoing → medium grey (same family as unassigned chart buckets)
+	 * - Resolved → brand teal (matches Total / accent KPI tile)
 	 */
 	function teamLeaderStatusColors(isDark: boolean): { ongoing: string; resolved: string } {
 		return {
-			// Amber family (Unresolved KPI)
-			ongoing: isDark ? '#fbbf24' : '#d97706',
-			// Emerald family (Resolved KPI)
-			resolved: isDark ? '#4ade80' : '#16a34a'
+			ongoing: getUnassignedChartColor(isDark),
+			// Light accent-600 / dark accent-600 (app.css)
+			resolved: isDark ? '#1dd4be' : '#038676'
 		};
 	}
 
@@ -1416,8 +1417,9 @@
 			responsive: true,
 			maintainAspectRatio: false,
 			indexAxis: 'y',
+			// Match Incidents by Driver plot chrome so category slots align
 			layout: {
-				padding: { top: 4, right: 28, left: 2, bottom: 4 }
+				padding: { top: 2, right: 32, left: 2, bottom: 2 }
 			},
 			onHover: (event, elements) => {
 				const native = event.native;
@@ -1456,20 +1458,9 @@
 				});
 			},
 			plugins: {
-				legend: {
-					display: true,
-					position: 'top',
-					align: 'end',
-					labels: {
-						boxWidth: 10,
-						boxHeight: 10,
-						padding: 10,
-						font: { size: 11, weight: 600 },
-						color: colors.legend,
-						usePointStyle: true,
-						pointStyle: 'rectRounded'
-					}
-				},
+				// Legend is HTML above the plot (same pattern as driver chart)
+				// so bar thickness/gap match the driver chart slot formula.
+				legend: { display: false },
 				title: { display: false },
 				tooltip: {
 					backgroundColor: colors.tooltipBg,
@@ -1518,7 +1509,7 @@
 				x: {
 					stacked: true,
 					beginAtZero: true,
-					grace: '12%',
+					grace: '18%',
 					ticks: {
 						color: colors.ticks,
 						stepSize: 1,
