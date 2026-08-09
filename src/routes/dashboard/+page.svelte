@@ -438,6 +438,54 @@
 		};
 	}
 
+	/**
+	 * Faint vertical rules on Incidents Over Time at calendar-month boundaries
+	 * (between hierarchical month/year groups on the x-axis).
+	 */
+	const overTimeMonthBoundaryPlugin: Plugin<'line'> = {
+		id: 'overTimeMonthBoundaries',
+		afterDatasetsDraw(chart) {
+			const keys = overTimeChartDateKeys;
+			if (keys.length < 2) return;
+			const xScale = chart.scales.x;
+			const area = chart.chartArea;
+			if (!xScale || !area) return;
+
+			const dark = isDarkMode();
+			// Soft grey separators — a touch stronger than the y-grid so they read as dividers
+			const stroke = dark
+				? withAlpha(MAP_GRID_GRAY, 0.4)
+				: withAlpha('#9ca3af', 0.55);
+
+			const ctx = chart.ctx;
+			ctx.save();
+			ctx.strokeStyle = stroke;
+			ctx.lineWidth = 1;
+			ctx.beginPath();
+
+			// Extend slightly below the plot into the day/month label band
+			const top = area.top;
+			const bottom = Math.min(chart.height - 2, area.bottom + 36);
+
+			for (let i = 1; i < keys.length; i++) {
+				const prevYm = keys[i - 1]?.slice(0, 7);
+				const curYm = keys[i]?.slice(0, 7);
+				if (!prevYm || !curYm || prevYm === curYm) continue;
+				const x0 = xScale.getPixelForValue(i - 1);
+				const x1 = xScale.getPixelForValue(i);
+				if (!Number.isFinite(x0) || !Number.isFinite(x1)) continue;
+				const x = (x0 + x1) / 2;
+				// Keep inside chart left/right bounds
+				if (x < area.left || x > area.right) continue;
+				ctx.moveTo(x, top);
+				ctx.lineTo(x, bottom);
+			}
+
+			ctx.stroke();
+			ctx.restore();
+		}
+	};
+
 	function buildChartOptions(colors: ReturnType<typeof getChartTheme>): ChartOptions<'line'> {
 		return {
 			responsive: true,
@@ -3251,7 +3299,9 @@
 			instance = new Chart(canvas, {
 				type: 'line',
 				data: initialData,
-				options: buildChartOptions(colors)
+				options: buildChartOptions(colors),
+				// Local only — month dividers for this chart (not global register)
+				plugins: [overTimeMonthBoundaryPlugin]
 			});
 			applyChartTheme(instance);
 			chartInstance = instance;
