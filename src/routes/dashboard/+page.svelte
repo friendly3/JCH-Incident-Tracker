@@ -3761,10 +3761,7 @@
 							aria-describedby="action-status-bar-summary"
 						>
 							<div class="mb-0.5 flex flex-wrap items-baseline justify-between gap-1">
-								<h2
-									id="action-status-bar-title"
-									class="text-[11px] font-semibold uppercase tracking-wide text-warm-700"
-								>
+								<h2 id="action-status-bar-title" class="dashboard-section-title">
 									By Resolution Status
 								</h2>
 								<p class="text-[10px] text-warm-500">
@@ -3831,7 +3828,7 @@
 						aria-describedby="stats-by-team-leader-summary"
 					>
 						<div class="dashboard-chart-header">
-							<h2 class="text-sm font-semibold text-warm-800" id="stats-by-team-leader-title">
+							<h2 class="dashboard-section-title" id="stats-by-team-leader-title">
 								Stats by Team Leader
 							</h2>
 							<p class="dashboard-chart-meta text-xs text-warm-500">
@@ -3930,7 +3927,7 @@
 												</thead>
 												<tbody class="divide-y divide-warm-100">
 													{#each statsByTeamLeader.rows as row (row.key)}
-														<tr class="hover:bg-warm-50/80 dark:hover:bg-warm-200/40">
+														<tr class="dashboard-data-row">
 															<th
 																scope="row"
 																class="px-2 py-1.5 font-medium text-warm-800 sm:px-3"
@@ -3966,7 +3963,7 @@
 													{/each}
 													{#if statsByTeamLeader.unassignedTotal > 0}
 														<tr
-															class="border-t border-warm-200 bg-warm-50/60 dark:bg-warm-200/30"
+															class="dashboard-data-row border-t border-warm-200 bg-warm-50/60 dark:bg-warm-200/30"
 														>
 															<th
 																scope="row"
@@ -4065,7 +4062,7 @@
 						aria-describedby="over-time-chart-summary"
 					>
 						<div class="dashboard-chart-header">
-							<h2 class="text-sm font-semibold text-warm-800" id="over-time-chart-title">
+							<h2 class="dashboard-section-title" id="over-time-chart-title">
 								Incidents Over Time
 							</h2>
 							<p class="dashboard-chart-meta text-xs text-warm-500">
@@ -4100,7 +4097,7 @@
 					>
 						<div class="dashboard-chart-header">
 							<div class="flex flex-wrap items-baseline justify-between gap-2">
-								<h2 class="text-sm font-semibold text-warm-800" id="type-over-time-chart-title">
+								<h2 class="dashboard-section-title" id="type-over-time-chart-title">
 									Incidents by Type Over Time
 								</h2>
 							</div>
@@ -4204,10 +4201,7 @@
 					>
 						<div class="dashboard-driver-table-header mb-2 flex shrink-0 flex-wrap items-start justify-between gap-2">
 							<div class="min-w-0">
-								<h2
-									id="driver-month-tally-title"
-									class="text-sm font-semibold text-warm-800"
-								>
+								<h2 id="driver-month-tally-title" class="dashboard-section-title">
 									Incidents by Driver per Month
 								</h2>
 								<p class="mt-0.5 text-xs text-warm-500">
@@ -4276,7 +4270,7 @@
 									</thead>
 									<tbody class="divide-y divide-warm-100">
 										{#each driverMonthTally.rows as row (row.key)}
-											<tr class="dashboard-driver-month-row">
+											<tr class="dashboard-data-row dashboard-driver-month-row">
 												<th
 													scope="row"
 													class="dashboard-driver-month-sticky sticky left-0 z-[1] bg-white px-3 text-xs font-medium text-warm-800 dark:bg-warm-100"
@@ -4368,7 +4362,7 @@
 						aria-describedby="driver-chart-summary"
 					>
 						<div class="dashboard-chart-header">
-							<h2 class="text-sm font-semibold text-warm-800" id="driver-chart-title">
+							<h2 class="dashboard-section-title" id="driver-chart-title">
 								Incidents by Driver
 							</h2>
 							<p class="dashboard-chart-meta text-xs text-warm-500">
@@ -4790,20 +4784,29 @@
 		font-size: 0.75rem; /* 12px — fits inside 20px pill */
 	}
 
-	/* Full-row hover: faint teal from accent palette (covers sticky driver col) */
-	:global(.dashboard-driver-month-table tbody tr.dashboard-driver-month-row:hover),
-	:global(.dashboard-driver-month-table tbody tr.dashboard-driver-month-row:hover > th),
-	:global(.dashboard-driver-month-table tbody tr.dashboard-driver-month-row:hover > td) {
+	/*
+	 * Chart / table card titles — one size, always uppercase.
+	 * Matches former text-sm + semibold; tracking keeps caps readable.
+	 */
+	:global(.dashboard-section-title) {
+		font-size: 0.875rem; /* 14px — text-sm */
+		line-height: 1.25rem;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--color-warm-800, #292524);
+	}
+
+	/* Full-row hover: faint teal (driver-per-month + stats by team leader) */
+	:global(tr.dashboard-data-row:hover),
+	:global(tr.dashboard-data-row:hover > th),
+	:global(tr.dashboard-data-row:hover > td) {
 		background-color: var(--color-accent-50);
 	}
 
-	:global(.dark .dashboard-driver-month-table tbody tr.dashboard-driver-month-row:hover),
-	:global(
-			.dark .dashboard-driver-month-table tbody tr.dashboard-driver-month-row:hover > th
-		),
-	:global(
-			.dark .dashboard-driver-month-table tbody tr.dashboard-driver-month-row:hover > td
-		) {
+	:global(.dark tr.dashboard-data-row:hover),
+	:global(.dark tr.dashboard-data-row:hover > th),
+	:global(.dark tr.dashboard-data-row:hover > td) {
 		/* Slightly stronger than accent-50 so the row reads on dark cards */
 		background-color: var(--color-accent-100);
 	}
