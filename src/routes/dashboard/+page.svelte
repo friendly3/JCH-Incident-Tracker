@@ -136,6 +136,15 @@
 	/** Mirror for axis chrome plugin / click handlers outside reactive contexts. */
 	let overTimeChartBucket: OverTimeBucket = 'day';
 
+	/**
+	 * Driver line chart mirrors (same key shapes as over-time). Declared early so the
+	 * axis-chrome plugin can close over them without TDZ issues.
+	 */
+	let driverMonthChartBucketKeys: string[] = [];
+	let driverMonthChartBucket: OverTimeBucket = 'day';
+	let driverMonthChartDriverKeys: string[] = [];
+	let driverMonthChartDriverLabels: string[] = [];
+
 	const CHART_FALLBACKS = {
 		light: {
 			accent: '#0072B2',
@@ -528,90 +537,103 @@
 	}
 
 	/**
-	 * Incidents Over Time axis chrome (day & month buckets):
+	 * Shared x-axis chrome for day/month buckets (used by Incidents Over Time and
+	 * Incidents by Driver per Month line chart):
 	 * - Chart.js draws primary ticks (day / month name / year)
-	 * - Plugin draws one outer label span + faint vertical rules in the x-axis band
+	 * - This draws outer group labels + faint vertical rules in the x-axis band
 	 */
+	function drawOverTimeAxisChrome(
+		chart: ChartJS<'line'>,
+		keys: string[],
+		bucket: OverTimeBucket
+	) {
+		if (keys.length === 0 || bucket === 'year') return;
+		const xScale = chart.scales.x;
+		const area = chart.chartArea;
+		if (!xScale || !area) return;
+
+		const dark = isDarkMode();
+		const themeColors = getChartTheme(dark);
+		const stroke = dark ? withAlpha(MAP_GRID_GRAY, 0.4) : withAlpha('#9ca3af', 0.55);
+		const labelColor = themeColors.ticks;
+		const ctx = chart.ctx;
+		const groups = overTimeOuterGroups(keys, bucket);
+		/*
+		 * Label band geometry (below chartArea.bottom):
+		 * - Day:  Chart.js day ticks (~0–16px) → month name → year
+		 * - Month: Chart.js month ticks (~0–18px) → year only (must clear the tick row)
+		 */
+		const bandDepth = bucket === 'day' ? 50 : 42;
+		const bandBottom = Math.min(chart.height - 2, area.bottom + bandDepth);
+
+		// —— Vertical boundary lines (x-axis label band only) ——
+		if (keys.length >= 2) {
+			ctx.save();
+			ctx.strokeStyle = stroke;
+			ctx.lineWidth = 1;
+			ctx.beginPath();
+			const lineTop = area.bottom + 1;
+			for (let i = 1; i < keys.length; i++) {
+				const prev = overTimeBoundaryKey(keys[i - 1] ?? '', bucket);
+				const cur = overTimeBoundaryKey(keys[i] ?? '', bucket);
+				if (!prev || !cur || prev === cur) continue;
+				const x0 = xScale.getPixelForValue(i - 1);
+				const x1 = xScale.getPixelForValue(i);
+				if (!Number.isFinite(x0) || !Number.isFinite(x1)) continue;
+				const x = (x0 + x1) / 2;
+				if (x < area.left || x > area.right) continue;
+				ctx.moveTo(x, lineTop);
+				ctx.lineTo(x, bandBottom);
+			}
+			ctx.stroke();
+			ctx.restore();
+		}
+
+		// —— Outer group labels ——
+		// Day: month @ +32, year @ +45 (under day ticks)
+		// Month: year only @ +34 (well clear of Chart.js short-month ticks)
+		const line1Y = Math.min(
+			chart.height - (bucket === 'day' ? 16 : 10),
+			area.bottom + (bucket === 'day' ? 32 : 34)
+		);
+		const line2Y = line1Y + 13;
+		ctx.save();
+		ctx.fillStyle = labelColor;
+		ctx.textAlign = 'center';
+		ctx.textBaseline = 'middle';
+		for (const g of groups) {
+			const xStart = xScale.getPixelForValue(g.start);
+			const xEnd = xScale.getPixelForValue(g.end);
+			if (!Number.isFinite(xStart) || !Number.isFinite(xEnd)) continue;
+			const x = (xStart + xEnd) / 2;
+			if (x < area.left - 4 || x > area.right + 4) continue;
+			const maxW = Math.max(24, Math.abs(xEnd - xStart) + 24);
+			ctx.font = '600 11px system-ui, sans-serif';
+			let draw1 = g.line1;
+			if (bucket === 'day' && ctx.measureText(draw1).width > maxW && maxW < 64) {
+				draw1 = draw1.slice(0, 3);
+			}
+			ctx.fillText(draw1, x, line1Y);
+			if (g.line2) {
+				ctx.font = '500 10px system-ui, sans-serif';
+				ctx.fillText(g.line2, x, line2Y);
+			}
+		}
+		ctx.restore();
+	}
+
 	const overTimeAxisChromePlugin: Plugin<'line'> = {
 		id: 'overTimeAxisChrome',
 		afterDraw(chart) {
-			const keys = overTimeChartDateKeys;
-			const bucket = overTimeChartBucket;
-			if (keys.length === 0 || bucket === 'year') return;
-			const xScale = chart.scales.x;
-			const area = chart.chartArea;
-			if (!xScale || !area) return;
+			drawOverTimeAxisChrome(chart, overTimeChartDateKeys, overTimeChartBucket);
+		}
+	};
 
-			const dark = isDarkMode();
-			const themeColors = getChartTheme(dark);
-			const stroke = dark
-				? withAlpha(MAP_GRID_GRAY, 0.4)
-				: withAlpha('#9ca3af', 0.55);
-			const labelColor = themeColors.ticks;
-			const ctx = chart.ctx;
-			const groups = overTimeOuterGroups(keys, bucket);
-			/*
-			 * Label band geometry (below chartArea.bottom):
-			 * - Day:  Chart.js day ticks (~0–16px) → month name → year
-			 * - Month: Chart.js month ticks (~0–18px) → year only (must clear the tick row)
-			 */
-			const bandDepth = bucket === 'day' ? 50 : 42;
-			const bandBottom = Math.min(chart.height - 2, area.bottom + bandDepth);
-
-			// —— Vertical boundary lines (x-axis label band only) ——
-			if (keys.length >= 2) {
-				ctx.save();
-				ctx.strokeStyle = stroke;
-				ctx.lineWidth = 1;
-				ctx.beginPath();
-				const lineTop = area.bottom + 1;
-				for (let i = 1; i < keys.length; i++) {
-					const prev = overTimeBoundaryKey(keys[i - 1] ?? '', bucket);
-					const cur = overTimeBoundaryKey(keys[i] ?? '', bucket);
-					if (!prev || !cur || prev === cur) continue;
-					const x0 = xScale.getPixelForValue(i - 1);
-					const x1 = xScale.getPixelForValue(i);
-					if (!Number.isFinite(x0) || !Number.isFinite(x1)) continue;
-					const x = (x0 + x1) / 2;
-					if (x < area.left || x > area.right) continue;
-					ctx.moveTo(x, lineTop);
-					ctx.lineTo(x, bandBottom);
-				}
-				ctx.stroke();
-				ctx.restore();
-			}
-
-			// —— Outer group labels ——
-			// Day: month @ +32, year @ +45 (under day ticks)
-			// Month: year only @ +34 (well clear of Chart.js short-month ticks)
-			const line1Y = Math.min(
-				chart.height - (bucket === 'day' ? 16 : 10),
-				area.bottom + (bucket === 'day' ? 32 : 34)
-			);
-			const line2Y = line1Y + 13;
-			ctx.save();
-			ctx.fillStyle = labelColor;
-			ctx.textAlign = 'center';
-			ctx.textBaseline = 'middle';
-			for (const g of groups) {
-				const xStart = xScale.getPixelForValue(g.start);
-				const xEnd = xScale.getPixelForValue(g.end);
-				if (!Number.isFinite(xStart) || !Number.isFinite(xEnd)) continue;
-				const x = (xStart + xEnd) / 2;
-				if (x < area.left - 4 || x > area.right + 4) continue;
-				const maxW = Math.max(24, Math.abs(xEnd - xStart) + 24);
-				ctx.font = '600 11px system-ui, sans-serif';
-				let draw1 = g.line1;
-				if (bucket === 'day' && ctx.measureText(draw1).width > maxW && maxW < 64) {
-					draw1 = draw1.slice(0, 3);
-				}
-				ctx.fillText(draw1, x, line1Y);
-				if (g.line2) {
-					ctx.font = '500 10px system-ui, sans-serif';
-					ctx.fillText(g.line2, x, line2Y);
-				}
-			}
-			ctx.restore();
+	/** Same chrome for driver line chart (keys/bucket mirrors set when that chart updates). */
+	const driverMonthAxisChromePlugin: Plugin<'line'> = {
+		id: 'driverMonthAxisChrome',
+		afterDraw(chart) {
+			drawOverTimeAxisChrome(chart, driverMonthChartBucketKeys, driverMonthChartBucket);
 		}
 	};
 
@@ -815,15 +837,22 @@
 		};
 	}
 
-	/** Multi-series line options: driver × month (top N default; dropdown toggles series). */
+	/** Multi-series line options: driver × day/month/year (same axis chrome as over-time). */
 	function buildDriverMonthLineOptions(
 		colors: ReturnType<typeof getChartTheme>
 	): ChartOptions<'line'> {
+		const bucket = untrack(() => dashboardUi.overTimeBucket);
 		return {
 			responsive: true,
 			maintainAspectRatio: false,
 			layout: {
-				padding: { top: 14, right: 8, left: 2, bottom: 4 }
+				// Bottom room for month/year under-labels (same as Incidents Over Time)
+				padding: {
+					top: 14,
+					right: 8,
+					left: 2,
+					bottom: overTimeAxisBottomPad(bucket)
+				}
 			},
 			interaction: {
 				mode: 'nearest',
@@ -838,14 +867,14 @@
 			onClick: (_event, elements, chart) => {
 				if (elements.length === 0) return;
 				const el = elements[0];
-				const monthYm = driverMonthChartMonths[el.index];
+				const periodKey = driverMonthChartBucketKeys[el.index];
 				const driverKey = driverMonthChartDriverKeys[el.datasetIndex];
 				const driverLabel = driverMonthChartDriverLabels[el.datasetIndex];
-				if (!monthYm || !driverKey || !driverLabel) return;
+				if (!periodKey || !driverKey || !driverLabel) return;
 				const point = chart.data.datasets[el.datasetIndex]?.data?.[el.index];
 				const count = typeof point === 'number' ? point : Number(point);
 				if (!Number.isFinite(count) || count <= 0) return;
-				openDriverMonthDetail(driverKey, driverLabel, monthYm, count);
+				openDriverMonthDetail(driverKey, driverLabel, periodKey, count);
 			},
 			plugins: {
 				legend: {
@@ -868,8 +897,10 @@
 						title: (items) => {
 							const idx = items[0]?.dataIndex;
 							if (idx == null) return '';
-							const ym = driverMonthChartMonths[idx];
-							return ym ? formatMonthYearLabel(ym) : '';
+							const key = driverMonthChartBucketKeys[idx];
+							return key
+								? overTimeTooltipTitle(key, driverMonthChartBucket)
+								: '';
 						},
 						label: (context) => {
 							const name = context.dataset.label ?? 'Driver';
@@ -896,11 +927,14 @@
 					}
 				},
 				x: {
+					// Primary ticks = day / month name / year; outer groups via plugin
 					ticks: {
 						color: colors.ticks,
-						maxRotation: 45,
+						font: { size: 11, weight: 500 },
+						autoSkip: true,
+						maxRotation: 0,
 						minRotation: 0,
-						font: { size: 11, weight: 500 }
+						padding: overTimeTickPadding(bucket)
 					},
 					grid: {
 						display: false
@@ -910,9 +944,24 @@
 		};
 	}
 
+	function applyDriverMonthAxisLayout(chart: ChartJS<'line'>, bucket: OverTimeBucket) {
+		const pad = chart.options?.layout?.padding;
+		if (pad && typeof pad === 'object' && !Array.isArray(pad)) {
+			(pad as { bottom?: number }).bottom = overTimeAxisBottomPad(bucket);
+		}
+		const xTicks = chart.options?.scales?.x?.ticks;
+		if (xTicks) {
+			xTicks.padding = overTimeTickPadding(bucket);
+			xTicks.maxRotation = 0;
+			xTicks.minRotation = 0;
+			xTicks.autoSkip = true;
+		}
+	}
+
 	function applyDriverMonthLineTheme(chart: ChartJS<'line'>) {
 		const colors = getChartTheme(theme.isDark);
 		const isDark = theme.isDark;
+		const bucket = untrack(() => dashboardUi.overTimeBucket);
 		const colorMap = assignDistinctCategoryColors(
 			chart.data.datasets.map((d) => String(d.label ?? '')),
 			isDark
@@ -953,6 +1002,7 @@
 			chart.options.plugins.tooltip.titleColor = colors.tooltipTitle;
 			chart.options.plugins.tooltip.bodyColor = colors.tooltipTitle;
 		}
+		applyDriverMonthAxisLayout(chart, bucket);
 		chart.update('none');
 	}
 
@@ -3198,8 +3248,12 @@
 	/** Drivers multi-select dropdown open state. */
 	let driverMonthPickerOpen = $state(false);
 
-	/** Parallel to chart datasets / categories for click drill-down (non-reactive mirrors). */
-	let driverMonthChartMonths: string[] = [];
+	/**
+	 * Parallel to chart categories for axis chrome + click drill-down (non-reactive mirrors).
+	 * Keys are YYYY-MM-DD | YYYY-MM | YYYY matching dashboardUi.overTimeBucket.
+	 */
+	let driverMonthChartBucketKeys: string[] = [];
+	let driverMonthChartBucket: OverTimeBucket = 'day';
 	let driverMonthChartDriverKeys: string[] = [];
 	let driverMonthChartDriverLabels: string[] = [];
 
@@ -3865,28 +3919,65 @@
 	});
 
 	/**
-	 * Line chart datasets: one series per driver (same pivot as the table).
+	 * Line chart datasets: one series per driver, x-axis by day / month / year
+	 * (same bucket + tick/grouping style as Incidents Over Time).
 	 * Visibility (top 10 default) is applied via Chart.js `hidden` + the dropdown.
+	 * Driver ranking uses full-period totals (same as the month table).
 	 */
 	const driverMonthLineData = $derived.by(() => {
-		const tally = driverMonthTally;
+		const range = timeRange;
+		const bucket = dashboardUi.overTimeBucket;
 		const dark = theme.isDark;
+		type DriverRow = {
+			key: string;
+			label: string;
+			byBucket: Map<string, number>;
+			total: number;
+		};
+		const byDriver = new Map<string, DriverRow>();
+		const bucketSet = new Set<string>();
+
+		for (const incident of dashboardIncidents) {
+			if (!isDateReceivedInTimeRange(incident.dateReceived, range)) continue;
+			const dayKey = dateReceivedKey(incident.dateReceived);
+			if (!dayKey) continue;
+			const bKey =
+				bucket === 'day' ? dayKey : bucket === 'month' ? dayKey.slice(0, 7) : dayKey.slice(0, 4);
+			bucketSet.add(bKey);
+
+			const d = normalizeAggregationKey(incident.driver, 'Unassigned');
+			let row = byDriver.get(d.key);
+			if (!row) {
+				row = { key: d.key, label: d.label, byBucket: new Map(), total: 0 };
+				byDriver.set(d.key, row);
+			}
+			row.byBucket.set(bKey, (row.byBucket.get(bKey) ?? 0) + 1);
+			row.total += 1;
+		}
+
+		const bucketKeys = [...bucketSet].sort((a, b) => a.localeCompare(b));
+		const drivers = [...byDriver.values()].sort((a, b) => {
+			if (b.total !== a.total) return b.total - a.total;
+			return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+		});
 		const colorMap = assignDistinctCategoryColors(
-			tally.rows.map((r) => r.label),
+			drivers.map((r) => r.label),
 			dark
 		);
+
 		return {
-			labels: tally.monthLabels,
-			months: tally.months,
-			periodLabel: tally.periodLabel,
-			datasets: tally.rows.map((row) => {
+			labels: bucketKeys.map((k) => overTimeTickLabel(k, bucket)),
+			bucketKeys,
+			bucket,
+			periodLabel: timeRangeLabel,
+			datasets: drivers.map((row) => {
 				const color =
 					colorMap.get(row.label) ?? getChartCategoryColor(row.label, 0, dark);
 				return {
 					label: row.label,
 					driverKey: row.key,
 					total: row.total,
-					data: row.counts,
+					data: bucketKeys.map((k) => row.byBucket.get(k) ?? 0),
 					borderColor: color,
 					backgroundColor: withAlpha(color, 0.06),
 					pointBackgroundColor: color,
@@ -3935,10 +4026,11 @@
 		}
 	});
 
-	// Keep drill-down mirrors aligned with chart categories
+	// Keep drill-down + axis-chrome mirrors aligned with chart categories
 	$effect(() => {
 		const data = driverMonthLineData;
-		driverMonthChartMonths = data.months;
+		driverMonthChartBucketKeys = data.bucketKeys;
+		driverMonthChartBucket = data.bucket;
 		driverMonthChartDriverKeys = data.datasets.map((d) => d.driverKey);
 		driverMonthChartDriverLabels = data.datasets.map((d) => d.label);
 	});
@@ -3970,22 +4062,39 @@
 		};
 	});
 
-	/** Drill-down: incidents for one driver × calendar month cell. */
+	/**
+	 * Drill-down: incidents for one driver × time bucket.
+	 * `periodKey` is YYYY-MM-DD | YYYY-MM | YYYY (chart) or YYYY-MM (table cell).
+	 */
 	type DriverMonthDetail = {
 		driverKey: string;
 		driverLabel: string;
-		monthYm: string;
+		periodKey: string;
 	};
 	let driverMonthDetail = $state<DriverMonthDetail | null>(null);
 
 	function openDriverMonthDetail(
 		driverKey: string,
 		driverLabel: string,
-		monthYm: string | undefined,
+		periodKey: string | undefined,
 		count: number
 	) {
-		if (count <= 0 || !monthYm) return;
-		driverMonthDetail = { driverKey, driverLabel, monthYm };
+		if (count <= 0 || !periodKey) return;
+		driverMonthDetail = { driverKey, driverLabel, periodKey };
+	}
+
+	/** Match dateReceived to a day / month / year period key. */
+	function dateMatchesDriverPeriodKey(dateKey: string, periodKey: string): boolean {
+		if (/^\d{4}-\d{2}-\d{2}$/.test(periodKey)) return dateKey === periodKey;
+		if (/^\d{4}-\d{2}$/.test(periodKey)) return dateKey.slice(0, 7) === periodKey;
+		if (/^\d{4}$/.test(periodKey)) return dateKey.slice(0, 4) === periodKey;
+		return false;
+	}
+
+	function driverPeriodKeyLabel(periodKey: string): string {
+		if (/^\d{4}-\d{2}-\d{2}$/.test(periodKey)) return formatDate(periodKey);
+		if (/^\d{4}-\d{2}$/.test(periodKey)) return formatMonthYearLabel(periodKey);
+		return periodKey;
 	}
 
 	function closeDriverMonthDetail() {
@@ -4009,7 +4118,7 @@
 		return () => window.removeEventListener('keydown', onKeydown);
 	});
 
-	/** Same filters as the driver×month tally for the selected cell. */
+	/** Same filters as the driver line/table selection for the selected cell. */
 	const driverMonthDetailIncidents = $derived.by(() => {
 		const sel = driverMonthDetail;
 		if (!sel) return [] as Incident[];
@@ -4020,7 +4129,7 @@
 			const d = normalizeAggregationKey(incident.driver, 'Unassigned');
 			if (d.key !== sel.driverKey) continue;
 			const dateKey = dateReceivedKey(incident.dateReceived);
-			if (!dateKey || dateKey.slice(0, 7) !== sel.monthYm) continue;
+			if (!dateKey || !dateMatchesDriverPeriodKey(dateKey, sel.periodKey)) continue;
 			list.push(incident);
 		}
 		// Newest date/time received first (match main incidents list)
@@ -4033,7 +4142,7 @@
 	const driverMonthDetailTitle = $derived.by(() => {
 		const sel = driverMonthDetail;
 		if (!sel) return '';
-		return `${sel.driverLabel} · ${formatMonthYearLabel(sel.monthYm)}`;
+		return `${sel.driverLabel} · ${driverPeriodKeyLabel(sel.periodKey)}`;
 	});
 
 	// Persist scroll when leaving dashboard (drill-down, nav links, etc.)
@@ -4396,7 +4505,9 @@
 			instance = new Chart(canvas, {
 				type: 'line',
 				data: initialData,
-				options: buildDriverMonthLineOptions(colors)
+				options: buildDriverMonthLineOptions(colors),
+				// Same day/month outer-group labels as Incidents Over Time
+				plugins: [driverMonthAxisChromePlugin]
 			});
 			applyDriverMonthLineTheme(instance);
 			untrack(() => {
@@ -5402,12 +5513,34 @@
 									{#if dashboardUi.driverMonthView === 'table'}
 										· click a count to view those incidents
 									{:else}
-										· top {DRIVER_MONTH_TOP_N} by default · click a point for that driver × month
+										· by {dashboardUi.overTimeBucket} · top {DRIVER_MONTH_TOP_N} by default ·
+										click a point for that driver
 									{/if}
 								</p>
 							</div>
 							<div class="flex shrink-0 flex-wrap items-center gap-2">
 								{#if dashboardUi.driverMonthView === 'chart' && hasDriverMonthTally}
+									<div
+										class="over-time-bucket-toggle inline-flex shrink-0 rounded-md border border-warm-200 bg-warm-50 p-0.5 dark:bg-warm-200"
+										role="group"
+										aria-label="Aggregate driver series by day, month, or year"
+									>
+										{#each OVER_TIME_BUCKET_OPTIONS as opt (opt.value)}
+											<button
+												type="button"
+												class="rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 {dashboardUi.overTimeBucket ===
+												opt.value
+													? 'bg-white text-accent-700 shadow-sm dark:bg-warm-100 dark:text-accent-600'
+													: 'text-warm-600 hover:text-warm-800'}"
+												aria-pressed={dashboardUi.overTimeBucket === opt.value}
+												onclick={() => {
+													dashboardUi.overTimeBucket = opt.value;
+												}}
+											>
+												{opt.label}
+											</button>
+										{/each}
+									</div>
 									<div class="relative" data-driver-month-picker>
 										<button
 											type="button"
