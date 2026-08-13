@@ -34,6 +34,7 @@
 		type SubjectBackfillResult
 	} from '$lib/parseSubjectsBackfill';
 	import { resolveIncidentLocation } from '$lib/parseEmailSubjectLocation';
+	import { incidentMatchesTeamLeaderFilter } from '$lib/teamLeaderStats';
 	import {
 		TIME_RANGE_OPTIONS,
 		dayKeyFromRange,
@@ -133,6 +134,8 @@
 	let filterRespondedBy = $state('');
 	/** Only incidents with no manual suburb and no parseable subject location. */
 	let filterMissingMapLocation = $state(false);
+	/** Facility / PO suburb from the dashboard map label drill-down. */
+	let filterSuburb = $state('');
 	/** Date Received column: newest-first (desc) by default; click header to toggle. */
 	let dateReceivedSort: 'asc' | 'desc' = $state('desc');
 
@@ -170,6 +173,7 @@
 			params.has('type') ||
 			params.has('action') ||
 			params.has('respondedBy') ||
+			params.has('suburb') ||
 			params.has('period') ||
 			params.has('drill');
 
@@ -207,6 +211,9 @@
 			filterDateRange = period;
 		}
 
+		const suburb = params.get('suburb');
+		filterSuburb = suburb && suburb.trim() ? suburb.trim() : '';
+
 		const drill = params.get('drill');
 		drillSource = drill && drill.trim() ? drill.trim() : null;
 	}
@@ -243,6 +250,8 @@
 				return 'Incidents Over Time';
 			case 'team-leader-chart':
 				return 'Stats by Team Leader';
+			case 'map-chart':
+				return 'Incident locations (NSW)';
 			case 'kpi-total':
 				return 'Total';
 			case 'kpi-unresolved':
@@ -288,6 +297,7 @@
 		filterType = '';
 		filterAction = '';
 		filterRespondedBy = '';
+		filterSuburb = '';
 		filterDateRange = 'all';
 		// Open every month group so records are not hidden under collapsed accordions
 		expandedMonths = new Set(allMonthKeys);
@@ -448,8 +458,21 @@
 			}
 			if (filterRespondedBy === RESPONDED_BY_FILTER_UNASSIGNED) {
 				if ((i.response ?? '').trim()) return false;
-			} else if (filterRespondedBy && (i.response ?? '') !== filterRespondedBy) {
+			} else if (
+				filterRespondedBy &&
+				!incidentMatchesTeamLeaderFilter(
+					i,
+					filterRespondedBy,
+					(data.respondedByOptions ?? []).map((o) => o.name)
+				)
+			) {
 				return false;
+			}
+			if (filterSuburb) {
+				const loc = resolveIncidentLocation(i);
+				if (!loc || loc.suburb.trim().toLowerCase() !== filterSuburb.trim().toLowerCase()) {
+					return false;
+				}
 			}
 			// Missing map: has a ref but no usable suburb/street (no-ref rows excluded)
 			if (
@@ -500,6 +523,7 @@
 		filterAction = '';
 		filterRespondedBy = '';
 		filterMissingMapLocation = false;
+		filterSuburb = '';
 		filterDateRange = 'all';
 		if (drillSource || page.url.search) {
 			drillSource = null;
@@ -517,6 +541,7 @@
 				filterAction ||
 				filterRespondedBy ||
 				filterMissingMapLocation ||
+				filterSuburb ||
 				filterDateRange !== 'all' ||
 				drillSource
 		)
@@ -943,6 +968,13 @@
 										class="inline-flex items-center rounded-md border border-accent-200 bg-white px-2 py-0.5 text-xs font-medium text-warm-800 dark:bg-warm-100"
 									>
 										Responded By: {drillRespondedByLabel()}
+									</span>
+								{/if}
+								{#if filterSuburb}
+									<span
+										class="inline-flex items-center rounded-md border border-accent-200 bg-white px-2 py-0.5 text-xs font-medium text-warm-800 dark:bg-warm-100"
+									>
+										Suburb: {filterSuburb}
 									</span>
 								{/if}
 								<span

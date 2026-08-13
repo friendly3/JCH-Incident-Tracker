@@ -18,6 +18,10 @@
 	import CourierTruckIcon from '$lib/components/CourierTruckIcon.svelte';
 	import NswIncidentMap from '$lib/components/NswIncidentMap.svelte';
 	import {
+		canonicalLeaderLabel,
+		teamLeaderStatsBucket
+	} from '$lib/teamLeaderStats';
+	import {
 		dashboardPeriod,
 		TIME_RANGE_OPTIONS,
 		currentMonthTimeRange,
@@ -1578,6 +1582,8 @@
 		action?: string;
 		/** Responded By (team leader); empty / unassigned → __unassigned__ */
 		respondedBy?: string;
+		/** Facility / PO suburb from the NSW map data label. */
+		suburb?: string;
 		/** Override period (e.g. d:YYYY-MM-DD for a single over-time day). */
 		period?: TimeRangeKey;
 	}) {
@@ -1606,6 +1612,10 @@
 				'respondedBy',
 				!r || isUnassignedCategory(r) ? '__unassigned__' : r
 			);
+		}
+		if (opts.suburb !== undefined) {
+			const s = opts.suburb.trim();
+			if (s) params.set('suburb', s);
 		}
 		void goto(`/?${params.toString()}`);
 	}
@@ -2293,6 +2303,13 @@
 
 	const incidents = $derived(incidentsFromPageData(incidentStore.list, data.incidents));
 
+	/** Official Responded By dropdown names — table rows use these labels. */
+	const respondedByOfficialNames = $derived(
+		(data.respondedByOptions ?? [])
+			.map((o) => (o.name ?? '').trim())
+			.filter((name) => name.length > 0)
+	);
+
 	/** Dashboard metrics ignore blank / missing reference numbers (NO REF). */
 	function hasIncidentReference(incident: Incident): boolean {
 		return Boolean(incident.referenceNo?.trim());
@@ -2948,12 +2965,13 @@
 				ty += 3.5;
 				pdf.setFont('helvetica', 'normal');
 				pdf.setFontSize(6);
-				if (teamLeaderStats.rows.length === 0 && teamLeaderStats.unassignedTotal === 0) {
+				const pdfLeaderRows = teamLeaderStats.rows.filter((row) => row.total > 0);
+				if (pdfLeaderRows.length === 0 && teamLeaderStats.unassignedTotal === 0) {
 					setText(muted);
 					pdf.text('No ongoing or resolved incidents in this period', tableX, ty + 4);
 				} else {
 					const reserveUnassigned = teamLeaderStats.unassignedTotal > 0 ? 1 : 0;
-					const visible = teamLeaderStats.rows.slice(
+					const visible = pdfLeaderRows.slice(
 						0,
 						Math.max(0, maxRows - reserveUnassigned)
 					);
@@ -2973,11 +2991,11 @@
 						pdf.text(String(row.total), xTotal - 1, ty, { align: 'right' });
 						ty += rowH;
 					}
-					if (teamLeaderStats.rows.length > visible.length) {
+					if (pdfLeaderRows.length > visible.length) {
 						setText(muted);
 						pdf.setFontSize(5.5);
 						pdf.text(
-							`+${teamLeaderStats.rows.length - visible.length} more…`,
+							`+${pdfLeaderRows.length - visible.length} more…`,
 							tableX,
 							ty
 						);
@@ -3627,28 +3645,35 @@
 	}));
 
 	/**
-	 * Stats by Team Leader: grouped by Responded By (labelled Team Leader).
+	 * Stats by Team Leader: one row per Responded By dropdown value (plus any
+	 * extra free-text names on incidents). Mailbox senders such as
+	 * "Caringbah Cust Exp" roll into the official dropdown name (Caringbah).
 	 * Ongoing = resolution status Ongoing.
 	 * Resolved = any resolution status except Ongoing and New (same rule as KPI tiles).
 	 * Each % is that status’s share of the team leader’s own row total (Ongoing + Resolved).
 	 *
-	 * Unassigned = Responded By is null/blank only (any resolution status, including New).
+	 * Unassigned = no Responded By and no facility-team sender (any status, including New).
 	 * Shown as a bottom row with Total only — new/unanswered items often have no Responded By yet.
 	 */
 	const statsByTeamLeader = $derived.by(() => {
+		const officialNames = respondedByOfficialNames;
 		const byLeader = new Map<
 			string,
 			{ key: string; label: string; ongoing: number; resolved: number }
 		>();
-		/** Any period incident with null/blank Responded By (no status filter, no Ongoing/Resolved split). */
+		// Always list every Responded By dropdown option (Caringbah included), even at 0.
+		for (const name of officialNames) {
+			const label = canonicalLeaderLabel(name, officialNames);
+			const key = label.toUpperCase();
+			if (!byLeader.has(key)) {
+				byLeader.set(key, { key, label, ongoing: 0, resolved: 0 });
+			}
+		}
+		/** Period incidents with no person and no facility-team mailbox to hang a row on. */
 		let unassignedTotal = 0;
 		for (const incident of periodIncidents) {
-			// Strict: only null/undefined/whitespace counts as Unassigned (not the label "Unassigned")
-			const respondedByRaw = incident.response;
-			const respondedByEmpty =
-				respondedByRaw == null ||
-				(typeof respondedByRaw === 'string' && !respondedByRaw.trim());
-			if (respondedByEmpty) {
+			const bucket = teamLeaderStatsBucket(incident, officialNames);
+			if (bucket.kind === 'unassigned') {
 				unassignedTotal += 1;
 				continue;
 			}
@@ -3658,9 +3683,14 @@
 			const isNew = action === 'NEW';
 			// Resolved = not Ongoing and not New — New is excluded from leader Ongoing/Resolved columns
 			const isResolved = !isOngoing && !isNew;
+			// Mailbox-only fallback: unanswered / New stays in Unassigned
+			if (bucket.source === 'fallback' && isNew) {
+				unassignedTotal += 1;
+				continue;
+			}
 			if (!isOngoing && !isResolved) continue;
 
-			const r = normalizeAggregationKey(incident.response, 'Unassigned');
+			const r = { key: bucket.key, label: bucket.label };
 			let row = byLeader.get(r.key);
 			if (!row) {
 				row = { key: r.key, label: r.label, ongoing: 0, resolved: 0 };
@@ -3706,13 +3736,14 @@
 		statsByTeamLeader.rows.length > 0 || statsByTeamLeader.unassignedTotal > 0
 	);
 
-	/** Chart only needs assigned leaders (Ongoing + Resolved stacks). */
-	const hasTeamLeaderChartData = $derived(statsByTeamLeader.rows.length > 0);
+	/** Chart only needs assigned leaders with at least one incident (skip 0-count dropdown rows). */
+	const teamLeaderChartRows = $derived(statsByTeamLeader.rows.filter((row) => row.total > 0));
+	const hasTeamLeaderChartData = $derived(teamLeaderChartRows.length > 0);
 
 	const teamLeaderBarData = $derived.by(() => {
 		const dark = theme.isDark;
 		const status = teamLeaderStatusColors(dark);
-		const rows = statsByTeamLeader.rows;
+		const rows = teamLeaderChartRows;
 		return {
 			labels: rows.map((r) => r.label),
 			datasets: [
@@ -3743,7 +3774,7 @@
 	});
 
 	const teamLeaderChartHeightPx = $derived(
-		teamLeaderChartHeightForCount(statsByTeamLeader.rows.length)
+		teamLeaderChartHeightForCount(teamLeaderChartRows.length)
 	);
 
 	const statsByTeamLeaderAriaLabel = $derived.by(() => {
@@ -5250,7 +5281,7 @@
 									</div>
 									{#if statsByTeamLeader.unassignedTotal > 0}
 										<p class="mt-1.5 text-[11px] text-warm-500">
-											Unassigned (empty Responded By): {statsByTeamLeader.unassignedTotal} —
+											Unassigned (no Responded By and no facility team): {statsByTeamLeader.unassignedTotal} —
 											switch to Table for the full breakdown.
 										</p>
 									{/if}
@@ -5291,9 +5322,9 @@
 														>
 															<span class="tls-th-label">Team Leader</span>
 															<span class="tls-th-popup" role="tooltip">
-																Category for the <strong>Responded By</strong> field — who
-																responded to the incident. Each row is one Responded By
-																value in the selected period.
+																One row per <strong>Responded By</strong> dropdown value.
+																Mailbox variants (e.g. Caringbah Cust Exp) roll into the
+																official option (Caringbah).
 															</span>
 														</th>
 														<th
@@ -5417,7 +5448,7 @@
 															</td>
 															<td
 																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
-																title="All period incidents with empty Responded By (any status)"
+																title="Period incidents with no Responded By and no facility CX team (any status)"
 															>
 																{statsByTeamLeader.unassignedTotal}
 															</td>
@@ -6129,6 +6160,9 @@
 							periodLabel={timeRangeLabel}
 							onPersistCoords={async (updates) => {
 								await incidentStore.persistLocationCoords(updates);
+							}}
+							onSuburbDrillDown={(suburb) => {
+								drillDownToIncidents({ drill: 'map-chart', suburb });
 							}}
 						/>
 					</div>

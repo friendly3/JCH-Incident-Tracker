@@ -25,9 +25,11 @@
 		 * Called in batches after the map resolves places missing DB coords.
 		 */
 		onPersistCoords?: (updates: CoordPersistUpdate[]) => void | Promise<void>;
+		/** Click a suburb data label → open the incidents list for that place. */
+		onSuburbDrillDown?: (suburb: string) => void;
 	}
 
-	let { incidents, periodLabel = '', onPersistCoords }: Props = $props();
+	let { incidents, periodLabel = '', onPersistCoords, onSuburbDrillDown }: Props = $props();
 
 	let mapEl = $state<HTMLDivElement | undefined>(undefined);
 	let statusText = $state('Preparing map…');
@@ -251,10 +253,15 @@
 
 	function buildMarkerIcon(entry: MapMarkerEntry, L: { divIcon: (opts: object) => unknown }) {
 		const sideClass = `incident-marker--${entry.side}`;
-		const labelHtml = `<span class="incident-marker-label" style="--label-offset:${entry.sideOffset}px">
+		const countPhrase =
+			entry.count === 1 ? '1 incident' : `${entry.count} incidents`;
+		const labelTitle = onSuburbDrillDown
+			? `Open ${countPhrase} in ${entry.nameLine}`
+			: entry.placeLabel;
+		const labelHtml = `<button type="button" class="incident-marker-label" style="--label-offset:${entry.sideOffset}px" tabindex="-1" title="${escapeHtml(labelTitle)}" aria-label="${escapeHtml(labelTitle)}" data-map-suburb="${escapeHtml(entry.nameLine)}">
 						<span class="incident-marker-name">${escapeHtml(entry.nameLine)}</span>
 						<span class="incident-marker-suburb">${escapeHtml(entry.suburbLine)}</span>
-					</span>`;
+					</button>`;
 
 		return L.divIcon({
 			className: 'incident-pulse-icon',
@@ -443,6 +450,7 @@
 			`<div class="incident-map-tooltip-inner">
 				<span class="incident-map-tooltip-count">${escapeHtml(countLabel)}</span>
 				<span class="incident-map-tooltip-place">${escapeHtml(opts.placeLabel)}</span>
+				${onSuburbDrillDown ? '<span class="incident-map-tooltip-place">Click label to open list</span>' : ''}
 			</div>`,
 			{
 				direction: 'top',
@@ -463,6 +471,22 @@
 				<span style="color:#777;font-size:11px">${escapeHtml(opts.precisionNote)}</span>
 			</div>`
 		);
+
+		if (onSuburbDrillDown) {
+			// Take over click so a label hit drills down instead of flashing the popup
+			marker.off('click');
+			marker.on('click', (e: { originalEvent?: Event }) => {
+				const target = e.originalEvent?.target;
+				if (target instanceof Element && target.closest('.incident-marker-label')) {
+					if (e.originalEvent && Lref?.DomEvent?.stop) {
+						Lref.DomEvent.stop(e.originalEvent);
+					}
+					onSuburbDrillDown(opts.nameLine);
+					return;
+				}
+				marker.openPopup();
+			});
+		}
 
 		markersLayer.addLayer(marker);
 		placedMarkers.push(entry);
@@ -789,7 +813,8 @@
 				{/if}
 			</div>
 			<p class="mt-0.5 text-xs text-warm-500 sm:text-sm">
-				Facility / post office suburb totals (street pins off). Hover for counts.
+				Facility / post office suburb totals (street pins off). Click a suburb label to
+				open those incidents.
 			</p>
 			<p class="mt-0.5 text-xs text-warm-400" aria-live="polite">{statusText}</p>
 		</div>
@@ -857,7 +882,7 @@
 			bind:this={mapEl}
 			class="nsw-incident-map absolute inset-0 h-full w-full bg-warm-100"
 			role="application"
-			aria-label="Interactive map centred on Sydney, New South Wales. Zoom and pan to explore incident locations. Hover markers for incident counts."
+			aria-label="Interactive map centred on Sydney, New South Wales. Zoom and pan to explore incident locations. Click a suburb label to open matching incidents."
 			tabindex="0"
 		></div>
 
@@ -1039,14 +1064,30 @@
 		align-items: flex-start;
 		width: 7.25rem;
 		max-width: 7.25rem;
+		margin: 0;
 		padding: 0.15rem 0.35rem 0.2rem;
 		border-radius: 0.25rem;
 		border: 1px solid rgba(0, 0, 0, 0.55);
 		background: rgba(255, 255, 255, 0.96);
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 		line-height: 1.15;
-		pointer-events: none;
+		appearance: none;
+		font: inherit;
+		color: inherit;
+		text-align: inherit;
+		pointer-events: auto;
+		cursor: pointer;
 		z-index: 2;
+	}
+
+	:global(.incident-marker-label:hover),
+	:global(.incident-marker-label:focus-visible) {
+		border-color: #0f7cb3;
+		background: #ffffff;
+		box-shadow:
+			0 1px 3px rgba(0, 0, 0, 0.18),
+			0 0 0 2px rgba(15, 124, 179, 0.35);
+		outline: none;
 	}
 
 	:global(.incident-marker--right .incident-marker-label) {
