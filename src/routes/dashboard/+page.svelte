@@ -2411,6 +2411,8 @@
 	/** PDF export (html2canvas + jsPDF). */
 	let pdfExporting = $state(false);
 	let pdfExportError = $state<string | null>(null);
+	/** Live NSW map — used to snapshot the chart into the PDF. */
+	let nswMap = $state<{ captureForPdf?: () => Promise<string | null> } | undefined>();
 
 	function pdfFilenameSlug(label: string): string {
 		return label
@@ -2423,9 +2425,8 @@
 
 	/**
 	 * Data-driven dashboard PDF (not a pixel clone of the live UI).
-	 * Page 1: KPIs + resolution + line charts.
-	 * Page 2: Incidents by Driver bar chart (full page).
-	 * Page 3+: driver×month table with auto page breaks (vector text).
+	 * Always light/print palette. Pages: overview, team-leader table,
+	 * driver chart, NSW map, then driver×month table.
 	 */
 	async function exportDashboardPdf() {
 		if (pdfExporting || typeof window === 'undefined') return;
@@ -2453,17 +2454,34 @@
 			const byStatus = incidentsByActionStatus;
 			const tally = driverMonthTally;
 			const showMonthTotals = tally.months.length > 1;
-			const dark = isDarkMode();
+			// PDF is always light — JPEG has no alpha, so a dark/transparent
+			// canvas becomes a black chart background.
+			const dark = false;
 
-			// Print-friendly palette (sRGB only)
-			const ink = dark ? '#e8e8e8' : '#1a1a1a';
-			const muted = dark ? '#a0a0a0' : '#555555';
-			const rule = dark ? '#3a3a3a' : '#d0d0d0';
-			const cardFill = dark ? '#1c1c1c' : '#ffffff';
-			const pageFill = dark ? '#121212' : '#ffffff';
+			// Print-friendly light palette (sRGB only)
+			const ink = '#1a1a1a';
+			const muted = '#555555';
+			const rule = '#d0d0d0';
+			const cardFill = '#ffffff';
+			const pageFill = '#ffffff';
 			const accent = '#038676';
 			const amber = '#b45309';
 			const emerald = '#047857';
+			const pdfWhiteBg = {
+				id: 'pdfWhiteBg',
+				beforeDraw(chart: {
+					ctx: CanvasRenderingContext2D;
+					width: number;
+					height: number;
+				}) {
+					const { ctx, width, height } = chart;
+					ctx.save();
+					ctx.globalCompositeOperation = 'destination-over';
+					ctx.fillStyle = '#ffffff';
+					ctx.fillRect(0, 0, width, height);
+					ctx.restore();
+				}
+			};
 
 			/** Point/bar value labels on PDF chart rasters (chartjs-plugin-datalabels). */
 			const pdfDataLabels = {
@@ -2480,7 +2498,7 @@
 					typeof value === 'number' && Number.isFinite(value) ? String(value) : '',
 				color: ink,
 				font: { size: 15, weight: 'bold' as const },
-				textStrokeColor: dark ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.9)',
+				textStrokeColor: 'rgba(255,255,255,0.9)',
 				textStrokeWidth: 3
 			};
 
@@ -2548,7 +2566,7 @@
 						},
 						color: ink,
 						font: { size: 15, weight: 'bold' as const },
-						textStrokeColor: dark ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.9)',
+						textStrokeColor: 'rgba(255,255,255,0.9)',
 						textStrokeWidth: 3
 					}
 				}
@@ -2585,6 +2603,7 @@
 				const chart = new Chart(canvas, {
 					type,
 					data: data as never,
+					plugins: [pdfWhiteBg],
 					options: {
 						responsive: false,
 						maintainAspectRatio: false,
@@ -2765,6 +2784,8 @@
 				}
 			);
 
+			const mapJpeg = (await nswMap?.captureForPdf?.()) ?? '';
+
 			const statusPng =
 				byStatus.length > 0
 					? await chartToJpeg(
@@ -2927,131 +2948,173 @@
 				pdf.text('No resolution status data', m + 3, y + 20);
 			}
 
-			// Top-row pair: Stats by Team Leader | over time (matches dashboard layout)
+			// Over-time full width (team-leader table is its own page so no rows are clipped)
 			y += statusH + 5;
 			const footerReserve = 10;
 			const remaining = pageH - y - footerReserve;
-			const halfW = (contentW - 4) / 2;
 			const midChartH = Math.max(50, remaining - 2);
-			roundedCard(m, y, halfW, midChartH);
-			roundedCard(m + halfW + 4, y, halfW, midChartH);
+			roundedCard(m, y, contentW, midChartH);
 			setText(ink);
 			pdf.setFont('helvetica', 'bold');
 			pdf.setFontSize(11);
 			pdf.text(
-				SHOW_TYPE_OVER_TIME_CHART ? 'Incidents by Type Over Time' : 'Stats by Team Leader',
+				SHOW_TYPE_OVER_TIME_CHART ? 'Incidents by Type Over Time' : 'Incidents Over Time',
 				m + 3,
 				y + 5
 			);
-			pdf.text('Incidents Over Time', m + halfW + 7, y + 5);
 			setText(muted);
 			pdf.setFont('helvetica', 'normal');
 			pdf.setFontSize(8);
-			pdf.text(
-				SHOW_TYPE_OVER_TIME_CHART ? periodLabel : `${periodLabel} · Ongoing & Resolved`,
-				m + 3,
-				y + 9
-			);
-			pdf.text(periodLabel, m + halfW + 7, y + 9);
+			pdf.text(periodLabel, m + 3, y + 9);
 			const plotH = midChartH - 12;
 			if (SHOW_TYPE_OVER_TIME_CHART && typePng && plotH > 20) {
-				addChartImage(typePng, m + 2, y + 11, halfW - 4, plotH);
-			} else if (!SHOW_TYPE_OVER_TIME_CHART) {
-				// Vector table (left): Team Leader | Ongoing | % | Resolved | % | Total
-				const tableX = m + 3;
-				const tableW = halfW - 6;
-				const colTeam = tableW * 0.3;
-				const colNum = tableW * 0.14;
-				const xOngoing = tableX + colTeam + colNum;
-				const xOngoingPct = xOngoing + colNum;
-				const xResolved = xOngoingPct + colNum;
-				const xResolvedPct = xResolved + colNum;
-				const xTotal = tableX + tableW;
-				let ty = y + 13;
-				const rowH = 6.4;
-				const maxRows = Math.max(0, Math.floor((plotH - 8) / rowH) - 1);
-				setText(ink);
-				pdf.setFont('helvetica', 'bold');
-				pdf.setFontSize(8);
-				pdf.text('Team Leader', tableX, ty);
-				pdf.text('Ongoing', xOngoing - 1, ty, { align: 'right' });
-				pdf.text('%', xOngoingPct - 1, ty, { align: 'right' });
-				pdf.text('Resolved', xResolved - 1, ty, { align: 'right' });
-				pdf.text('%', xResolvedPct - 1, ty, { align: 'right' });
-				pdf.text('Total', xTotal - 1, ty, { align: 'right' });
-				ty += 2;
-				setDraw(rule);
-				pdf.setLineWidth(0.2);
-				pdf.line(tableX, ty, tableX + tableW, ty);
-				ty += 3.5;
-				pdf.setFont('helvetica', 'normal');
-				pdf.setFontSize(8);
-				const pdfLeaderRows = teamLeaderStats.rows.filter((row) => row.total > 0);
-				if (pdfLeaderRows.length === 0 && teamLeaderStats.unassignedTotal === 0) {
-					setText(muted);
-					pdf.text('No ongoing or resolved incidents in this period', tableX, ty + 4);
-				} else {
-					const reserveUnassigned = teamLeaderStats.unassignedTotal > 0 ? 1 : 0;
-					const visible = pdfLeaderRows.slice(
-						0,
-						Math.max(0, maxRows - reserveUnassigned)
-					);
-					for (const row of visible) {
-						if (ty > y + midChartH - 6) break;
-						setText(ink);
-						const name = pdf.splitTextToSize(row.label, colTeam - 2);
-						pdf.text(name[0] ?? row.label, tableX, ty);
-						pdf.text(String(row.ongoing), xOngoing - 1, ty, { align: 'right' });
-						pdf.text(`${row.ongoingPct.toFixed(1)}%`, xOngoingPct - 1, ty, {
-							align: 'right'
-						});
-						pdf.text(String(row.resolved), xResolved - 1, ty, { align: 'right' });
-						pdf.text(`${row.resolvedPct.toFixed(1)}%`, xResolvedPct - 1, ty, {
-							align: 'right'
-						});
-						pdf.text(String(row.total), xTotal - 1, ty, { align: 'right' });
-						ty += rowH;
-					}
-					if (pdfLeaderRows.length > visible.length) {
-						setText(muted);
-						pdf.setFontSize(7.5);
-						pdf.text(
-							`+${pdfLeaderRows.length - visible.length} more…`,
-							tableX,
-							ty
-						);
-						ty += rowH;
-					}
-					// Unassigned: Total only (no Ongoing / Resolved breakdown)
-					if (teamLeaderStats.unassignedTotal > 0 && ty <= y + midChartH - 6) {
-						setText(muted);
-						pdf.setFont('helvetica', 'italic');
-						pdf.setFontSize(8);
-						pdf.text('Unassigned', tableX, ty);
-						pdf.setFont('helvetica', 'normal');
-						pdf.text('—', xOngoing - 1, ty, { align: 'right' });
-						pdf.text('—', xOngoingPct - 1, ty, { align: 'right' });
-						pdf.text('—', xResolved - 1, ty, { align: 'right' });
-						pdf.text('—', xResolvedPct - 1, ty, { align: 'right' });
-						setText(ink);
-						pdf.text(String(teamLeaderStats.unassignedTotal), xTotal - 1, ty, {
-							align: 'right'
-						});
-					}
-				}
-			}
-			// Right half: over-time line chart
-			if (overTimePng && plotH > 20) {
-				addChartImage(overTimePng, m + halfW + 6, y + 11, halfW - 4, plotH);
+				addChartImage(typePng, m + 3, y + 11, contentW - 6, plotH);
+			} else if (overTimePng && plotH > 20) {
+				addChartImage(overTimePng, m + 3, y + 11, contentW - 6, plotH);
 			}
 
-			pageFooter('Page 1 of 3 · Overview · JCH Incident Tracker');
+			const pageKinds: string[] = ['overview'];
+
+			pageFooter('Overview · JCH Incident Tracker');
 
 			// ═══════════════════════════════════════════════════════════
-			// PAGE 2 — Incidents by Driver (full-page chart, correct aspect)
+			// PAGE — Stats by Team Leader (full table, paginated)
 			// ═══════════════════════════════════════════════════════════
 			pdf.addPage();
 			fillPage();
+			pageKinds.push('team-leader');
+
+			function drawTlsTitle(startY: number): number {
+				setText(ink);
+				pdf.setFont('helvetica', 'bold');
+				pdf.setFontSize(16);
+				pdf.text('Stats by Team Leader', m, startY);
+				setText(muted);
+				pdf.setFont('helvetica', 'normal');
+				pdf.setFontSize(10);
+				pdf.text(
+					`${teamLeaderStats.periodLabel} · Ongoing & Resolved · Responded By`,
+					m,
+					startY + 6
+				);
+				return startY + 12;
+			}
+
+			const tlsColTeam = contentW * 0.34;
+			const tlsColNum = contentW * 0.14;
+			const tlsX = {
+				leader: m,
+				ongoing: m + tlsColTeam + tlsColNum,
+				ongoingPct: m + tlsColTeam + tlsColNum * 2,
+				resolved: m + tlsColTeam + tlsColNum * 3,
+				resolvedPct: m + tlsColTeam + tlsColNum * 4,
+				total: m + contentW
+			};
+			const tlsRowH = 7;
+
+			function paintTlsHeader(y0: number) {
+				setFill('#f0f0f0');
+				pdf.rect(m, y0 - 3.8, contentW, tlsRowH, 'F');
+				setText(muted);
+				pdf.setFont('helvetica', 'bold');
+				pdf.setFontSize(9);
+				pdf.text('Team Leader', tlsX.leader + 1, y0);
+				pdf.text('Ongoing', tlsX.ongoing - 1, y0, { align: 'right' });
+				pdf.text('%', tlsX.ongoingPct - 1, y0, { align: 'right' });
+				pdf.text('Resolved', tlsX.resolved - 1, y0, { align: 'right' });
+				pdf.text('%', tlsX.resolvedPct - 1, y0, { align: 'right' });
+				pdf.text('Total', tlsX.total - 1, y0, { align: 'right' });
+			}
+
+			function ensureTlsRoom(need: number): void {
+				if (tyTls <= pageH - 14 - need) return;
+				pdf.addPage();
+				fillPage();
+				pageKinds.push('team-leader');
+				tyTls = drawTlsTitle(m + 4);
+				paintTlsHeader(tyTls);
+				tyTls += tlsRowH;
+			}
+
+			let tyTls = drawTlsTitle(m + 4);
+			paintTlsHeader(tyTls);
+			tyTls += tlsRowH;
+
+			const tlsRows = teamLeaderStats.rows;
+			if (tlsRows.length === 0 && teamLeaderStats.unassignedTotal === 0) {
+				setText(muted);
+				pdf.setFont('helvetica', 'normal');
+				pdf.setFontSize(10);
+				pdf.text('No ongoing or resolved incidents in this period', m + 1, tyTls + 4);
+			} else {
+				pdf.setFont('helvetica', 'normal');
+				pdf.setFontSize(9);
+				for (const row of tlsRows) {
+					ensureTlsRoom(tlsRowH);
+					setText(ink);
+					pdf.setFont('helvetica', 'bold');
+					const name = pdf.splitTextToSize(row.label, tlsColTeam - 4);
+					pdf.text(name[0] ?? row.label, tlsX.leader + 1, tyTls);
+					pdf.setFont('helvetica', 'normal');
+					pdf.text(String(row.ongoing), tlsX.ongoing - 1, tyTls, { align: 'right' });
+					pdf.text(`${row.ongoingPct.toFixed(1)}%`, tlsX.ongoingPct - 1, tyTls, {
+						align: 'right'
+					});
+					pdf.text(String(row.resolved), tlsX.resolved - 1, tyTls, { align: 'right' });
+					pdf.text(`${row.resolvedPct.toFixed(1)}%`, tlsX.resolvedPct - 1, tyTls, {
+						align: 'right'
+					});
+					pdf.setFont('helvetica', 'bold');
+					pdf.text(String(row.total), tlsX.total - 1, tyTls, { align: 'right' });
+					setDraw(rule);
+					pdf.setLineWidth(0.1);
+					pdf.line(m, tyTls + 2, m + contentW, tyTls + 2);
+					tyTls += tlsRowH;
+				}
+				if (teamLeaderStats.unassignedTotal > 0) {
+					ensureTlsRoom(tlsRowH);
+					setText(muted);
+					pdf.setFont('helvetica', 'italic');
+					pdf.setFontSize(9);
+					pdf.text('Unassigned', tlsX.leader + 1, tyTls);
+					pdf.setFont('helvetica', 'normal');
+					pdf.text('—', tlsX.ongoing - 1, tyTls, { align: 'right' });
+					pdf.text('—', tlsX.ongoingPct - 1, tyTls, { align: 'right' });
+					pdf.text('—', tlsX.resolved - 1, tyTls, { align: 'right' });
+					pdf.text('—', tlsX.resolvedPct - 1, tyTls, { align: 'right' });
+					setText(ink);
+					pdf.setFont('helvetica', 'bold');
+					pdf.text(String(teamLeaderStats.unassignedTotal), tlsX.total - 1, tyTls, {
+						align: 'right'
+					});
+					tyTls += tlsRowH;
+				}
+				ensureTlsRoom(tlsRowH + 1);
+				setFill('#f0f0f0');
+				pdf.rect(m, tyTls - 3.8, contentW, tlsRowH + 1, 'F');
+				setText(ink);
+				pdf.setFont('helvetica', 'bold');
+				pdf.setFontSize(9);
+				pdf.text('All', tlsX.leader + 1, tyTls);
+				pdf.text(String(teamLeaderStats.totalOngoing), tlsX.ongoing - 1, tyTls, {
+					align: 'right'
+				});
+				pdf.text('—', tlsX.ongoingPct - 1, tyTls, { align: 'right' });
+				pdf.text(String(teamLeaderStats.totalResolved), tlsX.resolved - 1, tyTls, {
+					align: 'right'
+				});
+				pdf.text('—', tlsX.resolvedPct - 1, tyTls, { align: 'right' });
+				pdf.text(String(teamLeaderStats.grandTotal), tlsX.total - 1, tyTls, {
+					align: 'right'
+				});
+			}
+
+			// ═══════════════════════════════════════════════════════════
+			// PAGE — Incidents by Driver (full-page chart, correct aspect)
+			// ═══════════════════════════════════════════════════════════
+			pdf.addPage();
+			fillPage();
+			pageKinds.push('driver');
 
 			setText(ink);
 			pdf.setFont('helvetica', 'bold');
@@ -3086,10 +3149,48 @@
 				pdf.text('No driver data in this period', m + 6, chartTop + chartBoxH / 2);
 			}
 
-			pageFooter('Page 2 of 3 · Incidents by Driver · JCH Incident Tracker');
+			// ═══════════════════════════════════════════════════════════
+			// PAGE — NSW map
+			// ═══════════════════════════════════════════════════════════
+			pdf.addPage();
+			fillPage();
+			pageKinds.push('map');
+			setText(ink);
+			pdf.setFont('helvetica', 'bold');
+			pdf.setFontSize(16);
+			pdf.text('Incident locations (NSW)', m, m + 5);
+			setText(muted);
+			pdf.setFont('helvetica', 'normal');
+			pdf.setFontSize(10);
+			pdf.text(
+				`${periodLabel} · Facility / post office suburb totals`,
+				m,
+				m + 11
+			);
+			const mapTop = m + 16;
+			const mapBoxH = pageH - mapTop - m - 6;
+			roundedCard(m, mapTop, contentW, mapBoxH);
+			if (mapJpeg) {
+				const mapPad = 3;
+				addChartImage(
+					mapJpeg,
+					m + mapPad,
+					mapTop + mapPad,
+					contentW - mapPad * 2,
+					mapBoxH - mapPad * 2
+				);
+			} else {
+				setText(muted);
+				pdf.setFontSize(11);
+				pdf.text(
+					'Map snapshot was not available. Open the dashboard map, then export again.',
+					m + 8,
+					mapTop + mapBoxH / 2
+				);
+			}
 
 			// ═══════════════════════════════════════════════════════════
-			// PAGE 3+ — driver × month table (vector text)
+			// PAGE — driver × month table (vector text)
 			// ═══════════════════════════════════════════════════════════
 			// —— Page 3+: driver × month table (vector text) ——————
 			function drawTableHeader(startY: number): number {
@@ -3110,6 +3211,7 @@
 
 			pdf.addPage();
 			fillPage();
+			pageKinds.push('driver-month');
 
 			let ty = drawTableHeader(m + 4);
 			const cols = 1 + tally.months.length + (showMonthTotals ? 1 : 0);
@@ -3158,9 +3260,9 @@
 			pdf.setFont('helvetica', 'normal');
 			for (const row of rows) {
 				if (ty > pageH - 14) {
-					pageFooter('Driver × month · continued · JCH Incident Tracker');
 					pdf.addPage();
 					fillPage();
+					pageKinds.push('driver-month');
 					ty = drawTableHeader(m + 4);
 					paintHeaderRow(ty);
 					ty += rowH;
@@ -3196,9 +3298,9 @@
 			// Footer totals
 			if (tally.rows.length > 0) {
 				if (ty > pageH - 14) {
-					pageFooter('Driver × month · continued · JCH Incident Tracker');
 					pdf.addPage();
 					fillPage();
+					pageKinds.push('driver-month');
 					ty = m + 10;
 				}
 				setFill(dark ? '#2a2a2a' : '#f0f0f0');
@@ -3219,23 +3321,27 @@
 				}
 			}
 
-			// Stamp accurate page numbers (pages 1–2 already labelled; refresh all)
+			const pageKindLabel: Record<string, string> = {
+				overview: 'Overview',
+				'team-leader': 'Stats by Team Leader',
+				driver: 'Incidents by Driver',
+				map: 'Incident locations (NSW)',
+				'driver-month': 'Driver × month'
+			};
 			const pageCount = pdf.getNumberOfPages();
 			for (let p = 1; p <= pageCount; p++) {
 				pdf.setPage(p);
-				// Cover any prior footer strip
 				setFill(pageFill);
 				pdf.rect(0, pageH - 8, pageW, 8, 'F');
 				setText(muted);
 				pdf.setFont('helvetica', 'normal');
 				pdf.setFontSize(8);
-				const label =
-					p === 1
-						? `Page 1 of ${pageCount} · Overview · JCH Incident Tracker`
-						: p === 2
-							? `Page 2 of ${pageCount} · Incidents by Driver · JCH Incident Tracker`
-							: `Page ${p} of ${pageCount} · Driver × month · JCH Incident Tracker`;
-				pdf.text(label, m, pageH - 5);
+				const kind = pageKinds[p - 1] ?? 'driver-month';
+				pdf.text(
+					`Page ${p} of ${pageCount} · ${pageKindLabel[kind] ?? kind} · JCH Incident Tracker`,
+					m,
+					pageH - 5
+				);
 			}
 
 			const periodSlug = pdfFilenameSlug(periodLabel) || 'period';
@@ -6162,6 +6268,7 @@
 				<div class="dashboard-map-row mt-2" data-pdf-hide>
 					<div class="min-h-[min(28rem,55vh)] w-full [&_.map-chart-shell]:h-full [&_.map-chart-shell]:min-h-[min(28rem,55vh)]">
 						<NswIncidentMap
+							bind:this={nswMap}
 							incidents={periodIncidents}
 							periodLabel={timeRangeLabel}
 							onPersistCoords={async (updates) => {

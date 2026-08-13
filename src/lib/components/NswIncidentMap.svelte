@@ -164,7 +164,8 @@
 			attribution:
 				'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
 			subdomains: 'abcd',
-			maxZoom: 20
+			maxZoom: 20,
+			crossOrigin: true
 		}).addTo(map);
 
 		applySydneyView(false);
@@ -399,6 +400,35 @@
 
 	function closeExpand() {
 		void setExpanded(false);
+	}
+
+	/** Snapshot the live map for the dashboard PDF (light basemap, JPEG). */
+	export async function captureForPdf(): Promise<string | null> {
+		if (!mapEl || !map || !ready || typeof window === 'undefined') return null;
+		map.invalidateSize({ animate: false });
+		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+		await new Promise<void>((resolve) => setTimeout(resolve, 120));
+		const controls = mapEl.querySelector('.leaflet-control-container') as HTMLElement | null;
+		const prevVis = controls?.style.visibility ?? '';
+		if (controls) controls.style.visibility = 'hidden';
+		try {
+			const html2canvas = (await import('html2canvas')).default;
+			const canvas = await html2canvas(mapEl, {
+				backgroundColor: '#e8e8e8',
+				useCORS: true,
+				allowTaint: false,
+				scale: 1.5,
+				logging: false,
+				windowWidth: mapEl.clientWidth,
+				windowHeight: mapEl.clientHeight
+			});
+			return canvas.toDataURL('image/jpeg', 0.82);
+		} catch (err) {
+			console.warn('Map PDF capture failed', err);
+			return null;
+		} finally {
+			if (controls) controls.style.visibility = prevVis;
+		}
 	}
 
 	function onKeydown(e: KeyboardEvent) {
