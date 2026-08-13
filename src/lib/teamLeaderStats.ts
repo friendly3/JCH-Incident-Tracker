@@ -2,15 +2,9 @@ import type { Incident } from '$lib/data/incidents';
 
 export type TeamLeaderStatsBucket =
 	| { kind: 'unassigned' }
-	| {
-			kind: 'leader';
-			key: string;
-			label: string;
-			/** `response` = Responded By was set; `fallback` = facility mailbox / team name only. */
-			source: 'response' | 'fallback';
-	  };
+	| { kind: 'leader'; key: string; label: string };
 
-/** Collapse punctuation so "Caringbah Cust Exp" and "caringbah-cust-exp" match. */
+/** Case-fold and collapse punctuation: "Caringbah PDC" → "CARINGBAH PDC". */
 function foldName(raw: string | undefined | null): string {
 	return (raw ?? '')
 		.trim()
@@ -20,32 +14,11 @@ function foldName(raw: string | undefined | null): string {
 		.trim();
 }
 
-function titleCaseWords(folded: string): string {
-	return folded
-		.split(' ')
-		.filter(Boolean)
-		.map((w) => w.charAt(0) + w.slice(1).toLowerCase())
-		.join(' ');
-}
-
 /**
- * Facility / depot CX mailboxes that should appear as their own Stats by Team Leader row.
- * Includes the common Caringbah typo ("Caingbah").
- */
-export function facilityTeamFromName(raw: string | undefined | null): string | null {
-	const folded = foldName(raw);
-	if (!folded) return null;
-	// "Caringbah", "Caringbah Cust Exp", "Caingbah Cust Exp"
-	if (/\bCAI?NGBAH\b/.test(folded)) return 'Caringbah Cust Exp';
-	if (/\bCUST EXP\b/.test(folded) || /\bCUSTOMER EXP\b/.test(folded)) {
-		return titleCaseWords(folded);
-	}
-	return null;
-}
-
-/**
- * Map a free-text / mailbox / typo value onto the official Responded By dropdown name.
- * e.g. "Caringbah Cust Exp" + "Caingbah" → dropdown option "Caringbah".
+ * Map a Responded By value onto the official dropdown name.
+ * Matches exact spelling (ignoring case/spaces), not mailbox senders.
+ * "CaringbahPDC" and "Caringbah PDC" are the same option;
+ * "Caringbah Cust Exp" is not CaringbahPDC.
  */
 export function matchOfficialRespondedBy(
 	raw: string | undefined | null,
@@ -53,6 +26,7 @@ export function matchOfficialRespondedBy(
 ): string | null {
 	const folded = foldName(raw);
 	if (!folded) return null;
+	const compact = folded.replace(/\s+/g, '');
 
 	const officials = officialNames
 		.map((name) => ({ name: name.trim(), folded: foldName(name) }))
@@ -61,19 +35,8 @@ export function matchOfficialRespondedBy(
 	const exact = officials.find((o) => o.folded === folded);
 	if (exact) return exact.name;
 
-	const rawFacility = facilityTeamFromName(raw);
-	if (rawFacility) {
-		const same = officials.filter((o) => facilityTeamFromName(o.name) === rawFacility);
-		if (same.length === 1) return same[0].name;
-		if (same.length > 1) {
-			same.sort(
-				(a, b) => a.folded.length - b.folded.length || a.name.localeCompare(b.name)
-			);
-			return same[0].name;
-		}
-	}
-
-	return null;
+	const byCompact = officials.find((o) => o.folded.replace(/\s+/g, '') === compact);
+	return byCompact?.name ?? null;
 }
 
 export function canonicalLeaderLabel(
@@ -81,53 +44,26 @@ export function canonicalLeaderLabel(
 	officialNames: readonly string[] = []
 ): string {
 	const trimmed = raw.trim();
-	return (
-		matchOfficialRespondedBy(trimmed, officialNames) ??
-		facilityTeamFromName(trimmed) ??
-		trimmed
-	);
-}
-
-function leaderBucket(
-	label: string,
-	source: 'response' | 'fallback'
-): TeamLeaderStatsBucket {
-	const trimmed = label.trim();
-	return { kind: 'leader', key: trimmed.toUpperCase(), label: trimmed, source };
+	return matchOfficialRespondedBy(trimmed, officialNames) ?? trimmed;
 }
 
 /**
- * Row key for Stats by Team Leader.
- * Prefer official Responded By dropdown names (Andrew Tran, Caringbah, …).
- * Facility CX mailboxes also roll into that option when Responded By is blank.
+ * Stats by Team Leader is Responded By only — same rule that makes CaringbahPDC
+ * tally correctly. Blank Responded By → Unassigned. NEW is not counted here
+ * (the table only splits Ongoing vs Resolved).
  */
 export function teamLeaderStatsBucket(
 	incident: Incident,
 	officialNames: readonly string[] = []
 ): TeamLeaderStatsBucket {
 	const response = (incident.response ?? '').trim();
-	if (response) {
-		return leaderBucket(canonicalLeaderLabel(response, officialNames), 'response');
-	}
+	if (!response) return { kind: 'unassigned' };
 
-	const teamLeader = (incident.teamLeader ?? '').trim();
-	if (teamLeader) {
-		const official = matchOfficialRespondedBy(teamLeader, officialNames);
-		const facility = official ?? facilityTeamFromName(teamLeader);
-		if (facility) return leaderBucket(facility, 'fallback');
-	}
-
-	const senderRaw = (incident.sender ?? '').trim() || (incident.emailSender ?? '').trim();
-	if (senderRaw) {
-		const official = matchOfficialRespondedBy(senderRaw, officialNames);
-		const facility = official ?? facilityTeamFromName(senderRaw);
-		if (facility) return leaderBucket(facility, 'fallback');
-	}
-
-	return { kind: 'unassigned' };
+	const label = canonicalLeaderLabel(response, officialNames);
+	return { kind: 'leader', key: label.toUpperCase(), label };
 }
 
-/** List / drill-down match for a Responded By (or facility-team) filter value. */
+/** List / drill-down: same Responded By identity as the stats table. */
 export function incidentMatchesTeamLeaderFilter(
 	incident: Incident,
 	filter: string,
@@ -139,6 +75,5 @@ export function incidentMatchesTeamLeaderFilter(
 	const bucket = teamLeaderStatsBucket(incident, officialNames);
 	if (bucket.kind === 'unassigned') return false;
 
-	const wantLabel = canonicalLeaderLabel(want, officialNames);
-	return bucket.key === wantLabel.toUpperCase();
+	return bucket.key === canonicalLeaderLabel(want, officialNames).toUpperCase();
 }

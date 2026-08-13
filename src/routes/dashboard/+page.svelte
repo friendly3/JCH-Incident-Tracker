@@ -3645,15 +3645,14 @@
 	}));
 
 	/**
-	 * Stats by Team Leader: one row per Responded By dropdown value (plus any
-	 * extra free-text names on incidents). Mailbox senders such as
-	 * "Caringbah Cust Exp" roll into the official dropdown name (Caringbah).
+	 * Stats by Team Leader: Responded By only (same rule as the CaringbahPDC tally).
+	 * One row per dropdown option, plus any extra free-text Responded By values.
 	 * Ongoing = resolution status Ongoing.
-	 * Resolved = any resolution status except Ongoing and New (same rule as KPI tiles).
-	 * Each % is that status’s share of the team leader’s own row total (Ongoing + Resolved).
+	 * Resolved = any status except Ongoing and New.
+	 * New is excluded from the row totals (e.g. 1 July CaringbahPDC / New does not
+	 * increment Ongoing, Resolved, or Total).
 	 *
-	 * Unassigned = no Responded By and no facility-team sender (any status, including New).
-	 * Shown as a bottom row with Total only — new/unanswered items often have no Responded By yet.
+	 * Unassigned = Responded By is null/blank (any status, including New).
 	 */
 	const statsByTeamLeader = $derived.by(() => {
 		const officialNames = respondedByOfficialNames;
@@ -3661,7 +3660,7 @@
 			string,
 			{ key: string; label: string; ongoing: number; resolved: number }
 		>();
-		// Always list every Responded By dropdown option (Caringbah included), even at 0.
+		// Always list every Responded By dropdown option (CaringbahPDC included), even at 0.
 		for (const name of officialNames) {
 			const label = canonicalLeaderLabel(name, officialNames);
 			const key = label.toUpperCase();
@@ -3669,7 +3668,7 @@
 				byLeader.set(key, { key, label, ongoing: 0, resolved: 0 });
 			}
 		}
-		/** Period incidents with no person and no facility-team mailbox to hang a row on. */
+		/** Period incidents with null/blank Responded By (any status). */
 		let unassignedTotal = 0;
 		for (const incident of periodIncidents) {
 			const bucket = teamLeaderStatsBucket(incident, officialNames);
@@ -3683,11 +3682,7 @@
 			const isNew = action === 'NEW';
 			// Resolved = not Ongoing and not New — New is excluded from leader Ongoing/Resolved columns
 			const isResolved = !isOngoing && !isNew;
-			// Mailbox-only fallback: unanswered / New stays in Unassigned
-			if (bucket.source === 'fallback' && isNew) {
-				unassignedTotal += 1;
-				continue;
-			}
+			// New (with a Responded By) is not Ongoing or Resolved — omit from the row tally
 			if (!isOngoing && !isResolved) continue;
 
 			const r = { key: bucket.key, label: bucket.label };
@@ -5281,7 +5276,7 @@
 									</div>
 									{#if statsByTeamLeader.unassignedTotal > 0}
 										<p class="mt-1.5 text-[11px] text-warm-500">
-											Unassigned (no Responded By and no facility team): {statsByTeamLeader.unassignedTotal} —
+											Unassigned (empty Responded By): {statsByTeamLeader.unassignedTotal} —
 											switch to Table for the full breakdown.
 										</p>
 									{/if}
@@ -5323,8 +5318,8 @@
 															<span class="tls-th-label">Team Leader</span>
 															<span class="tls-th-popup" role="tooltip">
 																One row per <strong>Responded By</strong> dropdown value.
-																Mailbox variants (e.g. Caringbah Cust Exp) roll into the
-																official option (Caringbah).
+																Counts only incidents with that Responded By. New is not
+																included in Ongoing, Resolved, or Total.
 															</span>
 														</th>
 														<th
@@ -5448,7 +5443,7 @@
 															</td>
 															<td
 																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
-																title="Period incidents with no Responded By and no facility CX team (any status)"
+																title="All period incidents with empty Responded By (any status)"
 															>
 																{statsByTeamLeader.unassignedTotal}
 															</td>
