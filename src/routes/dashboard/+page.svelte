@@ -2479,7 +2479,7 @@
 				formatter: (value: unknown) =>
 					typeof value === 'number' && Number.isFinite(value) ? String(value) : '',
 				color: ink,
-				font: { size: 11, weight: 'bold' as const },
+				font: { size: 15, weight: 'bold' as const },
 				textStrokeColor: dark ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.9)',
 				textStrokeWidth: 3
 			};
@@ -2507,7 +2507,7 @@
 								? String(value)
 								: '',
 						color: '#ffffff',
-						font: { size: 11, weight: 'bold' as const },
+						font: { size: 14, weight: 'bold' as const },
 						textStrokeColor: 'rgba(0,0,0,0.45)',
 						textStrokeWidth: 2
 					},
@@ -2547,15 +2547,25 @@
 							return sum > 0 ? String(sum) : '';
 						},
 						color: ink,
-						font: { size: 12, weight: 'bold' as const },
+						font: { size: 15, weight: 'bold' as const },
 						textStrokeColor: dark ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.9)',
 						textStrokeWidth: 3
 					}
 				}
 			};
 
-			/** Render a Chart.js chart off-DOM → PNG data URL (high DPR, no animation). */
-			async function chartToPng(
+			/**
+			 * Render a Chart.js chart off-DOM → JPEG data URL.
+			 * JPEG + jsPDF stream compression keeps exports ~0.5–2 MB instead of 100 MB+
+			 * uncompressed PNGs. 1.5× is sharp enough on A4 landscape.
+			 */
+			const PDF_CHART_DPR = 1.5;
+			const PDF_CHART_JPEG_QUALITY = 0.76;
+			/** Driver page raster — matches the 16:9 box used when placing the image. */
+			const PDF_DRIVER_RASTER_W = 1400;
+			const PDF_DRIVER_RASTER_H = 788;
+
+			async function chartToJpeg(
 				type: 'line' | 'bar',
 				width: number,
 				height: number,
@@ -2566,7 +2576,7 @@
 				const Chart = await ensureChartJs();
 				if (!Chart) throw new Error('Chart.js is not available');
 				const canvas = document.createElement('canvas');
-				const dpr = 2;
+				const dpr = PDF_CHART_DPR;
 				// Chart.js owns backing-store size via devicePixelRatio
 				canvas.style.width = `${width}px`;
 				canvas.style.height = `${height}px`;
@@ -2587,9 +2597,9 @@
 								display: Boolean(extraOptions.showLegend),
 								position: 'bottom',
 								labels: {
-									boxWidth: 10,
-									boxHeight: 10,
-									font: { size: 10, weight: 600 },
+									boxWidth: 12,
+									boxHeight: 12,
+									font: { size: 13, weight: 600 },
 									color: ink,
 									padding: 8,
 									usePointStyle: true,
@@ -2603,7 +2613,7 @@
 						// x-axis tick font +2pt vs previous PDF defaults (9 → 11)
 						scales: extraOptions.scales ?? {
 							x: {
-								ticks: { color: muted, font: { size: 11, weight: 500 }, maxRotation: 40 },
+								ticks: { color: muted, font: { size: 14, weight: 500 }, maxRotation: 40 },
 								grid: { color: rule, drawBorder: false }
 							},
 							y: {
@@ -2611,7 +2621,7 @@
 								grace: '18%',
 								ticks: {
 									color: muted,
-									font: { size: 9, weight: 500 },
+									font: { size: 13, weight: 500 },
 									precision: 0,
 									stepSize: 1
 								},
@@ -2621,13 +2631,13 @@
 						...extraOptions.chartOptions
 					} as never
 				});
-				const url = canvas.toDataURL('image/png');
+				const url = canvas.toDataURL('image/jpeg', PDF_CHART_JPEG_QUALITY);
 				chart.destroy();
 				return url;
 			}
 
 			// —— Build chart images ————————————————————————————————
-			const overTimePng = await chartToPng(
+			const overTimePng = await chartToJpeg(
 				'line',
 				720,
 				320,
@@ -2650,7 +2660,7 @@
 
 			// Kept for future: type-over-time PNG when SHOW_TYPE_OVER_TIME_CHART is re-enabled
 			const typePng = SHOW_TYPE_OVER_TIME_CHART
-				? await chartToPng(
+				? await chartToJpeg(
 						'line',
 						720,
 						320,
@@ -2676,16 +2686,17 @@
 
 			const teamLeaderStats = statsByTeamLeader;
 
-			// Full-page horizontal stacked bars (drivers on Y) — matches live dashboard chart
-			// Height scales with driver count; bars stay a fixed 20px thick.
-			const driverPdfHeight = Math.max(
-				360,
-				driverChartHeightForCount(byDriver.labels.length) + 80
+			// Full-page horizontal stacked bars. Raster matches the A4 landscape
+			// box (not a tall 2× PNG) so tick/label type stays readable.
+			const driverCount = Math.max(1, byDriver.labels.length);
+			const driverBarPx = Math.max(
+				10,
+				Math.min(22, Math.floor((PDF_DRIVER_RASTER_H - 110) / driverCount) - 2)
 			);
-			const driverPng = await chartToPng(
+			const driverPng = await chartToJpeg(
 				'bar',
-				1600,
-				driverPdfHeight,
+				PDF_DRIVER_RASTER_W,
+				PDF_DRIVER_RASTER_H,
 				{
 					labels: byDriver.labels,
 					datasets: byDriver.datasets
@@ -2697,8 +2708,8 @@
 							borderColor: ds.borderColor,
 							borderWidth: 1,
 							stack: 'types',
-							barThickness: DRIVER_BAR_THICKNESS_PX,
-							maxBarThickness: DRIVER_BAR_THICKNESS_PX
+							barThickness: driverBarPx,
+							maxBarThickness: driverBarPx
 						}))
 				},
 				{
@@ -2713,7 +2724,7 @@
 							grace: '18%',
 							ticks: {
 								color: muted,
-								font: { size: 12, weight: 500 },
+								font: { size: 15, weight: 500 },
 								precision: 0,
 								stepSize: 1
 							},
@@ -2724,7 +2735,7 @@
 							stacked: true,
 							ticks: {
 								color: muted,
-								font: { size: 12, weight: 600 },
+								font: { size: 15, weight: 600 },
 								autoSkip: false
 							},
 							grid: { display: false }
@@ -2738,9 +2749,9 @@
 								display: true,
 								position: 'bottom',
 								labels: {
-									boxWidth: 12,
-									boxHeight: 12,
-									font: { size: 12, weight: 600 },
+									boxWidth: 14,
+									boxHeight: 14,
+									font: { size: 14, weight: 600 },
 									color: ink,
 									padding: 12,
 									usePointStyle: true,
@@ -2756,7 +2767,7 @@
 
 			const statusPng =
 				byStatus.length > 0
-					? await chartToPng(
+					? await chartToJpeg(
 							'bar',
 							900,
 							220,
@@ -2785,12 +2796,22 @@
 				orientation: 'landscape',
 				unit: 'mm',
 				format: 'a4',
-				compress: false
+				compress: true
 			});
 			const pageW = pdf.internal.pageSize.getWidth() as number;
 			const pageH = pdf.internal.pageSize.getHeight() as number;
 			const m = 10;
 			const contentW = pageW - m * 2;
+
+			function addChartImage(
+				dataUrl: string,
+				x: number,
+				y: number,
+				w: number,
+				h: number
+			) {
+				pdf.addImage(dataUrl, 'JPEG', x, y, w, h, undefined, 'MEDIUM');
+			}
 
 			function setFill(hex: string) {
 				const h = hex.replace('#', '');
@@ -2822,7 +2843,7 @@
 			function pageFooter(label: string) {
 				setText(muted);
 				pdf.setFont('helvetica', 'normal');
-				pdf.setFontSize(7);
+				pdf.setFontSize(8);
 				pdf.text(label, m, pageH - 5);
 			}
 
@@ -2834,7 +2855,7 @@
 			// Header
 			setText(ink);
 			pdf.setFont('helvetica', 'bold');
-			pdf.setFontSize(16);
+			pdf.setFontSize(18);
 			pdf.text('JCH Incident Dashboard', m, m + 5);
 			pdf.setFont('helvetica', 'normal');
 			pdf.setFontSize(10);
@@ -2875,14 +2896,14 @@
 				pdf.line(x, kpiY, x, kpiY + kpiH);
 				setText(muted);
 				pdf.setFont('helvetica', 'bold');
-				pdf.setFontSize(8);
+				pdf.setFontSize(9);
 				pdf.text(kpi.title, x + 4, kpiY + 6);
 				setText(kpi.accent);
-				pdf.setFontSize(17);
+				pdf.setFontSize(18);
 				pdf.text(kpi.value, x + 4, kpiY + 14.5);
 				setText(muted);
 				pdf.setFont('helvetica', 'normal');
-				pdf.setFontSize(7);
+				pdf.setFontSize(8);
 				const sub = pdf.splitTextToSize(kpi.sub, kpiW - 8);
 				pdf.text(sub, x + 4, kpiY + 20);
 			});
@@ -2893,14 +2914,14 @@
 			roundedCard(m, y, contentW, statusH);
 			setText(ink);
 			pdf.setFont('helvetica', 'bold');
-			pdf.setFontSize(9);
+			pdf.setFontSize(11);
 			pdf.text('By Resolution Status', m + 3, y + 5);
 			setText(muted);
 			pdf.setFont('helvetica', 'normal');
-			pdf.setFontSize(7.5);
+			pdf.setFontSize(8.5);
 			pdf.text(periodLabel, pageW - m - 3, y + 5, { align: 'right' });
 			if (statusPng) {
-				pdf.addImage(statusPng, 'PNG', m + 3, y + 7, contentW - 6, statusH - 10, undefined, 'NONE');
+				addChartImage(statusPng, m + 3, y + 7, contentW - 6, statusH - 10);
 			} else {
 				setText(muted);
 				pdf.text('No resolution status data', m + 3, y + 20);
@@ -2916,7 +2937,7 @@
 			roundedCard(m + halfW + 4, y, halfW, midChartH);
 			setText(ink);
 			pdf.setFont('helvetica', 'bold');
-			pdf.setFontSize(9);
+			pdf.setFontSize(11);
 			pdf.text(
 				SHOW_TYPE_OVER_TIME_CHART ? 'Incidents by Type Over Time' : 'Stats by Team Leader',
 				m + 3,
@@ -2925,7 +2946,7 @@
 			pdf.text('Incidents Over Time', m + halfW + 7, y + 5);
 			setText(muted);
 			pdf.setFont('helvetica', 'normal');
-			pdf.setFontSize(7);
+			pdf.setFontSize(8);
 			pdf.text(
 				SHOW_TYPE_OVER_TIME_CHART ? periodLabel : `${periodLabel} · Ongoing & Resolved`,
 				m + 3,
@@ -2934,7 +2955,7 @@
 			pdf.text(periodLabel, m + halfW + 7, y + 9);
 			const plotH = midChartH - 12;
 			if (SHOW_TYPE_OVER_TIME_CHART && typePng && plotH > 20) {
-				pdf.addImage(typePng, 'PNG', m + 2, y + 11, halfW - 4, plotH, undefined, 'NONE');
+				addChartImage(typePng, m + 2, y + 11, halfW - 4, plotH);
 			} else if (!SHOW_TYPE_OVER_TIME_CHART) {
 				// Vector table (left): Team Leader | Ongoing | % | Resolved | % | Total
 				const tableX = m + 3;
@@ -2947,11 +2968,11 @@
 				const xResolvedPct = xResolved + colNum;
 				const xTotal = tableX + tableW;
 				let ty = y + 13;
-				const rowH = 5.2;
+				const rowH = 6.4;
 				const maxRows = Math.max(0, Math.floor((plotH - 8) / rowH) - 1);
 				setText(ink);
 				pdf.setFont('helvetica', 'bold');
-				pdf.setFontSize(6);
+				pdf.setFontSize(8);
 				pdf.text('Team Leader', tableX, ty);
 				pdf.text('Ongoing', xOngoing - 1, ty, { align: 'right' });
 				pdf.text('%', xOngoingPct - 1, ty, { align: 'right' });
@@ -2964,7 +2985,7 @@
 				pdf.line(tableX, ty, tableX + tableW, ty);
 				ty += 3.5;
 				pdf.setFont('helvetica', 'normal');
-				pdf.setFontSize(6);
+				pdf.setFontSize(8);
 				const pdfLeaderRows = teamLeaderStats.rows.filter((row) => row.total > 0);
 				if (pdfLeaderRows.length === 0 && teamLeaderStats.unassignedTotal === 0) {
 					setText(muted);
@@ -2993,7 +3014,7 @@
 					}
 					if (pdfLeaderRows.length > visible.length) {
 						setText(muted);
-						pdf.setFontSize(5.5);
+						pdf.setFontSize(7.5);
 						pdf.text(
 							`+${pdfLeaderRows.length - visible.length} more…`,
 							tableX,
@@ -3005,7 +3026,7 @@
 					if (teamLeaderStats.unassignedTotal > 0 && ty <= y + midChartH - 6) {
 						setText(muted);
 						pdf.setFont('helvetica', 'italic');
-						pdf.setFontSize(6);
+						pdf.setFontSize(8);
 						pdf.text('Unassigned', tableX, ty);
 						pdf.setFont('helvetica', 'normal');
 						pdf.text('—', xOngoing - 1, ty, { align: 'right' });
@@ -3021,16 +3042,7 @@
 			}
 			// Right half: over-time line chart
 			if (overTimePng && plotH > 20) {
-				pdf.addImage(
-					overTimePng,
-					'PNG',
-					m + halfW + 6,
-					y + 11,
-					halfW - 4,
-					plotH,
-					undefined,
-					'NONE'
-				);
+				addChartImage(overTimePng, m + halfW + 6, y + 11, halfW - 4, plotH);
 			}
 
 			pageFooter('Page 1 of 3 · Overview · JCH Incident Tracker');
@@ -3043,11 +3055,11 @@
 
 			setText(ink);
 			pdf.setFont('helvetica', 'bold');
-			pdf.setFontSize(14);
+			pdf.setFontSize(16);
 			pdf.text('Incidents by Driver', m, m + 5);
 			setText(muted);
 			pdf.setFont('helvetica', 'normal');
-			pdf.setFontSize(9);
+			pdf.setFontSize(10);
 			pdf.text(`${periodLabel} · stacked by type · horizontal`, m, m + 11);
 
 			const chartTop = m + 16;
@@ -3060,15 +3072,14 @@
 				const imgPad = 4;
 				const maxImgW = contentW - imgPad * 2;
 				const maxImgH = chartBoxH - imgPad * 2 - 2;
-				// Source raster is 1600×900 (horizontal stacked bars)
-				const srcW = 1600;
-				const srcH = 900;
+				const srcW = PDF_DRIVER_RASTER_W;
+				const srcH = PDF_DRIVER_RASTER_H;
 				const scale = Math.min(maxImgW / srcW, maxImgH / srcH);
 				const drawW = srcW * scale;
 				const drawH = srcH * scale;
 				const imgX = m + (contentW - drawW) / 2;
 				const imgY = chartTop + (chartBoxH - drawH) / 2;
-				pdf.addImage(driverPng, 'PNG', imgX, imgY, drawW, drawH, undefined, 'NONE');
+				addChartImage(driverPng, imgX, imgY, drawW, drawH);
 			} else {
 				setText(muted);
 				pdf.setFontSize(11);
@@ -3084,11 +3095,11 @@
 			function drawTableHeader(startY: number): number {
 				setText(ink);
 				pdf.setFont('helvetica', 'bold');
-				pdf.setFontSize(14);
+				pdf.setFontSize(16);
 				pdf.text('Incidents by Driver per Month', m, startY);
 				setText(muted);
 				pdf.setFont('helvetica', 'normal');
-				pdf.setFontSize(9);
+				pdf.setFontSize(10);
 				pdf.text(
 					`${tally.periodLabel} · ${tally.rows.length} driver${tally.rows.length === 1 ? '' : 's'} · ${tally.grandTotal} total`,
 					m,
@@ -3109,8 +3120,8 @@
 				tally.months.length > 0
 					? restW / (tally.months.length + (showMonthTotals ? 1 : 0))
 					: restW;
-			const rowH = 6;
-			const fontSize = tally.months.length > 10 ? 7 : tally.months.length > 6 ? 7.5 : 8;
+			const rowH = 6.8;
+			const fontSize = tally.months.length > 10 ? 8.5 : tally.months.length > 6 ? 9 : 10;
 
 			function colX(i: number): number {
 				if (i === 0) return m;
@@ -3217,7 +3228,7 @@
 				pdf.rect(0, pageH - 8, pageW, 8, 'F');
 				setText(muted);
 				pdf.setFont('helvetica', 'normal');
-				pdf.setFontSize(7);
+				pdf.setFontSize(8);
 				const label =
 					p === 1
 						? `Page 1 of ${pageCount} · Overview · JCH Incident Tracker`
