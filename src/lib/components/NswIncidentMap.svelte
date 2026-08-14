@@ -403,11 +403,38 @@
 	}
 
 	/** Snapshot the live map for the dashboard PDF (light basemap, JPEG). */
-	export async function captureForPdf(): Promise<string | null> {
+	export async function captureForPdf(opts?: {
+		width?: number;
+		height?: number;
+	}): Promise<{ url: string; width: number; height: number } | null> {
 		if (!mapEl || !map || !ready || typeof window === 'undefined') return null;
+
+		const prev = {
+			position: mapEl.style.position,
+			inset: mapEl.style.inset,
+			left: mapEl.style.left,
+			top: mapEl.style.top,
+			width: mapEl.style.width,
+			height: mapEl.style.height,
+			zIndex: mapEl.style.zIndex
+		};
+		const sized = Boolean(opts?.width && opts?.height);
+		if (sized) {
+			mapEl.style.position = 'fixed';
+			mapEl.style.inset = 'auto';
+			mapEl.style.left = '-12000px';
+			mapEl.style.top = '0';
+			mapEl.style.width = `${opts!.width}px`;
+			mapEl.style.height = `${opts!.height}px`;
+			mapEl.style.zIndex = '-1';
+		}
+
 		map.invalidateSize({ animate: false });
+		fitAllMarkers(false);
 		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-		await new Promise<void>((resolve) => setTimeout(resolve, 120));
+		await new Promise<void>((resolve) => setTimeout(resolve, sized ? 450 : 120));
+		resolveLabelLayout();
+
 		const controls = mapEl.querySelector('.leaflet-control-container') as HTMLElement | null;
 		const prevVis = controls?.style.visibility ?? '';
 		if (controls) controls.style.visibility = 'hidden';
@@ -417,17 +444,34 @@
 				backgroundColor: '#e8e8e8',
 				useCORS: true,
 				allowTaint: false,
-				scale: 1.5,
+				scale: 2,
 				logging: false,
+				width: mapEl.clientWidth,
+				height: mapEl.clientHeight,
 				windowWidth: mapEl.clientWidth,
 				windowHeight: mapEl.clientHeight
 			});
-			return canvas.toDataURL('image/jpeg', 0.82);
+			return {
+				url: canvas.toDataURL('image/jpeg', 0.84),
+				width: canvas.width,
+				height: canvas.height
+			};
 		} catch (err) {
 			console.warn('Map PDF capture failed', err);
 			return null;
 		} finally {
 			if (controls) controls.style.visibility = prevVis;
+			if (sized) {
+				mapEl.style.position = prev.position;
+				mapEl.style.inset = prev.inset;
+				mapEl.style.left = prev.left;
+				mapEl.style.top = prev.top;
+				mapEl.style.width = prev.width;
+				mapEl.style.height = prev.height;
+				mapEl.style.zIndex = prev.zIndex;
+				map.invalidateSize({ animate: false });
+				requestAnimationFrame(() => resolveLabelLayout());
+			}
 		}
 	}
 
