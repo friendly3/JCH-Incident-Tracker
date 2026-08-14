@@ -92,6 +92,11 @@ export function replaceCanvasesWithImages(sourceRoot: HTMLElement, cloneRoot: HT
 	});
 }
 
+/** Screen-reader tables leak as visible text in html2canvas — drop them from the clone. */
+export function stripAssistiveOnly(cloneRoot: ParentNode) {
+	cloneRoot.querySelectorAll('.sr-only').forEach((el) => el.remove());
+}
+
 /** Run inside html2canvas `onclone` so the cloned document has only rgb/hex colors. */
 export function sanitizeCloneColors(clonedDoc: Document) {
 	clonedDoc.querySelectorAll('style').forEach((el) => {

@@ -17,7 +17,11 @@
 	import { getDuplicateIncidentIds } from '$lib/incidentDuplicates';
 	import CourierTruckIcon from '$lib/components/CourierTruckIcon.svelte';
 	import NswIncidentMap from '$lib/components/NswIncidentMap.svelte';
-	import { replaceCanvasesWithImages, sanitizeCloneColors } from '$lib/pdfCapture';
+	import {
+		replaceCanvasesWithImages,
+		sanitizeCloneColors,
+		stripAssistiveOnly
+	} from '$lib/pdfCapture';
 	import {
 		canonicalLeaderLabel,
 		teamLeaderStatsBucket
@@ -2498,6 +2502,7 @@
 					scrollY: 0,
 					onclone(clonedDoc, clone) {
 						sanitizeCloneColors(clonedDoc);
+						stripAssistiveOnly(clone);
 						replaceCanvasesWithImages(el, clone);
 					}
 				});
@@ -5725,7 +5730,8 @@
 		display: block;
 	}
 
-	:global(#dashboard-pdf-root.pdf-capture [data-pdf-hide]) {
+	:global(#dashboard-pdf-root.pdf-capture [data-pdf-hide]),
+	:global(#dashboard-pdf-root.pdf-capture .sr-only) {
 		display: none !important;
 	}
 
