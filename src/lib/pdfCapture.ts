@@ -59,6 +59,39 @@ function rewriteStyleSheet(sheet: CSSStyleSheet) {
 	}
 }
 
+/**
+ * Chart.js canvases are 2× device pixels. If the clone keeps that bitmap size as
+ * CSS size, html2canvas only paints the left/top half — “dots on the left”.
+ * Replace each canvas with a PNG <img> at the on-screen CSS size.
+ */
+export function replaceCanvasesWithImages(sourceRoot: HTMLElement, cloneRoot: HTMLElement) {
+	const srcList = sourceRoot.querySelectorAll('canvas');
+	const dstList = cloneRoot.querySelectorAll('canvas');
+	srcList.forEach((src, i) => {
+		const dst = dstList[i];
+		if (!(dst instanceof HTMLCanvasElement)) return;
+		if (src.width < 2 || src.height < 2) return;
+		const cssW = Math.max(1, src.clientWidth || Math.round(src.width / 2));
+		const cssH = Math.max(1, src.clientHeight || Math.round(src.height / 2));
+		try {
+			const img = dst.ownerDocument.createElement('img');
+			img.src = src.toDataURL('image/png');
+			img.alt = '';
+			img.width = cssW;
+			img.height = cssH;
+			img.style.cssText = `display:block;width:${cssW}px;height:${cssH}px;max-width:none;`;
+			dst.replaceWith(img);
+		} catch {
+			const ctx = dst.getContext('2d');
+			dst.width = src.width;
+			dst.height = src.height;
+			dst.style.width = `${cssW}px`;
+			dst.style.height = `${cssH}px`;
+			ctx?.drawImage(src, 0, 0);
+		}
+	});
+}
+
 /** Run inside html2canvas `onclone` so the cloned document has only rgb/hex colors. */
 export function sanitizeCloneColors(clonedDoc: Document) {
 	clonedDoc.querySelectorAll('style').forEach((el) => {

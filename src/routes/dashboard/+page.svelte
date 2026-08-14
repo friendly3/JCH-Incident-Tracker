@@ -17,7 +17,7 @@
 	import { getDuplicateIncidentIds } from '$lib/incidentDuplicates';
 	import CourierTruckIcon from '$lib/components/CourierTruckIcon.svelte';
 	import NswIncidentMap from '$lib/components/NswIncidentMap.svelte';
-	import { sanitizeCloneColors } from '$lib/pdfCapture';
+	import { replaceCanvasesWithImages, sanitizeCloneColors } from '$lib/pdfCapture';
 	import {
 		canonicalLeaderLabel,
 		teamLeaderStatsBucket
@@ -2450,7 +2450,12 @@
 		closeDriverMonthDetail();
 
 		const prevTeamLeaderView = dashboardUi.teamLeaderView;
+		const prevDriverMonthView = dashboardUi.driverMonthView;
+		const prevDriverMonthHidden = [...driverMonthHiddenLabels];
+		const prevDriverMonthTouched = driverMonthVisibilityTouched;
 		dashboardUi.teamLeaderView = 'table';
+		dashboardUi.driverMonthView = 'chart';
+		applyDriverMonthTopNVisibility(DRIVER_MONTH_TOP_N);
 
 		const root = document.getElementById('dashboard-pdf-root');
 		root?.classList.add('pdf-capture');
@@ -2458,6 +2463,11 @@
 		try {
 			await tick();
 			await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+			const waitUntil = Date.now() + 1600;
+			while (Date.now() < waitUntil && hasDriverMonthTally && !driverMonthChart) {
+				await new Promise<void>((resolve) => setTimeout(resolve, 50));
+			}
 
 			for (const chart of [
 				chartInstance,
@@ -2469,16 +2479,16 @@
 				chart?.resize();
 				chart?.update('none');
 			}
-			await new Promise<void>((resolve) => setTimeout(resolve, 280));
+			await new Promise<void>((resolve) => setTimeout(resolve, 200));
 
 			const html2canvas = (await import('html2canvas-pro')).default;
 			const { jsPDF } = await import('jspdf');
 
 			async function captureEl(el: HTMLElement): Promise<HTMLCanvasElement> {
-				const width = Math.max(el.scrollWidth, el.clientWidth, 1280);
+				const width = Math.max(el.scrollWidth, el.clientWidth, 1360);
 				return html2canvas(el, {
 					backgroundColor: '#f7f4ef',
-					scale: 2,
+					scale: 2.5,
 					useCORS: true,
 					allowTaint: false,
 					logging: false,
@@ -2488,16 +2498,7 @@
 					scrollY: 0,
 					onclone(clonedDoc, clone) {
 						sanitizeCloneColors(clonedDoc);
-						const srcCanvases = el.querySelectorAll('canvas');
-						const dstCanvases = clone.querySelectorAll('canvas');
-						srcCanvases.forEach((src, i) => {
-							const dst = dstCanvases[i];
-							if (!(dst instanceof HTMLCanvasElement)) return;
-							dst.width = src.width;
-							dst.height = src.height;
-							const ctx = dst.getContext('2d');
-							if (ctx) ctx.drawImage(src, 0, 0);
-						});
+						replaceCanvasesWithImages(el, clone);
 					}
 				});
 			}
@@ -2509,20 +2510,29 @@
 			const shot1 = await captureEl(page1);
 			const shot2 = page2 ? await captureEl(page2) : null;
 
+			function pageMmFor(canvas: HTMLCanvasElement): [number, number] {
+				const aspect = canvas.width / Math.max(1, canvas.height);
+				const h = 200;
+				const w = Math.min(400, Math.max(280, h * aspect));
+				return [w, h];
+			}
+
+			const [w1, h1] = pageMmFor(shot1);
 			const pdf = new jsPDF({
-				orientation: 'landscape',
+				orientation: w1 >= h1 ? 'landscape' : 'portrait',
 				unit: 'mm',
-				format: 'a4',
+				format: [w1, h1],
 				compress: true
 			});
-			const pageW = pdf.internal.pageSize.getWidth() as number;
-			const pageH = pdf.internal.pageSize.getHeight() as number;
-			const margin = 5;
+			const margin = 3.5;
 
 			function addShot(canvas: HTMLCanvasElement, first: boolean) {
-				if (!first) pdf.addPage();
+				const [pw, ph] = pageMmFor(canvas);
+				if (!first) pdf.addPage([pw, ph], pw >= ph ? 'landscape' : 'portrait');
+				const pageW = pdf.internal.pageSize.getWidth() as number;
+				const pageH = pdf.internal.pageSize.getHeight() as number;
 				const maxW = pageW - margin * 2;
-				const maxH = pageH - margin * 2;
+				const maxH = pageH - margin * 2 - 3;
 				const aspect = canvas.width / canvas.height;
 				let w = maxW;
 				let h = w / aspect;
@@ -2531,9 +2541,9 @@
 					w = h * aspect;
 				}
 				const x = (pageW - w) / 2;
-				const y = (pageH - h) / 2;
+				const y = margin;
 				pdf.addImage(
-					canvas.toDataURL('image/jpeg', 0.88),
+					canvas.toDataURL('image/jpeg', 0.92),
 					'JPEG',
 					x,
 					y,
@@ -2550,14 +2560,17 @@
 			const pageCount = pdf.getNumberOfPages();
 			for (let p = 1; p <= pageCount; p++) {
 				pdf.setPage(p);
+				const pageW = pdf.internal.pageSize.getWidth() as number;
+				const pageH = pdf.internal.pageSize.getHeight() as number;
 				pdf.setFont('helvetica', 'normal');
 				pdf.setFontSize(7);
 				pdf.setTextColor(120);
 				const label =
 					p === 1
 						? `Page ${p} of ${pageCount} · Overview · JCH Incident Tracker`
-						: `Page ${p} of ${pageCount} · Drivers & map · JCH Incident Tracker`;
-				pdf.text(label, margin, pageH - 2);
+						: `Page ${p} of ${pageCount} · Drivers · JCH Incident Tracker`;
+				pdf.text(label, margin, pageH - 1.6);
+				void pageW;
 			}
 
 			const periodSlug = pdfFilenameSlug(timeRangeLabel) || 'period';
@@ -2572,6 +2585,11 @@
 			if (dashboardUi.teamLeaderView !== prevTeamLeaderView) {
 				dashboardUi.teamLeaderView = prevTeamLeaderView;
 			}
+			if (dashboardUi.driverMonthView !== prevDriverMonthView) {
+				dashboardUi.driverMonthView = prevDriverMonthView;
+			}
+			driverMonthHiddenLabels = prevDriverMonthHidden;
+			driverMonthVisibilityTouched = prevDriverMonthTouched;
 			pdfExporting = false;
 		}
 	}
@@ -5489,8 +5507,8 @@
 					</section>
 				</div>
 
-				<!-- NSW map on its own full-width row -->
-				<div class="dashboard-map-row mt-2">
+				<!-- NSW map — hidden in PDF so page 2 stays a dense driver pair -->
+				<div class="dashboard-map-row mt-2" data-pdf-hide>
 					<div class="min-h-[min(28rem,55vh)] w-full [&_.map-chart-shell]:h-full [&_.map-chart-shell]:min-h-[min(28rem,55vh)]">
 						<NswIncidentMap
 							bind:this={nswMap}
@@ -5714,13 +5732,23 @@
 	:global(#dashboard-pdf-root.pdf-capture [data-pdf-page]),
 	:global(#dashboard-pdf-root.pdf-capture #dashboard-pdf-page-1),
 	:global(#dashboard-pdf-root.pdf-capture #dashboard-pdf-page-2) {
-		min-width: 1280px;
+		min-width: 1400px;
+		max-width: 1400px;
 		background: #f7f4ef;
+		padding: 0.35rem 0.5rem 0.5rem;
 	}
 
 	:global(#dashboard-pdf-root.pdf-capture .dashboard-summary > div) {
 		display: grid !important;
 		grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
+	}
+
+	:global(#dashboard-pdf-root.pdf-capture .dashboard-summary) {
+		margin-bottom: 0.4rem !important;
+	}
+
+	:global(#dashboard-pdf-root.pdf-capture hr) {
+		margin-bottom: 0.45rem !important;
 	}
 
 	:global(#dashboard-pdf-root.pdf-capture .dashboard-chart-row),
@@ -5729,6 +5757,7 @@
 		grid-template-columns: 1fr 1fr !important;
 		align-items: stretch !important;
 		gap: 0.5rem !important;
+		margin-top: 0 !important;
 	}
 
 	:global(#dashboard-pdf-root.pdf-capture .team-leader-view-toggle),
