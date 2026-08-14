@@ -2438,9 +2438,7 @@
 
 	/**
 	 * High-fidelity PDF: snapshot the live dashboard grid (html2canvas).
-	 * Page 1 = KPIs + status + team-leader | over-time.
-	 * Page 2 = driver month + driver bars (+ map).
-	 * Images are fitted without stretching.
+	 * Honours the current Table/Chart toggles, period, and series visibility.
 	 */
 	async function exportDashboardPdf() {
 		if (pdfExporting || typeof window === 'undefined') return;
@@ -2453,25 +2451,12 @@
 		driverMonthPickerOpen = false;
 		closeDriverMonthDetail();
 
-		const prevTeamLeaderView = dashboardUi.teamLeaderView;
-		const prevDriverMonthView = dashboardUi.driverMonthView;
-		const prevDriverMonthHidden = [...driverMonthHiddenLabels];
-		const prevDriverMonthTouched = driverMonthVisibilityTouched;
-		dashboardUi.teamLeaderView = 'table';
-		dashboardUi.driverMonthView = 'chart';
-		applyDriverMonthTopNVisibility(DRIVER_MONTH_TOP_N);
-
 		const root = document.getElementById('dashboard-pdf-root');
 		root?.classList.add('pdf-capture');
 
 		try {
 			await tick();
 			await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-			const waitUntil = Date.now() + 1600;
-			while (Date.now() < waitUntil && hasDriverMonthTally && !driverMonthChart) {
-				await new Promise<void>((resolve) => setTimeout(resolve, 50));
-			}
 
 			for (const chart of [
 				chartInstance,
@@ -2587,14 +2572,6 @@
 				err instanceof Error ? err.message : 'Could not create PDF. Try again.';
 		} finally {
 			root?.classList.remove('pdf-capture');
-			if (dashboardUi.teamLeaderView !== prevTeamLeaderView) {
-				dashboardUi.teamLeaderView = prevTeamLeaderView;
-			}
-			if (dashboardUi.driverMonthView !== prevDriverMonthView) {
-				dashboardUi.driverMonthView = prevDriverMonthView;
-			}
-			driverMonthHiddenLabels = prevDriverMonthHidden;
-			driverMonthVisibilityTouched = prevDriverMonthTouched;
 			pdfExporting = false;
 		}
 	}
