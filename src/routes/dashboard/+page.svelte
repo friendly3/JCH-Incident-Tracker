@@ -17,6 +17,7 @@
 	import { getDuplicateIncidentIds } from '$lib/incidentDuplicates';
 	import CourierTruckIcon from '$lib/components/CourierTruckIcon.svelte';
 	import NswIncidentMap from '$lib/components/NswIncidentMap.svelte';
+	import { sanitizeCloneColors } from '$lib/pdfCapture';
 	import {
 		canonicalLeaderLabel,
 		teamLeaderStatsBucket
@@ -2470,7 +2471,7 @@
 			}
 			await new Promise<void>((resolve) => setTimeout(resolve, 280));
 
-			const html2canvas = (await import('html2canvas')).default;
+			const html2canvas = (await import('html2canvas-pro')).default;
 			const { jsPDF } = await import('jspdf');
 
 			async function captureEl(el: HTMLElement): Promise<HTMLCanvasElement> {
@@ -2485,7 +2486,8 @@
 					windowWidth: width,
 					scrollX: 0,
 					scrollY: 0,
-					onclone(_doc, clone) {
+					onclone(clonedDoc, clone) {
+						sanitizeCloneColors(clonedDoc);
 						const srcCanvases = el.querySelectorAll('canvas');
 						const dstCanvases = clone.querySelectorAll('canvas');
 						srcCanvases.forEach((src, i) => {

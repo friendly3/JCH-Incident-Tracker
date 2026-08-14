@@ -439,7 +439,8 @@
 		const prevVis = controls?.style.visibility ?? '';
 		if (controls) controls.style.visibility = 'hidden';
 		try {
-			const html2canvas = (await import('html2canvas')).default;
+			const html2canvas = (await import('html2canvas-pro')).default;
+			const { sanitizeCloneColors } = await import('$lib/pdfCapture');
 			const canvas = await html2canvas(mapEl, {
 				backgroundColor: '#e8e8e8',
 				useCORS: true,
@@ -449,7 +450,10 @@
 				width: mapEl.clientWidth,
 				height: mapEl.clientHeight,
 				windowWidth: mapEl.clientWidth,
-				windowHeight: mapEl.clientHeight
+				windowHeight: mapEl.clientHeight,
+				onclone(clonedDoc) {
+					sanitizeCloneColors(clonedDoc);
+				}
 			});
 			return {
 				url: canvas.toDataURL('image/jpeg', 0.84),
