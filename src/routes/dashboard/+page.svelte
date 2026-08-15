@@ -2596,7 +2596,7 @@
 									? String(value)
 									: '',
 							color: '#ffffff',
-							font: { size: 9, weight: 'bold' as const },
+							font: { size: 10, weight: 'bold' as const },
 							textStrokeColor: 'rgba(0,0,0,0.45)',
 							textStrokeWidth: 2
 						},
@@ -2639,7 +2639,7 @@
 							clamp: false,
 							clip: false,
 							color: colors.legend,
-							font: { size: 11, weight: 'bold' as const },
+							font: { size: 12, weight: 'bold' as const },
 							textStrokeColor: isDarkMode()
 								? 'rgba(0,0,0,0.75)'
 								: 'rgba(255,255,255,0.9)',
