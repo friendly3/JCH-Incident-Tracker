@@ -1341,27 +1341,54 @@
 		}
 	};
 
-	function applyDriverMonthLineTheme(chart: ChartJS<'line'>) {
+	function applyDriverMonthSeriesFocus(
+		chart: ChartJS<'line'>,
+		focusLabel: string | null = null
+	) {
 		const colors = getChartTheme(theme.isDark);
 		const isDark = theme.isDark;
-		const bucket: OverTimeBucket = 'month';
+		const dimColor = getDimmedSeriesColor(isDark);
 		const colorMap = assignDistinctCategoryColors(
 			chart.data.datasets.map((d) => String(d.label ?? '')),
 			isDark
 		);
-		chart.data.datasets.forEach((dataset) => {
+		const single = lineHasSingleCategory(chart);
+		const focus = single ? null : focusLabel;
+		chart.data.datasets.forEach((dataset, index) => {
 			const label = String(dataset.label ?? '');
 			const stroke =
 				colorMap.get(label) ?? getChartCategoryColor(dataset.label, 0, isDark);
-			dataset.borderColor = stroke;
-			dataset.backgroundColor = withAlpha(stroke, 0.06);
-			dataset.pointBackgroundColor = stroke;
+			const dimmed = focus != null && focus !== label;
+			const focused = focus != null && focus === label;
+			const lineColor = dimmed ? dimColor : stroke;
+			dataset.borderColor = lineColor;
+			dataset.backgroundColor = withAlpha(lineColor, dimmed ? 0.02 : 0.06);
+			dataset.pointBackgroundColor = lineColor;
 			(dataset as { legendColor?: string }).legendColor = stroke;
-			dataset.pointBorderColor = colors.pointBorder;
-			dataset.borderWidth = 2.5;
-			dataset.pointBorderWidth = 2;
+			dataset.pointBorderColor = dimmed ? dimColor : colors.pointBorder;
+			dataset.borderWidth = dimmed ? 1.25 : focused ? 3.5 : 2.5;
+			dataset.pointRadius = scaledLinePoint(
+				dimmed ? 1.5 : LINE_CHART_POINTS.radius,
+				single
+			);
+			dataset.pointHoverRadius = scaledLinePoint(
+				dimmed ? 2.5 : LINE_CHART_POINTS.hoverRadius,
+				single
+			);
+			dataset.pointBorderWidth = dimmed ? 1 : 2;
+			dataset.order = dimmed ? index : focused ? 1000 : 100 + index;
 		});
+	}
+
+	function applyDriverMonthLineTheme(
+		chart: ChartJS<'line'>,
+		focusLabel: string | null = null
+	) {
+		const colors = getChartTheme(theme.isDark);
+		const isDark = theme.isDark;
+		const bucket: OverTimeBucket = 'month';
 		applyLineChartPoints(chart);
+		applyDriverMonthSeriesFocus(chart, focusLabel);
 		applyDriverMonthTiePointColors(chart);
 		if (chart.options?.plugins?.legend) {
 			chart.options.plugins.legend.display = false;
@@ -1369,7 +1396,9 @@
 		if (chart.options?.plugins?.datalabels) {
 			const baseLabels = buildLineDataLabels(colors, { fontSize: 10, multiSeries: true });
 			Object.assign(chart.options.plugins.datalabels, baseLabels);
-			if (lineHasSingleCategory(chart)) {
+			const single = lineHasSingleCategory(chart);
+			const focus = single ? null : focusLabel;
+			if (single) {
 				chart.options.plugins.datalabels.display = (context) => {
 					const raw = context.dataset.data[context.dataIndex];
 					if (!(typeof raw === 'number' && raw > 0)) return false;
@@ -1380,6 +1409,15 @@
 						}
 					}
 					return true;
+				};
+			} else if (focus != null) {
+				const baseDisplay = baseLabels.display;
+				chart.options.plugins.datalabels.display = (context) => {
+					if (String(context.dataset.label ?? '') !== focus) return false;
+					if (typeof baseDisplay === 'function') {
+						return (baseDisplay as (c: typeof context) => boolean)(context);
+					}
+					return baseDisplay !== false;
 				};
 			}
 		}
@@ -2823,6 +2861,7 @@
 	/** Legend hover focus — other series dim on the matching chart. */
 	let hoveredTypeOverTimeLabel = $state<string | null>(null);
 	let hoveredDriverTypeLabel = $state<string | null>(null);
+	let hoveredDriverMonthLabel = $state<string | null>(null);
 
 	/** PDF export (html2canvas + jsPDF). */
 	let pdfExporting = $state(false);
@@ -2858,6 +2897,7 @@
 		pdfExportError = null;
 		hoveredTypeOverTimeLabel = null;
 		hoveredDriverTypeLabel = null;
+		hoveredDriverMonthLabel = null;
 		actionStatusPickerOpen = false;
 		driverMonthPickerOpen = false;
 		closeDriverMonthDetail();
@@ -4358,6 +4398,7 @@
 	$effect(() => {
 		if (dashboardUi.driverMonthView === 'chart') return;
 		driverMonthPickerOpen = false;
+		hoveredDriverMonthLabel = null;
 		untrack(() => {
 			const chart = driverMonthChart;
 			if (!chart) return;
@@ -4387,11 +4428,23 @@
 			pointHoverRadius: ds.pointHoverRadius,
 			hidden: hidden.includes(ds.label)
 		}));
-		applyDriverMonthLineTheme(instance);
+		applyDriverMonthLineTheme(
+			instance,
+			untrack(() => (showDriverMonthTotals ? hoveredDriverMonthLabel : null))
+		);
 		queueMicrotask(() => {
 			instance.resize();
 			instance.update('none');
 		});
+	});
+
+	// Multi-month only: legend hover greys other driver lines (same idea as type-over-time)
+	$effect(() => {
+		const instance = driverMonthChart;
+		if (!instance || dashboardUi.driverMonthView !== 'chart') return;
+		const focus = showDriverMonthTotals ? hoveredDriverMonthLabel : null;
+		applyDriverMonthSeriesFocus(instance, focus);
+		instance.update('none');
 	});
 
 	$effect(() => {
@@ -4412,7 +4465,10 @@
 			applyTeamLeaderBarTheme(teamLeaderChart);
 		}
 		if (driverMonthChart) {
-			applyDriverMonthLineTheme(driverMonthChart);
+			applyDriverMonthLineTheme(
+				driverMonthChart,
+				untrack(() => (showDriverMonthTotals ? hoveredDriverMonthLabel : null))
+			);
 		}
 		// Hover is applied by the driver data effect above; only re-theme on dark toggle
 		if (driverChart) {
@@ -5623,7 +5679,12 @@
 								{#if driverMonthVisibleCount > 0}
 									<ul
 										class="flex flex-wrap gap-x-1.5 gap-y-1"
-										aria-label="Driver series legend for {driverMonthTally.periodLabel}. Click to hide a series from the chart."
+										aria-label="Driver series legend for {driverMonthTally.periodLabel}. Click to hide a series from the chart.{showDriverMonthTotals
+											? ' Hover to highlight a series.'
+											: ''}"
+										onpointerleave={() => {
+											hoveredDriverMonthLabel = null;
+										}}
 									>
 										{#each driverMonthTally.rows as row (row.key)}
 											{@const visible = isLegendVisible(
@@ -5634,16 +5695,33 @@
 												{@const swatch =
 													driverMonthColorByLabel.get(row.label) ??
 													getChartCategoryColor(row.label, 0, theme.isDark)}
+												{@const focus = showDriverMonthTotals
+													? hoveredDriverMonthLabel
+													: null}
+												{@const dimLegend =
+													visible && focus != null && focus !== row.label}
+												{@const activeLegend = visible && focus === row.label}
 												<li>
 													<button
 														type="button"
-														class="dashboard-legend-btn flex max-w-full items-center gap-1 text-[12px] leading-tight text-warm-600"
+														class="dashboard-legend-btn flex max-w-full items-center gap-1 text-[12px] leading-tight text-warm-600 {dimLegend
+															? 'opacity-35'
+															: activeLegend
+																? 'bg-warm-100 text-warm-800 opacity-100 ring-1 ring-warm-300/80 dark:bg-warm-200'
+																: ''}"
 														aria-pressed={true}
 														title="Hide {row.label} on chart"
+														onpointerenter={() => {
+															if (showDriverMonthTotals) {
+																hoveredDriverMonthLabel = row.label;
+															}
+														}}
 														onclick={() => toggleDriverMonthLegend(row.label)}
 													>
 														<span
-															class="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+															class="inline-block h-2.5 w-2.5 shrink-0 rounded-full {dimLegend
+																? 'opacity-50'
+																: ''}"
 															style="background: {swatch}"
 															aria-hidden="true"
 														></span>
