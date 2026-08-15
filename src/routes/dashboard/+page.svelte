@@ -908,6 +908,10 @@
 					padding: 12,
 					cornerRadius: 8,
 					displayColors: true,
+					// Caret on the right of the box → tooltip sits left of the point
+					xAlign: 'right',
+					yAlign: 'center',
+					caretPadding: 10,
 					filter: (item) => {
 						// Hide tooltip rows for series the user turned off
 						return item.dataset.hidden !== true;
