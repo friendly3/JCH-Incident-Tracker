@@ -2369,6 +2369,24 @@
 		return sum;
 	}
 
+	/** Visible incident total across every driver bar (selected period, legend-honouring). */
+	function sumVisibleDriverPeriodTotal(chart: {
+		data: { labels?: unknown; datasets: { data?: unknown[]; hidden?: boolean }[] };
+		isDatasetVisible?: (index: number) => boolean;
+	}): number {
+		const n = Array.isArray(chart.data.labels) ? chart.data.labels.length : 0;
+		let sum = 0;
+		for (let i = 0; i < n; i++) sum += sumVisibleDriverStack(chart, i);
+		return sum;
+	}
+
+	function formatDriverPeriodShare(part: number, whole: number): string {
+		if (whole <= 0 || part <= 0) return '0%';
+		const pct = (part / whole) * 100;
+		if (pct > 0 && pct < 1) return '<1%';
+		return `${Math.round(pct)}%`;
+	}
+
 	/** Last dataset index that is currently visible (draws the end total once). */
 	function lastVisibleDriverDatasetIndex(chart: {
 		data: { datasets: { hidden?: boolean }[] };
@@ -2404,8 +2422,8 @@
 			maintainAspectRatio: false,
 			indexAxis: 'y',
 			layout: {
-				// Extra right pad so external total labels are not clipped
-				padding: { top: 2, right: 32, left: 2, bottom: 2 }
+				// Extra right pad so "12 (25%)" end labels are not clipped
+				padding: { top: 2, right: 56, left: 2, bottom: 2 }
 			},
 			onHover: (event, elements) => {
 				const native = event.native;
@@ -2528,13 +2546,18 @@
 								context: {
 									dataIndex: number;
 									chart: {
-										data: { datasets: { data?: unknown[]; hidden?: boolean }[] };
+										data: {
+											labels?: unknown;
+											datasets: { data?: unknown[]; hidden?: boolean }[];
+										};
 										isDatasetVisible?: (index: number) => boolean;
 									};
 								}
 							) => {
 								const sum = sumVisibleDriverStack(context.chart, context.dataIndex);
-								return sum > 0 ? String(sum) : '';
+								if (sum <= 0) return '';
+								const period = sumVisibleDriverPeriodTotal(context.chart);
+								return `${sum} (${formatDriverPeriodShare(sum, period)})`;
 							},
 							// Horizontal bar: end of bar = right side of stack
 							anchor: 'end',
@@ -2556,8 +2579,8 @@
 				x: {
 					stacked: true,
 					beginAtZero: true,
-					// Room for external total labels past the bar end
-					grace: '18%',
+					// Room for external "12 (25%)" labels past the bar end
+					grace: '22%',
 					ticks: {
 						color: colors.ticks,
 						stepSize: 1,
