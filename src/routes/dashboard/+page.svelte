@@ -2215,7 +2215,9 @@
 			dataset.backgroundColor = withAlpha(solid, 0.85);
 			dataset.borderColor = solid;
 			dataset.borderWidth = 1;
-			dataset.borderRadius = 2;
+			// Same outer-end rounding as Incidents by Driver (flush stacked joins).
+			dataset.borderRadius = driverBarSegmentRadius;
+			dataset.borderSkipped = false;
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			(dataset as any).barThickness = TEAM_LEADER_BAR_THICKNESS_PX;
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -3607,7 +3609,8 @@
 					backgroundColor: withAlpha(status.ongoing, 0.85),
 					borderColor: status.ongoing,
 					borderWidth: 1,
-					borderRadius: 2,
+					borderRadius: DRIVER_BAR_RADIUS_PX,
+					borderSkipped: false,
 					stack: 'tls',
 					barThickness: TEAM_LEADER_BAR_THICKNESS_PX,
 					maxBarThickness: TEAM_LEADER_BAR_THICKNESS_PX
@@ -3618,7 +3621,8 @@
 					backgroundColor: withAlpha(status.resolved, 0.85),
 					borderColor: status.resolved,
 					borderWidth: 1,
-					borderRadius: 2,
+					borderRadius: DRIVER_BAR_RADIUS_PX,
+					borderSkipped: false,
 					stack: 'tls',
 					barThickness: TEAM_LEADER_BAR_THICKNESS_PX,
 					maxBarThickness: TEAM_LEADER_BAR_THICKNESS_PX
