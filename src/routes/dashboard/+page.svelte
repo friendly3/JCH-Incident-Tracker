@@ -965,19 +965,14 @@
 	}
 
 	/**
-	 * Shared chrome for Incidents Over Time and Incidents by Driver per Month.
-	 * Keep those two line charts in lockstep — do not special-case one without the other.
+	 * Shared point chrome for every dashboard line chart.
+	 * Same marker size on Over Time, type-over-time, and driver-per-month.
 	 */
-	const PAIRED_LINE_CHARTS = {
-		/** +25% then another +25% when there is no connecting line. */
-		singlePointScale: 1.25 * 1.25,
-		overTime: {
-			radius: 5,
-			hoverRadius: 7,
-			/** Single-point Over Time marker is 15% smaller than the shared scale. */
-			singlePointScale: 1.25 * 1.25 * 0.85
-		},
-		driverMonth: { radius: 3.5, hoverRadius: 6 },
+	const LINE_CHART_POINTS = {
+		radius: 5,
+		hoverRadius: 7,
+		/** Single-category scale (includes the 15% reduction). */
+		singlePointScale: 1.25 * 1.25 * 0.85,
 		/** Match NSW map `.incident-pulse` (2.4s, 14px fade). */
 		pulseMs: 2400,
 		pulseSpread: 14
@@ -999,23 +994,15 @@
 		return single;
 	}
 
-	function scaledLinePoint(
-		base: number,
-		single: boolean,
-		scale = PAIRED_LINE_CHARTS.singlePointScale
-	): number {
-		return single ? base * scale : base;
+	function scaledLinePoint(base: number, single: boolean): number {
+		return single ? base * LINE_CHART_POINTS.singlePointScale : base;
 	}
 
-	/** Centre + shared marker size for the two paired line charts. */
-	function applyPairedLineChartPoints(
-		chart: ChartJS<'line'>,
-		base: { radius: number; hoverRadius: number; singlePointScale?: number }
-	): boolean {
+	/** Centre + shared marker size for every line chart. */
+	function applyLineChartPoints(chart: ChartJS<'line'>): boolean {
 		const single = applySingleCategoryLineAxis(chart);
-		const scale = base.singlePointScale ?? PAIRED_LINE_CHARTS.singlePointScale;
-		const radius = scaledLinePoint(base.radius, single, scale);
-		const hoverRadius = scaledLinePoint(base.hoverRadius, single, scale);
+		const radius = scaledLinePoint(LINE_CHART_POINTS.radius, single);
+		const hoverRadius = scaledLinePoint(LINE_CHART_POINTS.hoverRadius, single);
 		for (const dataset of chart.data.datasets) {
 			dataset.pointRadius = radius;
 			dataset.pointHoverRadius = hoverRadius;
@@ -1116,11 +1103,11 @@
 				drawPairedLinePulseRings(chart, 3, 0.33);
 				return;
 			}
-			const cycle = (performance.now() % PAIRED_LINE_CHARTS.pulseMs) / PAIRED_LINE_CHARTS.pulseMs;
+			const cycle = (performance.now() % LINE_CHART_POINTS.pulseMs) / LINE_CHART_POINTS.pulseMs;
 			const eased = mapPulseEase(cycle);
 			// Keyframes: 0/100% spread 0 @ 70% — 50% spread 14 @ 0%
 			const k = eased <= 0.5 ? eased / 0.5 : (1 - eased) / 0.5;
-			const spread = PAIRED_LINE_CHARTS.pulseSpread * k;
+			const spread = LINE_CHART_POINTS.pulseSpread * k;
 			const alpha = 0.7 * (1 - k);
 			drawPairedLinePulseRings(chart, spread, alpha);
 			if (pairedLinePulseRaf.has(chart)) return;
@@ -1169,7 +1156,7 @@
 			dataset.borderWidth = 2.5;
 			dataset.pointBorderWidth = 2;
 		});
-		applyPairedLineChartPoints(chart, PAIRED_LINE_CHARTS.driverMonth);
+		applyLineChartPoints(chart);
 		if (chart.options?.plugins?.legend) {
 			chart.options.plugins.legend.display = false;
 		}
@@ -1207,7 +1194,7 @@
 		dataset.pointBorderColor = colors.pointBorder;
 		dataset.borderWidth = 2.5;
 		dataset.pointBorderWidth = 2;
-		applyPairedLineChartPoints(chart, PAIRED_LINE_CHARTS.overTime);
+		applyLineChartPoints(chart);
 		if (chart.options?.plugins?.legend?.labels) {
 			chart.options.plugins.legend.labels.color = colors.legend;
 		}
@@ -1273,8 +1260,14 @@
 			dataset.pointBackgroundColor = lineColor;
 			dataset.pointBorderColor = dimmed ? dimColor : colors.pointBorder;
 			dataset.borderWidth = dimmed ? 1.25 : focused ? 3.5 : 2.5;
-			dataset.pointRadius = scaledLinePoint(dimmed ? 1.5 : focused ? 5 : 4, single);
-			dataset.pointHoverRadius = scaledLinePoint(dimmed ? 2.5 : 6, single);
+			dataset.pointRadius = scaledLinePoint(
+				dimmed ? 1.5 : LINE_CHART_POINTS.radius,
+				single
+			);
+			dataset.pointHoverRadius = scaledLinePoint(
+				dimmed ? 2.5 : LINE_CHART_POINTS.hoverRadius,
+				single
+			);
 			dataset.pointBorderWidth = dimmed ? 1 : 2;
 			// Higher order draws later (on top) — line only; safe for non-stacked series
 			dataset.order = dimmed ? index : focused ? 1000 : 100 + index;
@@ -2986,9 +2979,9 @@
 					borderWidth: 2.5,
 					fill: true,
 					tension: 0.35,
-					pointRadius: 5,
+					pointRadius: LINE_CHART_POINTS.radius,
 					pointBorderWidth: 2,
-					pointHoverRadius: 7
+					pointHoverRadius: LINE_CHART_POINTS.hoverRadius
 				}
 			]
 		};
@@ -3079,9 +3072,9 @@
 						borderWidth: 2,
 						fill: false,
 						tension: 0.35,
-						pointRadius: 3,
+						pointRadius: LINE_CHART_POINTS.radius,
 						pointBorderWidth: 2,
-						pointHoverRadius: 5
+						pointHoverRadius: LINE_CHART_POINTS.hoverRadius
 					};
 				});
 			})()
@@ -3535,9 +3528,9 @@
 					borderWidth: 2.5,
 					fill: false,
 					tension: 0.35,
-					pointRadius: 3.5,
+					pointRadius: LINE_CHART_POINTS.radius,
 					pointBorderWidth: 2,
-					pointHoverRadius: 6
+					pointHoverRadius: LINE_CHART_POINTS.hoverRadius
 				};
 			})
 		};
@@ -3920,7 +3913,7 @@
 		if (instance.options.scales?.x?.ticks) {
 			instance.options.scales.x.ticks.padding = overTimeTickPadding(bucket);
 		}
-		applyPairedLineChartPoints(instance, PAIRED_LINE_CHARTS.overTime);
+		applyLineChartPoints(instance);
 		instance.update('none');
 	});
 
