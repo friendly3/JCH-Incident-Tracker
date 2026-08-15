@@ -900,7 +900,7 @@
 					display: false
 				},
 				tooltip: {
-					backgroundColor: colors.tooltipBg,
+					backgroundColor: driverMonthTooltipBg(),
 					titleColor: colors.tooltipTitle,
 					bodyColor: colors.tooltipTitle,
 					titleFont: { size: 14, weight: 'bold' },
@@ -1203,6 +1203,15 @@
 		return counts;
 	}
 
+	/** 60% transparent (40% opaque) — driver-month hover tooltip fill. */
+	const DRIVER_MONTH_TOOLTIP_BG_ALPHA = 0.4;
+
+	function driverMonthTooltipBg(isDark = isDarkMode()): string {
+		return isDark
+			? withAlpha('#1e1f21', DRIVER_MONTH_TOOLTIP_BG_ALPHA)
+			: withAlpha('#1a1a1a', DRIVER_MONTH_TOOLTIP_BG_ALPHA);
+	}
+
 	function driverMonthLegendColor(dataset: {
 		label?: unknown;
 		borderColor?: unknown;
@@ -1380,7 +1389,7 @@
 			chart.options.scales.x.ticks.color = colors.ticks;
 		}
 		if (chart.options?.plugins?.tooltip) {
-			chart.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
+			chart.options.plugins.tooltip.backgroundColor = driverMonthTooltipBg(isDark);
 			chart.options.plugins.tooltip.titleColor = colors.tooltipTitle;
 			chart.options.plugins.tooltip.bodyColor = colors.tooltipTitle;
 		}
