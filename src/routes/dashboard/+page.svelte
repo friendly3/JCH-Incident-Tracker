@@ -925,7 +925,13 @@
 							const name = context.dataset.label ?? 'Driver';
 							const y = context.parsed.y ?? 0;
 							return `${name}: ${y} ${y === 1 ? 'incident' : 'incidents'}`;
-						}
+						},
+						// Use legend series colour, not the grey stacked-point fill
+						labelColor: (context) => {
+							const stroke = driverMonthLegendColor(context.dataset);
+							return { borderColor: stroke, backgroundColor: stroke };
+						},
+						labelTextColor: (context) => driverMonthLegendColor(context.dataset)
 					}
 				},
 				datalabels: buildLineDataLabels(colors, { fontSize: 10, multiSeries: true })
@@ -1197,6 +1203,20 @@
 		return counts;
 	}
 
+	function driverMonthLegendColor(dataset: {
+		label?: unknown;
+		borderColor?: unknown;
+		legendColor?: unknown;
+	}): string {
+		if (typeof dataset.legendColor === 'string' && dataset.legendColor.startsWith('#')) {
+			return dataset.legendColor;
+		}
+		if (typeof dataset.borderColor === 'string' && dataset.borderColor.startsWith('#')) {
+			return dataset.borderColor;
+		}
+		return getChartCategoryColor(String(dataset.label ?? ''), 0, theme.isDark);
+	}
+
 	function applyDriverMonthTiePointColors(chart: ChartJS<'line'>) {
 		const counts = visibleDriverMonthIncidentCounts(chart);
 		const tieFill = theme.isDark ? DRIVER_MONTH_TIE_POINT.dark : DRIVER_MONTH_TIE_POINT.light;
@@ -1323,6 +1343,7 @@
 			dataset.borderColor = stroke;
 			dataset.backgroundColor = withAlpha(stroke, 0.06);
 			dataset.pointBackgroundColor = stroke;
+			(dataset as { legendColor?: string }).legendColor = stroke;
 			dataset.pointBorderColor = colors.pointBorder;
 			dataset.borderWidth = 2.5;
 			dataset.pointBorderWidth = 2;
