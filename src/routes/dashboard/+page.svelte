@@ -961,7 +961,8 @@
 	const SINGLE_CATEGORY_POINT_SCALE = 1.25;
 
 	function lineHasSingleCategory(chart: { data?: { labels?: unknown } }): boolean {
-		return (chart.data?.labels?.length ?? 0) === 1;
+		const labels = chart.data?.labels;
+		return Array.isArray(labels) && labels.length === 1;
 	}
 
 	function applySingleCategoryLineAxis(chart: ChartJS<'line'>): boolean {
