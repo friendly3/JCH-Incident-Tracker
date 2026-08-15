@@ -1203,8 +1203,8 @@
 		return counts;
 	}
 
-	/** 60% transparent (40% opaque) — driver-month hover tooltip fill. */
-	const DRIVER_MONTH_TOOLTIP_BG_ALPHA = 0.4;
+	/** 40% transparent (60% opaque) — driver-month hover tooltip fill. */
+	const DRIVER_MONTH_TOOLTIP_BG_ALPHA = 0.6;
 
 	function driverMonthTooltipBg(isDark = isDarkMode()): string {
 		return isDark
