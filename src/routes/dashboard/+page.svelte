@@ -1302,7 +1302,8 @@
 
 	const driverMonthTieAnnotatePlugin: Plugin<'line'> = {
 		id: 'driverMonthTieAnnotate',
-		afterDraw(chart) {
+		// Draw under the tooltip (tooltip paints in afterDraw)
+		afterDatasetsDraw(chart) {
 			drawDriverMonthTieAnnotations(chart);
 		}
 	};
