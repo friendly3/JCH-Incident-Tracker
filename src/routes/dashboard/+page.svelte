@@ -978,6 +978,12 @@
 		pulseSpread: 14
 	} as const;
 
+	/** Stacked single-month driver points (2+ drivers, same incident count). */
+	const DRIVER_MONTH_TIE_POINT = {
+		light: '#44403c',
+		dark: '#a8a29e'
+	} as const;
+
 	const pairedLinePulseRaf = new WeakMap<object, number>();
 
 	function lineHasSingleCategory(chart: { data?: { labels?: unknown } }): boolean {
@@ -1126,7 +1132,10 @@
 	function applyDriverMonthAxisLayout(chart: ChartJS<'line'>, bucket: OverTimeBucket) {
 		const pad = chart.options?.layout?.padding;
 		if (pad && typeof pad === 'object' && !Array.isArray(pad)) {
-			(pad as { bottom?: number }).bottom = overTimeAxisBottomPad(bucket);
+			const box = pad as { bottom?: number; right?: number };
+			box.bottom = overTimeAxisBottomPad(bucket);
+			// Room for "N drivers" callouts to the right of a lone month
+			box.right = lineHasSingleCategory(chart) ? 96 : 8;
 		}
 		const xTicks = chart.options?.scales?.x?.ticks;
 		if (xTicks) {
@@ -1136,6 +1145,167 @@
 			xTicks.autoSkip = true;
 		}
 	}
+
+	type DriverMonthTieGroup = {
+		incidents: number;
+		drivers: number;
+		x: number;
+		y: number;
+	};
+
+	function collectDriverMonthTieGroups(chart: ChartJS<'line'>): DriverMonthTieGroup[] {
+		const byIncidents = new Map<number, DriverMonthTieGroup>();
+		for (let i = 0; i < chart.data.datasets.length; i++) {
+			if (typeof chart.isDatasetVisible === 'function' && !chart.isDatasetVisible(i)) {
+				continue;
+			}
+			const meta = chart.getDatasetMeta(i);
+			if (!meta || meta.hidden) continue;
+			const dataset = chart.data.datasets[i];
+			if (!dataset || dataset.hidden) continue;
+			const el = meta.data[0];
+			if (!el || (el as { skip?: boolean }).skip) continue;
+			const raw = dataset.data[0];
+			const incidents = typeof raw === 'number' ? raw : Number(raw);
+			if (!Number.isFinite(incidents) || incidents <= 0) continue;
+			const x = el.x;
+			const y = el.y;
+			if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+			const prev = byIncidents.get(incidents);
+			if (prev) {
+				prev.drivers += 1;
+			} else {
+				byIncidents.set(incidents, { incidents, drivers: 1, x, y });
+			}
+		}
+		return [...byIncidents.values()].filter((g) => g.drivers > 1);
+	}
+
+	function visibleDriverMonthIncidentCounts(chart: ChartJS<'line'>): Map<number, number> {
+		const counts = new Map<number, number>();
+		if (!lineHasSingleCategory(chart)) return counts;
+		chart.data.datasets.forEach((dataset, i) => {
+			if (dataset.hidden) return;
+			if (typeof chart.isDatasetVisible === 'function' && !chart.isDatasetVisible(i)) {
+				return;
+			}
+			const raw = dataset.data[0];
+			const incidents = typeof raw === 'number' ? raw : Number(raw);
+			if (!Number.isFinite(incidents) || incidents <= 0) return;
+			counts.set(incidents, (counts.get(incidents) ?? 0) + 1);
+		});
+		return counts;
+	}
+
+	function applyDriverMonthTiePointColors(chart: ChartJS<'line'>) {
+		const counts = visibleDriverMonthIncidentCounts(chart);
+		const tieFill = theme.isDark ? DRIVER_MONTH_TIE_POINT.dark : DRIVER_MONTH_TIE_POINT.light;
+		for (const dataset of chart.data.datasets) {
+			if (dataset.hidden) continue;
+			const raw = dataset.data[0];
+			const incidents = typeof raw === 'number' ? raw : Number(raw);
+			if ((counts.get(incidents) ?? 0) > 1) {
+				dataset.pointBackgroundColor = tieFill;
+			}
+		}
+	}
+
+	function fillRoundRect(
+		ctx: CanvasRenderingContext2D,
+		x: number,
+		y: number,
+		w: number,
+		h: number,
+		r: number
+	) {
+		const radius = Math.min(r, w / 2, h / 2);
+		ctx.beginPath();
+		ctx.moveTo(x + radius, y);
+		ctx.arcTo(x + w, y, x + w, y + h, radius);
+		ctx.arcTo(x + w, y + h, x, y + h, radius);
+		ctx.arcTo(x, y + h, x, y, radius);
+		ctx.arcTo(x, y, x + w, y, radius);
+		ctx.closePath();
+	}
+
+	function drawDriverMonthTieAnnotations(chart: ChartJS<'line'>) {
+		if (!lineHasSingleCategory(chart)) return;
+		const groups = collectDriverMonthTieGroups(chart);
+		if (groups.length === 0) return;
+
+		const ctx = chart.ctx;
+		const area = chart.chartArea;
+		const colors = getChartTheme(theme.isDark);
+		const isDark = theme.isDark;
+		const boxBg = isDark ? 'rgba(30, 31, 33, 0.94)' : 'rgba(255, 255, 255, 0.96)';
+		const boxBorder = isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(28, 25, 23, 0.2)';
+		const lineColor = isDark ? 'rgba(255, 255, 255, 0.45)' : 'rgba(28, 25, 23, 0.4)';
+		const pointR = scaledLinePoint(LINE_CHART_POINTS.radius, true);
+		const padX = 6;
+		const boxH = 18;
+
+		ctx.save();
+		ctx.font = '600 11px system-ui, sans-serif';
+		ctx.textBaseline = 'middle';
+		ctx.textAlign = 'left';
+
+		const items = groups
+			.map((g) => {
+				const text = `${g.drivers} drivers`;
+				const boxW = Math.ceil(ctx.measureText(text).width) + padX * 2;
+				return { ...g, text, boxW };
+			})
+			.sort((a, b) => a.y - b.y);
+
+		const placed: { x: number; y: number; boxX: number; boxY: number; boxW: number; text: string }[] =
+			[];
+		for (const item of items) {
+			let boxX = item.x + pointR + 16;
+			let boxY = item.y - boxH / 2;
+			if (boxX + item.boxW > area.right - 2) {
+				boxX = Math.max(area.left + 4, area.right - item.boxW - 2);
+			}
+			for (const prev of placed) {
+				const overlaps =
+					boxX < prev.boxX + prev.boxW + 4 &&
+					boxX + item.boxW + 4 > prev.boxX &&
+					boxY < prev.boxY + boxH + 4 &&
+					boxY + boxH + 4 > prev.boxY;
+				if (overlaps) boxY = prev.boxY + boxH + 4;
+			}
+			if (boxY + boxH > area.bottom - 2) boxY = area.bottom - boxH - 2;
+			if (boxY < area.top + 2) boxY = area.top + 2;
+			placed.push({ x: item.x, y: item.y, boxX, boxY, boxW: item.boxW, text: item.text });
+		}
+
+		for (const p of placed) {
+			const midY = p.boxY + boxH / 2;
+			ctx.beginPath();
+			ctx.moveTo(p.x + pointR + 1, p.y);
+			ctx.lineTo(p.boxX - 1, midY);
+			ctx.strokeStyle = lineColor;
+			ctx.lineWidth = 1;
+			ctx.stroke();
+
+			fillRoundRect(ctx, p.boxX, p.boxY, p.boxW, boxH, 4);
+			ctx.fillStyle = boxBg;
+			ctx.fill();
+			ctx.strokeStyle = boxBorder;
+			ctx.lineWidth = 1;
+			ctx.stroke();
+
+			ctx.fillStyle = colors.legend;
+			ctx.fillText(p.text, p.boxX + padX, midY);
+		}
+		ctx.restore();
+	}
+
+	const driverMonthTieAnnotatePlugin: Plugin<'line'> = {
+		id: 'driverMonthTieAnnotate',
+		afterDraw(chart) {
+			drawDriverMonthTieAnnotations(chart);
+		}
+	};
 
 	function applyDriverMonthLineTheme(chart: ChartJS<'line'>) {
 		const colors = getChartTheme(theme.isDark);
@@ -1157,14 +1327,26 @@
 			dataset.pointBorderWidth = 2;
 		});
 		applyLineChartPoints(chart);
+		applyDriverMonthTiePointColors(chart);
 		if (chart.options?.plugins?.legend) {
 			chart.options.plugins.legend.display = false;
 		}
 		if (chart.options?.plugins?.datalabels) {
-			Object.assign(
-				chart.options.plugins.datalabels,
-				buildLineDataLabels(colors, { fontSize: 10, multiSeries: true })
-			);
+			const baseLabels = buildLineDataLabels(colors, { fontSize: 10, multiSeries: true });
+			Object.assign(chart.options.plugins.datalabels, baseLabels);
+			if (lineHasSingleCategory(chart)) {
+				chart.options.plugins.datalabels.display = (context) => {
+					const raw = context.dataset.data[context.dataIndex];
+					if (!(typeof raw === 'number' && raw > 0)) return false;
+					for (let i = 0; i < context.datasetIndex; i++) {
+						if (!context.chart.isDatasetVisible(i)) continue;
+						if (context.chart.data.datasets[i]?.data?.[context.dataIndex] === raw) {
+							return false;
+						}
+					}
+					return true;
+				};
+			}
 		}
 		if (chart.options?.scales?.y?.ticks) {
 			chart.options.scales.y.ticks.color = colors.ticks;
@@ -4088,7 +4270,11 @@
 				data: initialData,
 				options: buildDriverMonthLineOptions(colors, initialData.labels),
 				// Same day/month outer-group labels as Incidents Over Time
-				plugins: [driverMonthAxisChromePlugin, pairedLinePulsePlugin]
+				plugins: [
+					driverMonthAxisChromePlugin,
+					pairedLinePulsePlugin,
+					driverMonthTieAnnotatePlugin
+				]
 			});
 			applyDriverMonthLineTheme(instance);
 			untrack(() => {
