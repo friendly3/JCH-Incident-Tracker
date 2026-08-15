@@ -1000,6 +1000,9 @@
 			isDark
 		);
 		const single = applySingleCategoryLineAxis(chart);
+		// Extra 25% on top of the shared single-category scale (no line to read)
+		const r = scaledLinePoint(3.5, single) * (single ? 1.25 : 1);
+		const h = scaledLinePoint(6, single) * (single ? 1.25 : 1);
 		chart.data.datasets.forEach((dataset) => {
 			const label = String(dataset.label ?? '');
 			const stroke =
@@ -1009,8 +1012,8 @@
 			dataset.pointBackgroundColor = stroke;
 			dataset.pointBorderColor = colors.pointBorder;
 			dataset.borderWidth = 2.5;
-			dataset.pointRadius = scaledLinePoint(3.5, single);
-			dataset.pointHoverRadius = scaledLinePoint(6, single);
+			dataset.pointRadius = r;
+			dataset.pointHoverRadius = h;
 			dataset.pointBorderWidth = 2;
 		});
 		if (chart.options?.plugins?.legend) {
