@@ -93,10 +93,10 @@
 
 	/**
 	 * Incidents-by-driver horizontal bars: fixed thickness so bar height stays
-	 * 18px regardless of how many drivers are in the period. Plot height scales
+	 * 16px regardless of how many drivers are in the period. Plot height scales
 	 * with driver count so categories do not overlap.
 	 */
-	const DRIVER_BAR_THICKNESS_PX = 18;
+	const DRIVER_BAR_THICKNESS_PX = 16;
 	/**
 	 * Gap between bars. Chart.js spreads categories across the plot height, so
 	 * slot = thickness + gap and plot height must be exactly n×slot + pad —
