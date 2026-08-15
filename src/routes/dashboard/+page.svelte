@@ -649,7 +649,10 @@
 		}
 	};
 
-	function buildChartOptions(colors: ReturnType<typeof getChartTheme>): ChartOptions<'line'> {
+	function buildChartOptions(
+		colors: ReturnType<typeof getChartTheme>,
+		labels?: unknown
+	): ChartOptions<'line'> {
 		return {
 			responsive: true,
 			maintainAspectRatio: false,
@@ -742,6 +745,8 @@
 					}
 				},
 				x: {
+					// Centre a lone category; plugin beforeLayout keeps this in sync later
+					offset: Array.isArray(labels) && labels.length === 1,
 					// Primary ticks = day / month name / year; outer groups via plugin
 					ticks: {
 						color: colors.ticks,
@@ -851,7 +856,8 @@
 
 	/** Multi-series line options: driver × month (x-axis chrome matches over-time month view). */
 	function buildDriverMonthLineOptions(
-		colors: ReturnType<typeof getChartTheme>
+		colors: ReturnType<typeof getChartTheme>,
+		labels?: unknown
 	): ChartOptions<'line'> {
 		// Fixed month bucket — Day/Month/Year toggle is only on Incidents Over Time
 		const bucket: OverTimeBucket = 'month';
@@ -940,6 +946,7 @@
 					}
 				},
 				x: {
+					offset: Array.isArray(labels) && labels.length === 1,
 					// Primary ticks = day / month name / year; outer groups via plugin
 					ticks: {
 						color: colors.ticks,
@@ -964,7 +971,12 @@
 	const PAIRED_LINE_CHARTS = {
 		/** +25% then another +25% when there is no connecting line. */
 		singlePointScale: 1.25 * 1.25,
-		overTime: { radius: 5, hoverRadius: 7 },
+		overTime: {
+			radius: 5,
+			hoverRadius: 7,
+			/** Single-point Over Time marker is 15% smaller than the shared scale. */
+			singlePointScale: 1.25 * 1.25 * 0.85
+		},
 		driverMonth: { radius: 3.5, hoverRadius: 6 },
 		/** Match NSW map `.incident-pulse` (2.4s, 14px fade). */
 		pulseMs: 2400,
@@ -987,18 +999,23 @@
 		return single;
 	}
 
-	function scaledLinePoint(base: number, single: boolean): number {
-		return single ? base * PAIRED_LINE_CHARTS.singlePointScale : base;
+	function scaledLinePoint(
+		base: number,
+		single: boolean,
+		scale = PAIRED_LINE_CHARTS.singlePointScale
+	): number {
+		return single ? base * scale : base;
 	}
 
 	/** Centre + shared marker size for the two paired line charts. */
 	function applyPairedLineChartPoints(
 		chart: ChartJS<'line'>,
-		base: { radius: number; hoverRadius: number }
+		base: { radius: number; hoverRadius: number; singlePointScale?: number }
 	): boolean {
 		const single = applySingleCategoryLineAxis(chart);
-		const radius = scaledLinePoint(base.radius, single);
-		const hoverRadius = scaledLinePoint(base.hoverRadius, single);
+		const scale = base.singlePointScale ?? PAIRED_LINE_CHARTS.singlePointScale;
+		const radius = scaledLinePoint(base.radius, single, scale);
+		const hoverRadius = scaledLinePoint(base.hoverRadius, single, scale);
 		for (const dataset of chart.data.datasets) {
 			dataset.pointRadius = radius;
 			dataset.pointHoverRadius = hoverRadius;
@@ -1083,6 +1100,12 @@
 	 */
 	const pairedLinePulsePlugin: Plugin<'line'> = {
 		id: 'pairedLineSinglePointPulse',
+		// First layout (and every later one) must see offset before scales map pixels.
+		// Setting it only after `new Chart()` leaves a single point on the Y-axis
+		// until a resize / interaction rebuilds the category scale.
+		beforeLayout(chart) {
+			applySingleCategoryLineAxis(chart);
+		},
 		afterDraw(chart) {
 			if (!lineHasSingleCategory(chart)) {
 				stopPairedLinePulse(chart);
@@ -3755,12 +3778,19 @@
 			instance = new Chart(canvas, {
 				type: 'line',
 				data: initialData,
-				options: buildChartOptions(colors),
+				options: buildChartOptions(colors, initialData.labels),
 				// Local only — month labels + dividers (not global register)
 				plugins: [overTimeAxisChromePlugin, pairedLinePulsePlugin]
 			});
 			applyChartTheme(instance);
-			chartInstance = instance;
+			untrack(() => {
+				chartInstance = instance;
+			});
+			queueMicrotask(() => {
+				if (cancelled) return;
+				instance?.resize();
+				instance?.update('none');
+			});
 		});
 
 		return () => {
@@ -3890,6 +3920,7 @@
 		if (instance.options.scales?.x?.ticks) {
 			instance.options.scales.x.ticks.padding = overTimeTickPadding(bucket);
 		}
+		applyPairedLineChartPoints(instance, PAIRED_LINE_CHARTS.overTime);
 		instance.update('none');
 	});
 
@@ -4062,7 +4093,7 @@
 			instance = new Chart(canvas, {
 				type: 'line',
 				data: initialData,
-				options: buildDriverMonthLineOptions(colors),
+				options: buildDriverMonthLineOptions(colors, initialData.labels),
 				// Same day/month outer-group labels as Incidents Over Time
 				plugins: [driverMonthAxisChromePlugin, pairedLinePulsePlugin]
 			});
