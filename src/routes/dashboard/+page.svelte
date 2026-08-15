@@ -957,6 +957,26 @@
 		};
 	}
 
+	/** One x-category (e.g. a single-month period): centre the point and grow it. */
+	const SINGLE_CATEGORY_POINT_SCALE = 1.25;
+
+	function lineHasSingleCategory(chart: { data?: { labels?: unknown } }): boolean {
+		return (chart.data?.labels?.length ?? 0) === 1;
+	}
+
+	function applySingleCategoryLineAxis(chart: ChartJS<'line'>): boolean {
+		const single = lineHasSingleCategory(chart);
+		const x = chart.options.scales?.x;
+		if (x && typeof x === 'object') {
+			x.offset = single;
+		}
+		return single;
+	}
+
+	function scaledLinePoint(base: number, single: boolean): number {
+		return single ? base * SINGLE_CATEGORY_POINT_SCALE : base;
+	}
+
 	function applyDriverMonthAxisLayout(chart: ChartJS<'line'>, bucket: OverTimeBucket) {
 		const pad = chart.options?.layout?.padding;
 		if (pad && typeof pad === 'object' && !Array.isArray(pad)) {
@@ -979,6 +999,7 @@
 			chart.data.datasets.map((d) => String(d.label ?? '')),
 			isDark
 		);
+		const single = applySingleCategoryLineAxis(chart);
 		chart.data.datasets.forEach((dataset) => {
 			const label = String(dataset.label ?? '');
 			const stroke =
@@ -988,8 +1009,8 @@
 			dataset.pointBackgroundColor = stroke;
 			dataset.pointBorderColor = colors.pointBorder;
 			dataset.borderWidth = 2.5;
-			dataset.pointRadius = 3.5;
-			dataset.pointHoverRadius = 6;
+			dataset.pointRadius = scaledLinePoint(3.5, single);
+			dataset.pointHoverRadius = scaledLinePoint(6, single);
 			dataset.pointBorderWidth = 2;
 		});
 		if (chart.options?.plugins?.legend) {
@@ -1028,8 +1049,9 @@
 		dataset.pointBackgroundColor = colors.accent;
 		dataset.pointBorderColor = colors.pointBorder;
 		dataset.borderWidth = 2.5;
-		dataset.pointRadius = 5;
-		dataset.pointHoverRadius = 7;
+		const single = applySingleCategoryLineAxis(chart);
+		dataset.pointRadius = scaledLinePoint(5, single);
+		dataset.pointHoverRadius = scaledLinePoint(7, single);
 		dataset.pointBorderWidth = 2;
 		if (chart.options?.plugins?.legend?.labels) {
 			chart.options.plugins.legend.labels.color = colors.legend;
@@ -1083,6 +1105,7 @@
 			chart.data.datasets.map((d) => String(d.label ?? '')),
 			isDark
 		);
+		const single = applySingleCategoryLineAxis(chart);
 		chart.data.datasets.forEach((dataset, index) => {
 			const label = String(dataset.label ?? '');
 			const stroke =
@@ -1095,8 +1118,8 @@
 			dataset.pointBackgroundColor = lineColor;
 			dataset.pointBorderColor = dimmed ? dimColor : colors.pointBorder;
 			dataset.borderWidth = dimmed ? 1.25 : focused ? 3.5 : 2.5;
-			dataset.pointRadius = dimmed ? 1.5 : focused ? 5 : 4;
-			dataset.pointHoverRadius = dimmed ? 2.5 : 6;
+			dataset.pointRadius = scaledLinePoint(dimmed ? 1.5 : focused ? 5 : 4, single);
+			dataset.pointHoverRadius = scaledLinePoint(dimmed ? 2.5 : 6, single);
 			dataset.pointBorderWidth = dimmed ? 1 : 2;
 			// Higher order draws later (on top) — line only; safe for non-stacked series
 			dataset.order = dimmed ? index : focused ? 1000 : 100 + index;
