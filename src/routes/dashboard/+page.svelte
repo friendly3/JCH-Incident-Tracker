@@ -93,10 +93,10 @@
 
 	/**
 	 * Incidents-by-driver horizontal bars: fixed thickness so bar height stays
-	 * 20px regardless of how many drivers are in the period. Plot height scales
+	 * 18px regardless of how many drivers are in the period. Plot height scales
 	 * with driver count so categories do not overlap.
 	 */
-	const DRIVER_BAR_THICKNESS_PX = 20;
+	const DRIVER_BAR_THICKNESS_PX = 18;
 	/**
 	 * Gap between bars. Chart.js spreads categories across the plot height, so
 	 * slot = thickness + gap and plot height must be exactly n×slot + pad —
@@ -109,8 +109,8 @@
 	/** Axes / layout chrome outside category slots. */
 	const DRIVER_CHART_PAD_PX = 48;
 
-	/** Team-leader bars: +15% thickness vs driver chart (20 → 23px). */
-	const TEAM_LEADER_BAR_THICKNESS_PX = Math.round(DRIVER_BAR_THICKNESS_PX * 1.15);
+	/** Team-leader bars: keep 23px; driver chart was thinned separately. */
+	const TEAM_LEADER_BAR_THICKNESS_PX = 23;
 	const TEAM_LEADER_BAR_SLOT_PX = TEAM_LEADER_BAR_THICKNESS_PX + DRIVER_BAR_GAP_PX;
 
 	/** Driver×month line chart: show this many highest-volume drivers by default. */
