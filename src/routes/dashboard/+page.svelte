@@ -2964,7 +2964,14 @@
 	/**
 	 * High-fidelity PDF: snapshot the live dashboard grid (html2canvas).
 	 * Honours the current Table/Chart toggles, period, and series visibility.
+	 *
+	 * Capture is 1400 CSS px × 3.25 → ~4550 px on a ~370 mm page (~310 PPI).
+	 * Previous 2.5× JPEG @ 0.92 with jsPDF MEDIUM sat at ~230–250 PPI and
+	 * looked soft once zoomed or printed.
 	 */
+	const PDF_CAPTURE_SCALE = 3.25;
+	const PDF_JPEG_QUALITY = 0.96;
+
 	async function exportDashboardPdf() {
 		if (pdfExporting || typeof window === 'undefined') return;
 
@@ -2980,19 +2987,23 @@
 		const root = document.getElementById('dashboard-pdf-root');
 		root?.classList.add('pdf-capture');
 
+		const pdfCharts = [
+			chartInstance,
+			actionStatusChart,
+			teamLeaderChart,
+			driverChart,
+			driverMonthChart
+		].filter((c): c is NonNullable<typeof c> => Boolean(c));
+		const prevChartDpr = pdfCharts.map((c) => c.options.devicePixelRatio);
+
 		try {
 			await tick();
 			await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-			for (const chart of [
-				chartInstance,
-				actionStatusChart,
-				teamLeaderChart,
-				driverChart,
-				driverMonthChart
-			]) {
-				chart?.resize();
-				chart?.update('none');
+			for (const chart of pdfCharts) {
+				chart.options.devicePixelRatio = PDF_CAPTURE_SCALE;
+				chart.resize();
+				chart.update('none');
 			}
 			await new Promise<void>((resolve) => setTimeout(resolve, 200));
 
@@ -3003,7 +3014,7 @@
 				const width = Math.max(el.scrollWidth, el.clientWidth, 1360);
 				return html2canvas(el, {
 					backgroundColor: '#f7f4ef',
-					scale: 2.5,
+					scale: PDF_CAPTURE_SCALE,
 					useCORS: true,
 					allowTaint: false,
 					logging: false,
@@ -3058,15 +3069,16 @@
 				}
 				const x = (pageW - w) / 2;
 				const y = margin;
+				// Embed the JPEG as-is. jsPDF MEDIUM re-encodes and softens type.
 				pdf.addImage(
-					canvas.toDataURL('image/jpeg', 0.92),
+					canvas.toDataURL('image/jpeg', PDF_JPEG_QUALITY),
 					'JPEG',
 					x,
 					y,
 					w,
 					h,
 					undefined,
-					'MEDIUM'
+					'NONE'
 				);
 			}
 
@@ -3097,6 +3109,11 @@
 			pdfExportError =
 				err instanceof Error ? err.message : 'Could not create PDF. Try again.';
 		} finally {
+			pdfCharts.forEach((chart, i) => {
+				chart.options.devicePixelRatio = prevChartDpr[i];
+				chart.resize();
+				chart.update('none');
+			});
 			root?.classList.remove('pdf-capture');
 			pdfExporting = false;
 		}

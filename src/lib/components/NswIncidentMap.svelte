@@ -445,7 +445,7 @@
 				backgroundColor: '#e8e8e8',
 				useCORS: true,
 				allowTaint: false,
-				scale: 2,
+				scale: 3,
 				logging: false,
 				width: mapEl.clientWidth,
 				height: mapEl.clientHeight,
@@ -456,7 +456,7 @@
 				}
 			});
 			return {
-				url: canvas.toDataURL('image/jpeg', 0.84),
+				url: canvas.toDataURL('image/jpeg', 0.94),
 				width: canvas.width,
 				height: canvas.height
 			};
