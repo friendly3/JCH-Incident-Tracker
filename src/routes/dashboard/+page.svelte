@@ -935,7 +935,7 @@
 							const stroke = driverMonthLegendColor(context.dataset);
 							return { borderColor: stroke, backgroundColor: stroke };
 						},
-						labelTextColor: (context) => driverMonthLegendColor(context.dataset)
+						labelTextColor: () => colors.tooltipTitle
 					}
 				},
 				datalabels: buildLineDataLabels(colors, { fontSize: 10, multiSeries: true })
@@ -1207,8 +1207,8 @@
 		return counts;
 	}
 
-	/** 40% transparent (60% opaque) — driver-month hover tooltip fill. */
-	const DRIVER_MONTH_TOOLTIP_BG_ALPHA = 0.6;
+	/** 25% transparent (75% opaque) — driver-month hover tooltip fill. */
+	const DRIVER_MONTH_TOOLTIP_BG_ALPHA = 0.75;
 
 	function driverMonthTooltipBg(isDark = isDarkMode()): string {
 		return isDark
