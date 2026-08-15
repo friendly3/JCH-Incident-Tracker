@@ -957,8 +957,21 @@
 		};
 	}
 
-	/** One x-category (e.g. a single-month period): centre the point and grow it. */
-	const SINGLE_CATEGORY_POINT_SCALE = 1.25;
+	/**
+	 * Shared chrome for Incidents Over Time and Incidents by Driver per Month.
+	 * Keep those two line charts in lockstep — do not special-case one without the other.
+	 */
+	const PAIRED_LINE_CHARTS = {
+		/** +25% then another +25% when there is no connecting line. */
+		singlePointScale: 1.25 * 1.25,
+		overTime: { radius: 5, hoverRadius: 7 },
+		driverMonth: { radius: 3.5, hoverRadius: 6 },
+		/** Match NSW map `.incident-pulse` (2.4s, 14px fade). */
+		pulseMs: 2400,
+		pulseSpread: 14
+	} as const;
+
+	const pairedLinePulseRaf = new WeakMap<object, number>();
 
 	function lineHasSingleCategory(chart: { data?: { labels?: unknown } }): boolean {
 		const labels = chart.data?.labels;
@@ -975,8 +988,130 @@
 	}
 
 	function scaledLinePoint(base: number, single: boolean): number {
-		return single ? base * SINGLE_CATEGORY_POINT_SCALE : base;
+		return single ? base * PAIRED_LINE_CHARTS.singlePointScale : base;
 	}
+
+	/** Centre + shared marker size for the two paired line charts. */
+	function applyPairedLineChartPoints(
+		chart: ChartJS<'line'>,
+		base: { radius: number; hoverRadius: number }
+	): boolean {
+		const single = applySingleCategoryLineAxis(chart);
+		const radius = scaledLinePoint(base.radius, single);
+		const hoverRadius = scaledLinePoint(base.hoverRadius, single);
+		for (const dataset of chart.data.datasets) {
+			dataset.pointRadius = radius;
+			dataset.pointHoverRadius = hoverRadius;
+		}
+		return single;
+	}
+
+	function prefersReducedMotion(): boolean {
+		return (
+			typeof window !== 'undefined' &&
+			window.matchMedia('(prefers-reduced-motion: reduce)').matches
+		);
+	}
+
+	/** CSS cubic-bezier(0.4, 0, 0.6, 1) — same timing as the map pulse. */
+	function mapPulseEase(t: number): number {
+		const x = Math.min(1, Math.max(0, t));
+		let u = x;
+		for (let i = 0; i < 6; i++) {
+			const one = 1 - u;
+			const xu = 3 * one * one * u * 0.4 + 3 * one * u * u * 0.6 + u * u * u;
+			const dx = 3 * one * one * 0.4 + 6 * one * u * 0.2 + 3 * u * u * 0.4;
+			if (Math.abs(dx) < 1e-6) break;
+			u = Math.min(1, Math.max(0, u - (xu - x) / dx));
+		}
+		const one = 1 - u;
+		return 3 * one * u * u + u * u * u;
+	}
+
+	function linePointFillColor(dataset: { pointBackgroundColor?: unknown; borderColor?: unknown }): string {
+		const raw = dataset.pointBackgroundColor ?? dataset.borderColor;
+		if (typeof raw === 'string' && raw.startsWith('#') && raw.length === 7) return raw;
+		if (Array.isArray(raw) && typeof raw[0] === 'string' && raw[0].startsWith('#')) {
+			return raw[0];
+		}
+		return '#0f7cb3';
+	}
+
+	function stopPairedLinePulse(chart: object) {
+		const raf = pairedLinePulseRaf.get(chart);
+		if (raf != null) {
+			cancelAnimationFrame(raf);
+			pairedLinePulseRaf.delete(chart);
+		}
+	}
+
+	function drawPairedLinePulseRings(chart: ChartJS<'line'>, spread: number, alpha: number) {
+		const ctx = chart.ctx;
+		ctx.save();
+		for (let i = 0; i < chart.data.datasets.length; i++) {
+			const meta = chart.getDatasetMeta(i);
+			if (!meta || meta.hidden) continue;
+			const dataset = chart.data.datasets[i];
+			if (!dataset || dataset.hidden) continue;
+			const fill = linePointFillColor(dataset);
+			ctx.fillStyle = withAlpha(fill, alpha);
+			for (const el of meta.data) {
+				if (!el || (el as { skip?: boolean }).skip) continue;
+				const x = el.x;
+				const y = el.y;
+				if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+				const radius = Number(
+					(el as { options?: { radius?: number } }).options?.radius ??
+						dataset.pointRadius ??
+						5
+				);
+				if (!Number.isFinite(radius) || radius <= 0) continue;
+				const outer = radius + spread;
+				if (outer <= radius) continue;
+				ctx.beginPath();
+				ctx.arc(x, y, outer, 0, Math.PI * 2);
+				ctx.arc(x, y, radius, 0, Math.PI * 2, true);
+				ctx.fill('evenodd');
+			}
+		}
+		ctx.restore();
+	}
+
+	/**
+	 * Expanding ring on single-category points — same motion as the NSW map
+	 * incident pulse. Shared by both paired line charts.
+	 */
+	const pairedLinePulsePlugin: Plugin<'line'> = {
+		id: 'pairedLineSinglePointPulse',
+		afterDraw(chart) {
+			if (!lineHasSingleCategory(chart)) {
+				stopPairedLinePulse(chart);
+				return;
+			}
+			if (prefersReducedMotion()) {
+				stopPairedLinePulse(chart);
+				drawPairedLinePulseRings(chart, 3, 0.33);
+				return;
+			}
+			const cycle = (performance.now() % PAIRED_LINE_CHARTS.pulseMs) / PAIRED_LINE_CHARTS.pulseMs;
+			const eased = mapPulseEase(cycle);
+			// Keyframes: 0/100% spread 0 @ 70% — 50% spread 14 @ 0%
+			const k = eased <= 0.5 ? eased / 0.5 : (1 - eased) / 0.5;
+			const spread = PAIRED_LINE_CHARTS.pulseSpread * k;
+			const alpha = 0.7 * (1 - k);
+			drawPairedLinePulseRings(chart, spread, alpha);
+			if (pairedLinePulseRaf.has(chart)) return;
+			const raf = requestAnimationFrame(() => {
+				pairedLinePulseRaf.delete(chart);
+				if (!chart.ctx || !lineHasSingleCategory(chart)) return;
+				chart.draw();
+			});
+			pairedLinePulseRaf.set(chart, raf);
+		},
+		beforeDestroy(chart) {
+			stopPairedLinePulse(chart);
+		}
+	};
 
 	function applyDriverMonthAxisLayout(chart: ChartJS<'line'>, bucket: OverTimeBucket) {
 		const pad = chart.options?.layout?.padding;
@@ -1000,10 +1135,6 @@
 			chart.data.datasets.map((d) => String(d.label ?? '')),
 			isDark
 		);
-		const single = applySingleCategoryLineAxis(chart);
-		// Extra 25% on top of the shared single-category scale (no line to read)
-		const r = scaledLinePoint(3.5, single) * (single ? 1.25 : 1);
-		const h = scaledLinePoint(6, single) * (single ? 1.25 : 1);
 		chart.data.datasets.forEach((dataset) => {
 			const label = String(dataset.label ?? '');
 			const stroke =
@@ -1013,10 +1144,9 @@
 			dataset.pointBackgroundColor = stroke;
 			dataset.pointBorderColor = colors.pointBorder;
 			dataset.borderWidth = 2.5;
-			dataset.pointRadius = r;
-			dataset.pointHoverRadius = h;
 			dataset.pointBorderWidth = 2;
 		});
+		applyPairedLineChartPoints(chart, PAIRED_LINE_CHARTS.driverMonth);
 		if (chart.options?.plugins?.legend) {
 			chart.options.plugins.legend.display = false;
 		}
@@ -1053,10 +1183,8 @@
 		dataset.pointBackgroundColor = colors.accent;
 		dataset.pointBorderColor = colors.pointBorder;
 		dataset.borderWidth = 2.5;
-		const single = applySingleCategoryLineAxis(chart);
-		dataset.pointRadius = scaledLinePoint(5, single);
-		dataset.pointHoverRadius = scaledLinePoint(7, single);
 		dataset.pointBorderWidth = 2;
+		applyPairedLineChartPoints(chart, PAIRED_LINE_CHARTS.overTime);
 		if (chart.options?.plugins?.legend?.labels) {
 			chart.options.plugins.legend.labels.color = colors.legend;
 		}
@@ -3629,7 +3757,7 @@
 				data: initialData,
 				options: buildChartOptions(colors),
 				// Local only — month labels + dividers (not global register)
-				plugins: [overTimeAxisChromePlugin]
+				plugins: [overTimeAxisChromePlugin, pairedLinePulsePlugin]
 			});
 			applyChartTheme(instance);
 			chartInstance = instance;
@@ -3936,7 +4064,7 @@
 				data: initialData,
 				options: buildDriverMonthLineOptions(colors),
 				// Same day/month outer-group labels as Incidents Over Time
-				plugins: [driverMonthAxisChromePlugin]
+				plugins: [driverMonthAxisChromePlugin, pairedLinePulsePlugin]
 			});
 			applyDriverMonthLineTheme(instance);
 			untrack(() => {
