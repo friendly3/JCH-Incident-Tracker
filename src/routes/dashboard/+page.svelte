@@ -98,6 +98,11 @@
 	 */
 	const DRIVER_BAR_THICKNESS_PX = 16;
 	/**
+	 * Soft rounded-rect (between square and pill). Full pill would be
+	 * thickness/2 (8px); 6px keeps stacked joins flush at the ends.
+	 */
+	const DRIVER_BAR_RADIUS_PX = 6;
+	/**
 	 * Gap between bars. Chart.js spreads categories across the plot height, so
 	 * slot = thickness + gap and plot height must be exactly n×slot + pad —
 	 * do not flex-grow the plot or gaps balloon.
@@ -2460,6 +2465,73 @@
 		return `${Math.round(pct)}%`;
 	}
 
+	function isVisibleDriverDataset(
+		chart: {
+			data: { datasets: { hidden?: boolean }[] };
+			isDatasetVisible?: (index: number) => boolean;
+		},
+		index: number
+	): boolean {
+		const ds = chart.data.datasets[index];
+		if (!ds || ds.hidden) return false;
+		if (typeof chart.isDatasetVisible === 'function' && !chart.isDatasetVisible(index)) {
+			return false;
+		}
+		return true;
+	}
+
+	function firstPositiveVisibleDriverDatasetIndex(
+		chart: {
+			data: { datasets: { data?: unknown[]; hidden?: boolean }[] };
+			isDatasetVisible?: (index: number) => boolean;
+		},
+		dataIndex: number
+	): number {
+		for (let i = 0; i < chart.data.datasets.length; i++) {
+			if (!isVisibleDriverDataset(chart, i)) continue;
+			const v = chart.data.datasets[i]?.data?.[dataIndex];
+			if (typeof v === 'number' && v > 0) return i;
+		}
+		return -1;
+	}
+
+	function lastPositiveVisibleDriverDatasetIndex(
+		chart: {
+			data: { datasets: { data?: unknown[]; hidden?: boolean }[] };
+			isDatasetVisible?: (index: number) => boolean;
+		},
+		dataIndex: number
+	): number {
+		for (let i = chart.data.datasets.length - 1; i >= 0; i--) {
+			if (!isVisibleDriverDataset(chart, i)) continue;
+			const v = chart.data.datasets[i]?.data?.[dataIndex];
+			if (typeof v === 'number' && v > 0) return i;
+		}
+		return -1;
+	}
+
+	/** Round only the outer ends so stacks stay flush; 6px is between square and pill. */
+	function driverBarSegmentRadius(context: {
+		datasetIndex: number;
+		dataIndex: number;
+		chart: {
+			data: { datasets: { data?: unknown[]; hidden?: boolean }[] };
+			isDatasetVisible?: (index: number) => boolean;
+		};
+	}) {
+		const r = DRIVER_BAR_RADIUS_PX;
+		const first = firstPositiveVisibleDriverDatasetIndex(context.chart, context.dataIndex);
+		const last = lastPositiveVisibleDriverDatasetIndex(context.chart, context.dataIndex);
+		const start = context.datasetIndex === first ? r : 0;
+		const end = context.datasetIndex === last ? r : 0;
+		return {
+			topLeft: start,
+			bottomLeft: start,
+			topRight: end,
+			bottomRight: end
+		};
+	}
+
 	/** Last dataset index that is currently visible (draws the end total once). */
 	function lastVisibleDriverDatasetIndex(chart: {
 		data: { datasets: { hidden?: boolean }[] };
@@ -2706,7 +2778,8 @@
 			dataset.backgroundColor = dimmed ? dimFill : withAlpha(solid, 0.82);
 			dataset.borderColor = dimmed ? dimBorder : solid;
 			dataset.borderWidth = dimmed ? 0.5 : focused ? 1.5 : 1;
-			dataset.borderRadius = 2;
+			dataset.borderRadius = driverBarSegmentRadius;
+			dataset.borderSkipped = false;
 			// Fixed bar thickness (horizontal bar "height") — independent of driver count
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			(dataset as any).barThickness = DRIVER_BAR_THICKNESS_PX;
@@ -3630,7 +3703,8 @@
 				backgroundColor: withAlpha(solid, 0.82),
 				borderColor: solid,
 				borderWidth: 1,
-				borderRadius: 2,
+				borderRadius: DRIVER_BAR_RADIUS_PX,
+				borderSkipped: false,
 				stack: 'types',
 				/** Fixed bar height (px) — not proportional to driver count. */
 				barThickness: DRIVER_BAR_THICKNESS_PX,
