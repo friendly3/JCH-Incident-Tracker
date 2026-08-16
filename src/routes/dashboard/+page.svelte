@@ -2139,8 +2139,7 @@
 								context.chart,
 								context.dataIndex
 							);
-							const pct =
-								rowTotal > 0 ? ((value / rowTotal) * 100).toFixed(1) : '0.0';
+							const pct = formatTeamLeaderSharePct(value, rowTotal);
 							return `${name}: ${value} (${pct}% of row) · click to open list`;
 						}
 					}
@@ -2165,7 +2164,7 @@
 							return '';
 						}
 						const rowTotal = teamLeaderRowTotalFromChart(context.chart, context.dataIndex);
-						const pct = rowTotal > 0 ? ((value / rowTotal) * 100).toFixed(1) : '0.0';
+						const pct = formatTeamLeaderSharePct(value, rowTotal);
 						return `${value} (${pct}%)`;
 					},
 					color: '#ffffff',
@@ -2245,6 +2244,12 @@
 		if (chart.options?.scales?.x) chart.options.scales.x.stacked = true;
 		if (chart.options?.scales?.y) chart.options.scales.y.stacked = true;
 		chart.update('none');
+	}
+
+	/** Whole-number share of a team-leader bar (e.g. 67 not 66.7). */
+	function formatTeamLeaderSharePct(part: number, whole: number): string {
+		if (whole <= 0) return '0';
+		return String(Math.round((part / whole) * 100));
 	}
 
 	/** Row total from chart stacks (Ongoing + Resolved) for tooltip %. */
