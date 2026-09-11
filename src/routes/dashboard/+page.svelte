@@ -5142,10 +5142,12 @@
 											class="dashboard-team-leader-stats-scroll min-h-0 flex-1 overflow-auto"
 										>
 											<table
-												class="tls-stats-table w-full min-w-[20rem] border-collapse text-left text-sm"
+												class="tls-stats-table w-full min-w-[24rem] border-collapse text-left text-sm"
 											>
 												<colgroup>
 													<col class="tls-col-leader" />
+													<col class="tls-col-num" />
+													<col class="tls-col-pct" />
 													<col class="tls-col-num" />
 													<col class="tls-col-pct" />
 													<col class="tls-col-num" />
@@ -5173,6 +5175,24 @@
 															class="tls-th-tip tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
 															tabindex="0"
 														>
+															<span class="tls-th-label">New</span>
+															<span class="tls-th-popup" role="tooltip">
+																<strong>Inclusion:</strong> resolution status is
+																<strong>New</strong> only, for that Responded By value.
+															</span>
+														</th>
+														<th
+															scope="col"
+															class="tls-col-group-end px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+															title="New as a share of this team leader’s total (New + Ongoing + Resolved)"
+														>
+															%
+														</th>
+														<th
+															scope="col"
+															class="tls-th-tip tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
+															tabindex="0"
+														>
 															<span class="tls-th-label">Ongoing</span>
 															<span class="tls-th-popup" role="tooltip">
 																<strong>Inclusion:</strong> resolution status is
@@ -5183,7 +5203,7 @@
 														<th
 															scope="col"
 															class="tls-col-group-end px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
-															title="Ongoing as a share of this team leader’s total (Ongoing + Resolved)"
+															title="Ongoing as a share of this team leader’s total (New + Ongoing + Resolved)"
 														>
 															%
 														</th>
@@ -5204,7 +5224,7 @@
 														<th
 															scope="col"
 															class="tls-col-group-end px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-600 sm:px-2"
-															title="Resolved as a share of this team leader’s total (Ongoing + Resolved)"
+															title="Resolved as a share of this team leader’s total (New + Ongoing + Resolved)"
 														>
 															%
 														</th>
@@ -5226,6 +5246,16 @@
 															>
 																{row.label}
 															</th>
+															<td
+																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-semibold text-warm-900 sm:px-2"
+															>
+																{row.newCount}
+															</td>
+															<td
+																class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-700 sm:px-2"
+															>
+																{row.newPct.toFixed(1)}%
+															</td>
 															<td
 																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-semibold text-warm-900 sm:px-2"
 															>
@@ -5266,6 +5296,16 @@
 															<td
 																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-semibold text-warm-900 sm:px-2"
 															>
+																{statsByTeamLeader.unassignedNew}
+															</td>
+															<td
+																class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-700 sm:px-2"
+															>
+																{statsByTeamLeader.unassignedNewPct.toFixed(1)}%
+															</td>
+															<td
+																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-semibold text-warm-900 sm:px-2"
+															>
 																{statsByTeamLeader.unassignedOngoing}
 															</td>
 															<td
@@ -5299,11 +5339,13 @@
 											Same colgroup + table-layout as body so values line up with leader rows.
 										-->
 										<table
-											class="tls-stats-table tls-stats-table--footer w-full min-w-[20rem] shrink-0 border-collapse border-t border-warm-200 bg-warm-50 text-left text-sm dark:bg-warm-200"
+											class="tls-stats-table tls-stats-table--footer w-full min-w-[24rem] shrink-0 border-collapse border-t border-warm-200 bg-warm-50 text-left text-sm dark:bg-warm-200"
 											aria-label="Stats by Team Leader totals for {statsByTeamLeader.periodLabel}"
 										>
 											<colgroup>
 												<col class="tls-col-leader" />
+												<col class="tls-col-num" />
+												<col class="tls-col-pct" />
 												<col class="tls-col-num" />
 												<col class="tls-col-pct" />
 												<col class="tls-col-num" />
@@ -5318,6 +5360,17 @@
 													>
 														All
 													</th>
+													<td
+														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
+													>
+														{statsByTeamLeader.totalNew}
+													</td>
+													<td
+														class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
+														aria-hidden="true"
+													>
+														—
+													</td>
 													<td
 														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
 													>
@@ -6472,26 +6525,26 @@
 
 	/*
 	 * Shared column template for body + All footer tables (two tables, one grid).
-	 * Fixed layout so Ongoing / % / Resolved / % / Total line up with leader rows.
+	 * Fixed layout so New / % / Ongoing / % / Resolved / % / Total line up with leader rows.
 	 */
 	:global(.tls-stats-table) {
 		table-layout: fixed;
 	}
 
 	:global(.tls-stats-table .tls-col-leader) {
-		width: 34%;
+		width: 28%;
 	}
 
 	:global(.tls-stats-table .tls-col-num) {
-		width: 14%;
+		width: 10.5%;
 	}
 
 	:global(.tls-stats-table .tls-col-pct) {
-		width: 12%;
+		width: 10%;
 	}
 
 	/*
-	 * Feint vertical rules group Ongoing+% and Resolved+% pairs
+	 * Feint vertical rules group New+%, Ongoing+%, and Resolved+% pairs
 	 * (and separate Total). Soft gray so it reads as structure, not grid.
 	 */
 	:global(.tls-stats-table .tls-col-group-start) {

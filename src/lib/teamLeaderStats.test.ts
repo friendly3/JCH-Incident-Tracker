@@ -95,3 +95,44 @@ test('assigned New appears in that leader’s Total, not Unassigned', () => {
 	assert.equal(stats.unassignedTotal, 1);
 	assert.equal(stats.grandTotal, 4);
 });
+
+test('New% is of row Total; New + Ongoing + Resolved percents sum to 100', () => {
+	const stats = buildTeamLeaderStats(
+		[
+			incident({ id: 'n', response: 'CaringbahPDC', action: 'NEW' }),
+			incident({ id: 'o', response: 'CaringbahPDC', action: 'ONGOING' }),
+			incident({ id: 'r', response: 'CaringbahPDC', action: 'Resolved' })
+		],
+		['CaringbahPDC']
+	);
+	const row = stats.rows.find((r) => r.key === 'CARINGBAHPDC');
+	assert.ok(row);
+	assert.equal(row.total, 3);
+	assert.equal(row.newPct, (1 / 3) * 100);
+	assert.equal(row.ongoingPct, (1 / 3) * 100);
+	assert.equal(row.resolvedPct, (1 / 3) * 100);
+	assert.ok(Math.abs(row.newPct + row.ongoingPct + row.resolvedPct - 100) < 1e-9);
+});
+
+test('Unassigned New column and percents of Unassigned Total', () => {
+	const stats = buildTeamLeaderStats(
+		[
+			incident({ id: 'n1', response: '', action: 'NEW' }),
+			incident({ id: 'n2', response: '', action: 'NEW' }),
+			incident({ id: 'o', response: '', action: 'ONGOING' }),
+			incident({ id: 'r', response: '', action: 'Resolved' })
+		],
+		[]
+	);
+	assert.equal(stats.unassignedNew, 2);
+	assert.equal(stats.unassignedTotal, 4);
+	assert.equal(stats.unassignedNewPct, 50);
+	assert.equal(stats.unassignedOngoingPct, 25);
+	assert.equal(stats.unassignedResolvedPct, 25);
+	assert.equal(stats.totalNew, 2);
+	assert.ok(
+		Math.abs(
+			stats.unassignedNewPct + stats.unassignedOngoingPct + stats.unassignedResolvedPct - 100
+		) < 1e-9
+	);
+});

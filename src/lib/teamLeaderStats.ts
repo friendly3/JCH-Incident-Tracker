@@ -68,6 +68,7 @@ export type TeamLeaderStatCounts = { ongoing: number; resolved: number; newCount
 export type TeamLeaderStatRow = TeamLeaderStatCounts & {
 	key: string;
 	label: string;
+	newPct: number;
 	ongoingPct: number;
 	resolvedPct: number;
 	total: number;
@@ -78,10 +79,12 @@ export type TeamLeaderStatsResult = {
 	unassignedOngoing: number;
 	unassignedResolved: number;
 	unassignedNew: number;
+	unassignedNewPct: number;
 	unassignedOngoingPct: number;
 	unassignedResolvedPct: number;
 	/** All blank Responded By in the period, including New. */
 	unassignedTotal: number;
+	totalNew: number;
 	totalOngoing: number;
 	totalResolved: number;
 	/** Equals incidents.length: every period incident is in exactly one row. */
@@ -99,15 +102,18 @@ function addResolution(counts: TeamLeaderStatCounts, resolution: TeamLeaderResol
 }
 
 function withPercents(counts: TeamLeaderStatCounts): {
+	newPct: number;
 	ongoingPct: number;
 	resolvedPct: number;
 	total: number;
 } {
-	const openClosed = counts.ongoing + counts.resolved;
+	const total = counts.ongoing + counts.resolved + counts.newCount;
+	const share = (n: number) => (total > 0 ? (n / total) * 100 : 0);
 	return {
-		total: openClosed + counts.newCount,
-		ongoingPct: openClosed > 0 ? (counts.ongoing / openClosed) * 100 : 0,
-		resolvedPct: openClosed > 0 ? (counts.resolved / openClosed) * 100 : 0
+		total,
+		newPct: share(counts.newCount),
+		ongoingPct: share(counts.ongoing),
+		resolvedPct: share(counts.resolved)
 	};
 }
 
@@ -159,6 +165,7 @@ export function buildTeamLeaderStats(
 		}));
 
 	const unassignedPct = withPercents(unassigned);
+	const totalNew = rows.reduce((sum, row) => sum + row.newCount, 0) + unassigned.newCount;
 	const totalOngoing = rows.reduce((sum, row) => sum + row.ongoing, 0) + unassigned.ongoing;
 	const totalResolved = rows.reduce((sum, row) => sum + row.resolved, 0) + unassigned.resolved;
 
@@ -167,9 +174,11 @@ export function buildTeamLeaderStats(
 		unassignedOngoing: unassigned.ongoing,
 		unassignedResolved: unassigned.resolved,
 		unassignedNew: unassigned.newCount,
+		unassignedNewPct: unassignedPct.newPct,
 		unassignedOngoingPct: unassignedPct.ongoingPct,
 		unassignedResolvedPct: unassignedPct.resolvedPct,
 		unassignedTotal: unassignedPct.total,
+		totalNew,
 		totalOngoing,
 		totalResolved,
 		grandTotal: rows.reduce((sum, row) => sum + row.total, 0) + unassignedPct.total
