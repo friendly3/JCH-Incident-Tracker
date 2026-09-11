@@ -47,10 +47,138 @@ export function canonicalLeaderLabel(
 	return matchOfficialRespondedBy(trimmed, officialNames) ?? trimmed;
 }
 
+export type TeamLeaderResolution = 'ongoing' | 'resolved' | 'new';
+
+/**
+ * Ongoing = action ONGOING.
+ * New is excluded from Ongoing and Resolved columns but counted in Total.
+ * Resolved = any other status (including blank).
+ */
+export function classifyTeamLeaderResolution(
+	action: string | undefined | null
+): TeamLeaderResolution {
+	const a = (action ?? '').trim().toUpperCase();
+	if (a === 'ONGOING') return 'ongoing';
+	if (a === 'NEW') return 'new';
+	return 'resolved';
+}
+
+export type TeamLeaderStatCounts = { ongoing: number; resolved: number; newCount: number };
+
+export type TeamLeaderStatRow = TeamLeaderStatCounts & {
+	key: string;
+	label: string;
+	ongoingPct: number;
+	resolvedPct: number;
+	total: number;
+};
+
+export type TeamLeaderStatsResult = {
+	rows: TeamLeaderStatRow[];
+	unassignedOngoing: number;
+	unassignedResolved: number;
+	unassignedNew: number;
+	unassignedOngoingPct: number;
+	unassignedResolvedPct: number;
+	/** All blank Responded By in the period, including New. */
+	unassignedTotal: number;
+	totalOngoing: number;
+	totalResolved: number;
+	/** Equals incidents.length: every period incident is in exactly one row. */
+	grandTotal: number;
+};
+
+function emptyCounts(): TeamLeaderStatCounts {
+	return { ongoing: 0, resolved: 0, newCount: 0 };
+}
+
+function addResolution(counts: TeamLeaderStatCounts, resolution: TeamLeaderResolution): void {
+	if (resolution === 'ongoing') counts.ongoing += 1;
+	else if (resolution === 'resolved') counts.resolved += 1;
+	else counts.newCount += 1;
+}
+
+function withPercents(counts: TeamLeaderStatCounts): {
+	ongoingPct: number;
+	resolvedPct: number;
+	total: number;
+} {
+	const openClosed = counts.ongoing + counts.resolved;
+	return {
+		total: openClosed + counts.newCount,
+		ongoingPct: openClosed > 0 ? (counts.ongoing / openClosed) * 100 : 0,
+		resolvedPct: openClosed > 0 ? (counts.resolved / openClosed) * 100 : 0
+	};
+}
+
+/** Tally period incidents: named leaders + Unassigned, same Ongoing/Resolved/Total rules. */
+export function buildTeamLeaderStats(
+	incidents: readonly Incident[],
+	officialNames: readonly string[] = []
+): TeamLeaderStatsResult {
+	const byLeader = new Map<string, { key: string; label: string } & TeamLeaderStatCounts>();
+	for (const name of officialNames) {
+		const label = canonicalLeaderLabel(name, officialNames);
+		const key = label.toUpperCase();
+		if (!byLeader.has(key)) {
+			byLeader.set(key, { key, label, ...emptyCounts() });
+		}
+	}
+
+	const unassigned = emptyCounts();
+
+	for (const incident of incidents) {
+		const resolution = classifyTeamLeaderResolution(incident.action);
+		const bucket = teamLeaderStatsBucket(incident, officialNames);
+		if (bucket.kind === 'unassigned') {
+			addResolution(unassigned, resolution);
+			continue;
+		}
+
+		let row = byLeader.get(bucket.key);
+		if (!row) {
+			row = { key: bucket.key, label: bucket.label, ...emptyCounts() };
+			byLeader.set(bucket.key, row);
+		}
+		addResolution(row, resolution);
+	}
+
+	const rows = [...byLeader.values()]
+		.sort((a, b) => {
+			if (b.ongoing !== a.ongoing) return b.ongoing - a.ongoing;
+			if (b.resolved !== a.resolved) return b.resolved - a.resolved;
+			return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+		})
+		.map((row) => ({
+			key: row.key,
+			label: row.label,
+			ongoing: row.ongoing,
+			resolved: row.resolved,
+			newCount: row.newCount,
+			...withPercents(row)
+		}));
+
+	const unassignedPct = withPercents(unassigned);
+	const totalOngoing = rows.reduce((sum, row) => sum + row.ongoing, 0) + unassigned.ongoing;
+	const totalResolved = rows.reduce((sum, row) => sum + row.resolved, 0) + unassigned.resolved;
+
+	return {
+		rows,
+		unassignedOngoing: unassigned.ongoing,
+		unassignedResolved: unassigned.resolved,
+		unassignedNew: unassigned.newCount,
+		unassignedOngoingPct: unassignedPct.ongoingPct,
+		unassignedResolvedPct: unassignedPct.resolvedPct,
+		unassignedTotal: unassignedPct.total,
+		totalOngoing,
+		totalResolved,
+		grandTotal: rows.reduce((sum, row) => sum + row.total, 0) + unassignedPct.total
+	};
+}
+
 /**
  * Stats by Team Leader is Responded By only — same rule that makes CaringbahPDC
- * tally correctly. Blank Responded By → Unassigned. NEW is not counted here
- * (the table only splits Ongoing vs Resolved).
+ * tally correctly. Blank Responded By → Unassigned.
  */
 export function teamLeaderStatsBucket(
 	incident: Incident,

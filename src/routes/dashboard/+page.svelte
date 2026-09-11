@@ -22,10 +22,7 @@
 		sanitizeCloneColors,
 		stripAssistiveOnly
 	} from '$lib/pdfCapture';
-	import {
-		canonicalLeaderLabel,
-		teamLeaderStatsBucket
-	} from '$lib/teamLeaderStats';
+	import { buildTeamLeaderStats } from '$lib/teamLeaderStats';
 	import {
 		dashboardPeriod,
 		TIME_RANGE_OPTIONS,
@@ -3530,83 +3527,14 @@
 	/**
 	 * Stats by Team Leader: Responded By only (same rule as the CaringbahPDC tally).
 	 * One row per dropdown option, plus any extra free-text Responded By values.
-	 * Ongoing = resolution status Ongoing.
-	 * Resolved = any status except Ongoing and New.
-	 * New is excluded from the row totals (e.g. 1 July CaringbahPDC / New does not
-	 * increment Ongoing, Resolved, or Total).
-	 *
-	 * Unassigned = Responded By is null/blank (any status, including New).
+	 * Ongoing / Resolved / Total (and Unassigned) share classifyTeamLeaderResolution:
+	 * Ongoing = action ONGOING; Resolved = not Ongoing and not New; Total includes New.
 	 */
 	const statsByTeamLeader = $derived.by(() => {
-		const officialNames = respondedByOfficialNames;
-		const byLeader = new Map<
-			string,
-			{ key: string; label: string; ongoing: number; resolved: number }
-		>();
-		// Always list every Responded By dropdown option (CaringbahPDC included), even at 0.
-		for (const name of officialNames) {
-			const label = canonicalLeaderLabel(name, officialNames);
-			const key = label.toUpperCase();
-			if (!byLeader.has(key)) {
-				byLeader.set(key, { key, label, ongoing: 0, resolved: 0 });
-			}
-		}
-		/** Period incidents with null/blank Responded By (any status). */
-		let unassignedTotal = 0;
-		for (const incident of periodIncidents) {
-			const bucket = teamLeaderStatsBucket(incident, officialNames);
-			if (bucket.kind === 'unassigned') {
-				unassignedTotal += 1;
-				continue;
-			}
-
-			const action = (incident.action ?? '').trim().toUpperCase();
-			const isOngoing = action === 'ONGOING';
-			const isNew = action === 'NEW';
-			// Resolved = not Ongoing and not New — New is excluded from leader Ongoing/Resolved columns
-			const isResolved = !isOngoing && !isNew;
-			// New (with a Responded By) is not Ongoing or Resolved — omit from the row tally
-			if (!isOngoing && !isResolved) continue;
-
-			const r = { key: bucket.key, label: bucket.label };
-			let row = byLeader.get(r.key);
-			if (!row) {
-				row = { key: r.key, label: r.label, ongoing: 0, resolved: 0 };
-				byLeader.set(r.key, row);
-			}
-			if (isOngoing) row.ongoing += 1;
-			else row.resolved += 1;
-		}
-		const rows = [...byLeader.values()].sort((a, b) => {
-			if (b.ongoing !== a.ongoing) return b.ongoing - a.ongoing;
-			if (b.resolved !== a.resolved) return b.resolved - a.resolved;
-			return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
-		});
-		const totalOngoing = rows.reduce((sum, row) => sum + row.ongoing, 0);
-		const totalResolved = rows.reduce((sum, row) => sum + row.resolved, 0);
-		const leadersTotal = totalOngoing + totalResolved;
-		const grandTotal = leadersTotal + unassignedTotal;
+		const tallies = buildTeamLeaderStats(periodIncidents, respondedByOfficialNames);
 		return {
 			periodLabel: timeRangeLabel,
-			totalOngoing,
-			totalResolved,
-			unassignedTotal,
-			grandTotal,
-			rows: rows.map((row) => {
-				const total = row.ongoing + row.resolved;
-				return {
-					key: row.key,
-					label: row.label,
-					ongoing: row.ongoing,
-					/** Share of this team leader’s total that is Ongoing. */
-					ongoingPct: total > 0 ? (row.ongoing / total) * 100 : 0,
-					resolved: row.resolved,
-					/** Share of this team leader’s total that is Resolved. */
-					resolvedPct: total > 0 ? (row.resolved / total) * 100 : 0,
-					/** Ongoing + Resolved for this team leader. */
-					total
-				};
-			})
+			...tallies
 		};
 	});
 
@@ -3615,7 +3543,7 @@
 	);
 
 	/** Chart only needs assigned leaders with at least one incident (skip 0-count dropdown rows). */
-	const teamLeaderChartRows = $derived(statsByTeamLeader.rows.filter((row) => row.total > 0));
+	const teamLeaderChartRows = $derived(statsByTeamLeader.rows.filter((row) => row.ongoing + row.resolved > 0));
 	const hasTeamLeaderChartData = $derived(teamLeaderChartRows.length > 0);
 
 	const teamLeaderBarData = $derived.by(() => {
@@ -5237,7 +5165,7 @@
 															<span class="tls-th-popup" role="tooltip">
 																One row per <strong>Responded By</strong> dropdown value.
 																Counts only incidents with that Responded By. New is not
-																included in Ongoing, Resolved, or Total.
+																included in Ongoing or Resolved; Total includes New.
 															</span>
 														</th>
 														<th
@@ -5283,7 +5211,7 @@
 														<th
 															scope="col"
 															class="tls-col-group-start px-1.5 py-2 text-center text-xs font-semibold uppercase tracking-wide text-warm-700 sm:px-2"
-															title="Ongoing + Resolved for the row"
+															title="Ongoing + Resolved + New for the row"
 														>
 															Total
 														</th>
@@ -5336,32 +5264,28 @@
 																Unassigned
 															</th>
 															<td
-																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
-																aria-hidden="true"
+																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-semibold text-warm-900 sm:px-2"
 															>
-																—
+																{statsByTeamLeader.unassignedOngoing}
 															</td>
 															<td
-																class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
-																aria-hidden="true"
+																class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-700 sm:px-2"
 															>
-																—
+																{statsByTeamLeader.unassignedOngoingPct.toFixed(1)}%
 															</td>
 															<td
-																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
-																aria-hidden="true"
+																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-semibold text-warm-900 sm:px-2"
 															>
-																—
+																{statsByTeamLeader.unassignedResolved}
 															</td>
 															<td
-																class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-400 sm:px-2"
-																aria-hidden="true"
+																class="tls-col-group-end px-1.5 py-1.5 text-center tabular-nums text-warm-700 sm:px-2"
 															>
-																—
+																{statsByTeamLeader.unassignedResolvedPct.toFixed(1)}%
 															</td>
 															<td
 																class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
-																title="All period incidents with empty Responded By (any status)"
+																title="Ongoing + Resolved + New with empty Responded By"
 															>
 																{statsByTeamLeader.unassignedTotal}
 															</td>
@@ -5418,7 +5342,7 @@
 													</td>
 													<td
 														class="tls-col-group-start px-1.5 py-1.5 text-center tabular-nums font-bold text-warm-900 sm:px-2"
-														title="Team leaders + Unassigned"
+														title="Named leaders + Unassigned (includes New)"
 													>
 														{statsByTeamLeader.grandTotal}
 													</td>
